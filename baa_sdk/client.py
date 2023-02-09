@@ -23,6 +23,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import requests
 from qclib.state_preparation import LowRankInitialize
+from qclib.state_preparation.util.baa import Node
 from qiskit import QuantumCircuit
 
 from baa_sdk.models import JobConfig, RenameJob
@@ -298,10 +299,24 @@ class ResultNode(Document):
         return None
 
     @property
+    def node_fidelity_loss(self) -> Optional[float]:
+        result_summary = self._get_property("ResultNodeData")
+        if result_summary is not None and "NodeFidelityLoss" in result_summary:
+            return result_summary["NodeFidelityLoss"]
+        return None
+
+    @property
     def total_saved_cnots(self) -> Optional[int]:
         result_summary = self._get_property("ResultNodeData")
         if result_summary is not None and "TotalSavedCnots" in result_summary:
             return result_summary["TotalSavedCnots"]
+        return None
+
+    @property
+    def node_saved_cnots(self) -> Optional[int]:
+        result_summary = self._get_property("ResultNodeData")
+        if result_summary is not None and "NodeSavedCnots" in result_summary:
+            return result_summary["NodeSavedCnots"]
         return None
 
     @property
@@ -339,6 +354,22 @@ class ResultNode(Document):
 
     def get_vectors(self) -> List[Optional[np.ndarray]]:
         return [self.get_node_vector(idx) for idx in range(self.num_vectors)]
+
+    def to_node(self) -> Optional[Node]:
+        vectors = [list(v) for v in self.get_vectors() if v is not None]
+        if len(vectors) != self.num_vectors:
+            return None
+        return Node(
+            node_saved_cnots=self.node_saved_cnots,
+            total_saved_cnots=self.total_saved_cnots,
+            node_fidelity_loss=self.node_fidelity_loss,
+            total_fidelity_loss=self.total_fidelity_loss,
+            vectors=vectors,
+            qubits=self.qubits,
+            ranks=self.ranks,
+            partitions=self.partitions,
+            nodes=[]
+        )
 
     def to_circuit(self, opt_params=None):
         """
