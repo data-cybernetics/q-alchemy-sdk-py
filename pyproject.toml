@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "baa-sdk"
+version = "0.1.0"
+description = ""
+authors = ["Carsten Blank <blank@data-cybernetics.com>"]
+readme = "README.md"
+packages = [{include = "baa_sdk"}]
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4"
+numpy = "*"
+pyarrow = "*"
+requests = "*"
+pydantic = "*"
+python-dateutil = "*"
+qclib = { git = "https://github.com/qclib/qclib.git", branch = "master" }
+
+[tool.poetry.dev-dependencies]
+pytest = "*"
+jupyter = "*"
+matplotlib = "*"
+pandas = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
