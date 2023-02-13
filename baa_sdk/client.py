@@ -26,7 +26,7 @@ from qclib.state_preparation import LowRankInitialize
 from qclib.state_preparation.util.baa import Node
 from qiskit import QuantumCircuit
 
-from baa_sdk.models import JobConfig, RenameJob
+from baa_sdk.models import JobConfig, RenameJob, JobState, JobQuerySortBy, JobQuerySortType
 
 LOG = logging.getLogger(__name__)
 
@@ -679,7 +679,11 @@ class JobsRoot(Document):
             return Job(document.client, document.json)
         raise IOError(response.text)
 
-    def job_query(self, page_size: int = 20, page_offset: int = 0, sort_by: str = "CreatedOn", descending=True, filter_by: str = "Name", filter_type: str = "Contains"):
+    def job_query(self, page_size: int = 20, page_offset: int = 0,
+                  sort_by: JobQuerySortBy = JobQuerySortBy.CREATED_ON,
+                  sort_type: JobQuerySortType = JobQuerySortType.DESCENDING,
+                  tags_by_and: Optional[List[str]] = None, name_contains: Optional[str] = None,
+                  states_by_or: Optional[List[JobState]] = None) -> Optional[JobQueryResult]:
         action = self._get_action("CreateJobQuery")
         if action is not None:
             data = {
@@ -689,13 +693,13 @@ class JobsRoot(Document):
                 },
                 "SortBy": {
                     "PropertyName": sort_by,
-                    "SortType": "Descending" if descending else "Ascending"
+                    "SortType": sort_type.value
                 },
-                # TODO: in backend and here
-                # "Filter": {
-                #     # "FilterBy": filter_by,
-                #     # "FilterType": filter_type
-                # }
+                "Filter": {
+                    "StatesByOr": states_by_or or [],
+                    "TagsByAnd": tags_by_and or [],
+                    "NameContains": name_contains
+                }
             }
             response = requests.request(
                 action["method"], action["href"], headers=self.client.get_header(), json=data

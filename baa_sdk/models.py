@@ -75,3 +75,30 @@ class JobContext(BaseModel):
     @property
     def log_prefix(self):
         return f"[{self.unique_id} @{self.time_since_start()}] "
+
+
+class JobQuerySortBy(str, Enum):
+    NAME = 'Name',
+    COMPLETED_ON = 'CompletedOn',
+    CREATED_ON = 'CreatedOn',
+    TAGS = 'Tags',
+    JOB_STATE = 'JobState'
+
+
+class JobQuerySortType(str, Enum):
+    NONE = 'None',
+    ASCENDING = 'Ascending',
+    DESCENDING = 'Descending'
+
+
+class JobState(str, Enum):
+    UNDEFINED = 'Undefined',
+    CREATED = 'Created',
+    READY_FOR_PROCESSING = 'ReadyForProcessing',
+    PENDING = 'Pending',
+    PROCESSING = 'Processing',
+    COMPLETED = 'Completed',
+    ERROR = 'Error',
+    CANCELED = 'Canceled',
+    DATA_MISSING = 'DataMissing',
+    MARKED_FOR_DELETION = 'MarkedForDeletion'
