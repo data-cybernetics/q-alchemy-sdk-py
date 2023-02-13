@@ -123,7 +123,7 @@ class Config(Document):
             raise ValueError("Expected Actions 'Rename' not found!")
         response: requests.Response = requests.request(
             method=action["method"], url=action["href"], headers=self.client.get_header(),
-            data=config.json()
+            json=config.dict()
         )
         if response.status_code == 200:
             self.update()
