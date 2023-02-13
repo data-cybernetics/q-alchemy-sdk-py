@@ -25,6 +25,7 @@ import requests
 from qclib.state_preparation import LowRankInitialize
 from qclib.state_preparation.util.baa import Node
 from qiskit import QuantumCircuit
+from retry import retry
 
 from baa_sdk.models import JobConfig, RenameJob, JobState, JobQuerySortBy, JobQuerySortType
 
@@ -773,6 +774,7 @@ class Client(RawClient):
         return JobsRoot(raw_document.client, raw_document.json)
 
 
+@retry(tries=100, delay=0.5, max_delay=9, backoff=1.25,logger=LOG)
 def _get_document(client: RawClient, url: str) -> Document:
     response: requests.Response = requests.get(url, headers=client.get_header())
     if response.status_code == 200:

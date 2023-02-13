@@ -13,6 +13,7 @@ pyarrow = "*"
 requests = "*"
 pydantic = "*"
 python-dateutil = "*"
+retry = "*"
 qclib = { git = "https://github.com/qclib/qclib.git", branch = "master" }
 
 [tool.poetry.dev-dependencies]
