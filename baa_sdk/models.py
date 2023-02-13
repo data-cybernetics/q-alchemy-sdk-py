@@ -38,11 +38,13 @@ class Strategy(str, Enum):
     GREEDY = "Greedy"
     BRUTE_FORCE = "BruteForce"
 
+
 class LogLevel(str, Enum):
     DEBUG = "DEBUG"
     INFO = "INFO"
     WARN = "WARN"
     ERROR = "ERROR"
+
 
 class JobConfig(BaseModel):
     max_fidelity_loss: float = 0.0
