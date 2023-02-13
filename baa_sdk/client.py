@@ -656,6 +656,38 @@ class JobQueryResult(Document):
             return JobQueryResult(doc.client, doc.json)
         return None
 
+    def delete_all(self) -> int:
+        """
+        Delete all jobs in this query.
+
+        :return: deletes that weren't successful
+        """
+        count = len(self.jobs)
+        executed_count = sum([1 if job.delete() else 0 for job in self.jobs])
+        return count - executed_count
+
+    def cancel_all(self) -> int:
+        """
+        Cancel all jobs in this query.
+
+        :return: cancels that weren't successful
+        """
+        count = len(self.jobs)
+        executed_count = sum([1 if job.cancel() else 0 for job in self.jobs])
+        return count - executed_count
+
+    def schedule_all(self) -> int:
+        """
+        Schedule all jobs in this query.
+
+        :return: schedules that weren't successful
+        """
+        count = len(self.jobs)
+        executed_count = sum([1 if job.schedule() else 0 for job in self.jobs])
+        return count - executed_count
+
+    def __repr__(self):
+        return f"Query {len(self.jobs)}/{self.total_entities}"
 
 class JobsRoot(Document):
 
