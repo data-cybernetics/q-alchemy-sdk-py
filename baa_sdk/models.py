@@ -60,6 +60,7 @@ class JobConfig(BaseModel):
     batch_size: int = 100
     log_level: str = "INFO"
     redis_ttl_seconds: int = 3600
+    tags = []
 
 
 class JobContext(BaseModel):
