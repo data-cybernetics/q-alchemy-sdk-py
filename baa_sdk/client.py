@@ -596,7 +596,7 @@ class Job(Document):
             self.update()
             return True
         else:
-            warnings.warn(f"Rename has failed (code {response.status_code}) with {response.text}", UserWarning)
+            warnings.warn(f"Delete has failed (code {response.status_code}) with {response.text}", UserWarning)
             return False
 
     def cancel(self) -> bool:
