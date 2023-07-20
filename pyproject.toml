@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Carsten Blank <blank@data-cybernetics.com>"]
 readme = "README.md"
-packages = [{include = "q_alchemy_sdk"}]
+packages = [{include = "q_alchemy"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4"

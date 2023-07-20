@@ -2613,7 +2613,7 @@ cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 [[package]]
 name = "qclib"
 version = "0.0.23"
-description = ""
+description = "A quantum computing library using qiskit"
 category = "main"
 optional = false
 python-versions = ">=3.8"

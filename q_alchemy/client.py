@@ -27,7 +27,7 @@ from qclib.state_preparation.util.baa import Node
 from qiskit import QuantumCircuit
 from retry import retry
 
-from q_alchemy_sdk.models import JobConfig, RenameJob, JobState, JobQuerySortBy, JobQuerySortType, Strategy
+from q_alchemy.models import JobConfig, RenameJob, JobState, JobQuerySortBy, JobQuerySortType, Strategy
 
 LOG = logging.getLogger(__name__)
 
