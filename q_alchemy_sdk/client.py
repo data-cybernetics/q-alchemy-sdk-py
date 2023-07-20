@@ -1,4 +1,4 @@
-# Copyright 2022 data cybernetics ssc GmbH.
+# Copyright 2022-2023 data cybernetics ssc GmbH.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ from qclib.state_preparation.util.baa import Node
 from qiskit import QuantumCircuit
 from retry import retry
 
-from baa_sdk.models import JobConfig, RenameJob, JobState, JobQuerySortBy, JobQuerySortType
+from q_alchemy_sdk.models import JobConfig, RenameJob, JobState, JobQuerySortBy, JobQuerySortType, Strategy
 
 LOG = logging.getLogger(__name__)
 
@@ -118,10 +118,17 @@ class Config(Document):
     def __init__(self, client: RawClient, json: dict):
         super().__init__(client, json)
 
+    @property
+    def state(self):
+        return self._get_property("State")
+
+    def create_config(self) -> 'JobConfigWrapper':
+        return JobConfigWrapper(self)
+
     def upload(self, config: JobConfig):
         action = self._get_action("Upload")
         if action is None:
-            raise ValueError("Expected Actions 'Rename' not found!")
+            raise ValueError("Expected Actions 'Upload' not found!")
         response: requests.Response = requests.request(
             method=action["method"], url=action["href"], headers=self.client.get_header(),
             json=config.dict()
@@ -163,6 +170,60 @@ class Config(Document):
     def update(self) -> 'Config':
         super().update()
         return self
+
+    def __repr__(self):
+        return f"Config({self.state}, {self.get_self_url()})"
+
+
+class JobConfigWrapper:
+
+    job_config: JobConfig
+    config_doc: Config
+
+    def __init__(self, config_doc: 'Config', **kwargs):
+        super().__init__(**kwargs)
+        self.job_config = JobConfig()
+        self.config_doc = config_doc
+
+    def with_max_fidelity_loss(self, value: float = 0.0) -> 'JobConfigWrapper':
+        """
+        Maximum Fidelity Loss allowed by the algorithm. Default: 0.0 (none).
+        :param value: max_fidelity_loss
+        :return: the JobConfig
+        """
+        self.job_config.max_fidelity_loss = value
+        return self
+
+    def with_use_low_rank(self, value: bool) -> 'JobConfigWrapper':
+        self.job_config.use_low_rank = value
+        return self
+
+    def with_strategy(self, value: Strategy) -> 'JobConfigWrapper':
+        self.job_config.strategy = value.value
+        return self
+
+    def with_max_combination_size(self, value: int) -> 'JobConfigWrapper':
+        self.job_config.max_combination_size = value
+        return self
+
+    def with_load_per_cyle(self, value: int) -> 'JobConfigWrapper':
+        self.job_config.load_per_cyle = value
+        return self
+
+    def with_secede_modulo(self, value: int) -> 'JobConfigWrapper':
+        self.job_config.secede_modulo = value
+        return self
+
+    def with_max_time_sec(self, value: int) -> 'JobConfigWrapper':
+        self.job_config.max_time_sec = value
+        return self
+
+    def with_tags(self, *tags: str) -> 'JobConfigWrapper':
+        self.job_config.tags += tags
+        return self
+
+    def upload(self):
+        self.config_doc.upload(self.job_config)
 
 
 class StateVector(Document):
@@ -247,6 +308,12 @@ class StateVector(Document):
             print(message)
             warnings.warn(message=message, category=UserWarning)
             return False
+
+    def __repr__(self):
+        return f"StateVector(~{self._get_property('ApproximateStateVectorQubits')} qb, " \
+               f"{self._get_property('StateVectorQubits')} qb, " \
+               f"{self._get_property('StateVectorSizeBytes')} bytes, " \
+               f"{self.get_self_url()})"
 
 
 class ResultNode(Document):
@@ -614,6 +681,9 @@ class Job(Document):
             warnings.warn(f"Cancel has failed (code {response.status_code}) with {response.text}", UserWarning)
             return False
 
+    def __repr__(self):
+        return f"Job({self.state}, {self.get_self_url()})"
+
 
 class JobQueryResult(Document):
 
@@ -690,6 +760,7 @@ class JobQueryResult(Document):
     def __repr__(self):
         return f"Query {len(self.jobs)}/{self.total_entities}"
 
+
 class JobsRoot(Document):
 
     def __init__(self, client: RawClient, json: dict):
@@ -761,10 +832,13 @@ class JobsRoot(Document):
         document = self.client.get_document(link)
         return Job(document.client, document.json)
 
+    def __repr__(self):
+        return f"JobsRoot({self.get_self_url()})"
+
 
 class Client(RawClient):
 
-    def __init__(self, api_key: str, host: str, schema: str = "https", added_headers: Optional[dict] = None) -> None:
+    def __init__(self, api_key: str, host: str = "jobs.api.q-alchemy.com", schema: str = "https", added_headers: Optional[dict] = None) -> None:
         super().__init__(api_key, host, schema, added_headers)
 
     def get_jobs_root(self) -> JobsRoot:

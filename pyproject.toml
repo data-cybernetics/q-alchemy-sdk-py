@@ -1,10 +1,10 @@
 [tool.poetry]
-name = "baa-sdk"
+name = "q-alchemy-sdk-py"
 version = "0.1.0"
 description = ""
 authors = ["Carsten Blank <blank@data-cybernetics.com>"]
 readme = "README.md"
-packages = [{include = "baa_sdk"}]
+packages = [{include = "q_alchemy_sdk"}]
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4"
