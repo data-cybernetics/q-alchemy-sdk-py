@@ -205,22 +205,6 @@ class JobConfigWrapper:
         self.job_config.strategy = value.value
         return self
 
-    def with_max_combination_size(self, value: int) -> 'JobConfigWrapper':
-        self.job_config.max_combination_size = value
-        return self
-
-    def with_load_per_cyle(self, value: int) -> 'JobConfigWrapper':
-        self.job_config.load_per_cyle = value
-        return self
-
-    def with_secede_modulo(self, value: int) -> 'JobConfigWrapper':
-        self.job_config.secede_modulo = value
-        return self
-
-    def with_max_time_sec(self, value: int) -> 'JobConfigWrapper':
-        self.job_config.max_time_sec = value
-        return self
-
     def with_tags(self, *tags: str) -> 'JobConfigWrapper':
         self.job_config.tags += tags
         return self
