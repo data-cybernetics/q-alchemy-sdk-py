@@ -1,5 +1,5 @@
 # Copyright 2022-2023 data cybernetics ssc GmbH.
-
+import json
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -113,6 +113,9 @@ class Document:
         self.json = job_doc.json
         return self
 
+    def __repr__(self):
+        return f"{type(self).__name__}({self.get_self_url()})"
+
 
 class Config(Document):
     def __init__(self, client: RawClient, json: dict):
@@ -224,6 +227,9 @@ class JobConfigWrapper:
 
     def upload(self):
         self.config_doc.upload(self.job_config)
+
+    def __repr__(self):
+        return json.dumps(self.job_config.dict(), indent=2)
 
 
 class StateVector(Document):
@@ -475,6 +481,15 @@ class ResultNode(Document):
 
         return circuit.reverse_bits()
 
+    def __repr__(self):
+        return f"ResultNode(" \
+               f"is_final={self.is_final}, " \
+               f"creation_date={self.creation_date}, " \
+               f"total_fidelity_loss={self.total_fidelity_loss}, " \
+               f"total_saved_cnots={self.total_saved_cnots}, " \
+               f"num_vectors={self.num_vectors}, " \
+               f"{self.get_self_url()})"
+
 
 class Result(Document):
     def __init__(self, client: RawClient, json: dict):
@@ -532,6 +547,13 @@ class Result(Document):
         entities = self._get_entities("child")
         docs = [ResultNode(self.client, self.client.get_document(d["href"]).json) for d in entities if "href" in d]
         return docs
+
+    def __repr__(self):
+        return f"Result(" \
+               f"nodes={len(self.get_result_nodes())}, " \
+               f"total_fidelity_loss={self.get_total_fidelity_loss()}, " \
+               f"total_saved_cnots={self.get_total_saved_cnots()}, " \
+               f"{self.get_self_url()})"
 
 
 class Job(Document):
@@ -847,10 +869,18 @@ class Client(RawClient):
         raw_document = self.get_document(jobs["href"])
         return JobsRoot(raw_document.client, raw_document.json)
 
+    def __repr__(self):
+        return f"Client({self.schema}://{self.host}, add_headers={len(self.added_headers)})"
 
-@retry(tries=100, delay=0.5, max_delay=9, backoff=1.25,logger=LOG)
+
+@retry(tries=100, delay=0.5, max_delay=9, backoff=1.25, logger=LOG, exceptions=requests.Timeout)
 def _get_document(client: RawClient, url: str) -> Document:
     response: requests.Response = requests.get(url, headers=client.get_header())
     if response.status_code == 200:
         return Document(client, response.json())
-    raise IOError(response.text)
+    elif 400 <= response.status_code < 500:
+        raise ConnectionError(f"{response.status_code}: {response.text}")
+    elif 500 <= response.status_code < 600:
+        raise ConnectionError(f"{response.status_code}: {response.text}")
+    else:
+        raise ValueError(f"Status Code encountered is not handled: {response.status_code}: {response.text}")
