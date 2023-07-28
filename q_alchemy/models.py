@@ -48,10 +48,6 @@ class LogLevel(str, Enum):
 
 class JobConfig(BaseModel):
     max_fidelity_loss: float = 0.0
-    """Maximum Fidelity Loss allowed by the algorithm. Default: 0.0 (none)."""
-    strategy: str = Strategy.GREEDY.value
-    """The strategy to find the best state preparation. Default: Greedy."""
-    use_low_rank: bool = False
     """Using low rank can produce even better results. Usually a full dis-entangling 
     is attempted (within the maximum fidelity loss), but if that fails, a low rank 
     split is tried too. Default: False."""

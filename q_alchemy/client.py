@@ -197,14 +197,6 @@ class JobConfigWrapper:
         self.job_config.max_fidelity_loss = value
         return self
 
-    def with_use_low_rank(self, value: bool) -> 'JobConfigWrapper':
-        self.job_config.use_low_rank = value
-        return self
-
-    def with_strategy(self, value: Strategy) -> 'JobConfigWrapper':
-        self.job_config.strategy = value.value
-        return self
-
     def with_tags(self, *tags: str) -> 'JobConfigWrapper':
         self.job_config.tags += tags
         return self
