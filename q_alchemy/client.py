@@ -128,6 +128,12 @@ class Config(Document):
     def create_config(self) -> 'JobConfigWrapper':
         return JobConfigWrapper(self)
 
+    def set_config(self, max_fidelity_loss=0.0, tags: Optional[List[str]]=None):
+        return self.upload(JobConfig(
+            max_fidelity_loss=max_fidelity_loss,
+            tags=tags if tags is not None else []
+        ))
+
     def upload(self, config: JobConfig):
         action = self._get_action("Upload")
         if action is None:
