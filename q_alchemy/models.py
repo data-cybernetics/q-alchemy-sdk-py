@@ -100,7 +100,7 @@ class ExpertJobConfig(JobConfig):
     """The log-level of the computation, in case it is necessary to debug the computation. Default: INFO."""
     redis_ttl_seconds: int = 3600
     """The splits/sub-problems are stored on an internal redis at most this number of seconds. Default: 3600."""
-    check_product_state: int = True
+    check_product_state: bool = True
     """This determines if the geometric entanglement is calculated to figure out, if the 
     product state can be returned. If false, the full algorithm is used, which can be 
     used as a benchmark, but it is more time consuming. Default: true."""
