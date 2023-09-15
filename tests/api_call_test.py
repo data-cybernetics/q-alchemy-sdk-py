@@ -11,6 +11,7 @@ class TestApiIntegration(unittest.TestCase):
 
     def test_integration(self):
 
+        # The API key is read from the environment variable Q_ALCHEMY_API_KEY
         client = Client()
         root = client.get_jobs_root()
 
