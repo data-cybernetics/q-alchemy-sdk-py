@@ -31,6 +31,7 @@ requests = "*"
 pydantic = "*"
 python-dateutil = "*"
 retry = "*"
+qiskit_aer = "*"
 qclib = { git = "https://github.com/qclib/qclib.git", branch = "master" }
 ````
 
@@ -64,37 +65,68 @@ with which one can create a new job like this:
 ```python
 # Let us create a new and empty job, but rename it right away!
 job = root.create_job()
-job.rename("Carsten's Test-Job")
+job.rename("Your first Test-Job!")
 
 # First, let us configure the job with the job's config
 # for that we summon up the config resource!
 config = job.get_config()
+```
 
-# Create a job config with the fluent syntax:
-config.create_config() \
-    .with_use_low_rank(True) \
-    .with_max_fidelity_loss(0.1) \
-    .with_strategy(Strategy.GREEDY) \
-    .with_tags("Test Job", "Q-Alchemy") \
-    .upload()
+When we want to create a new quantum state, we can generate one with the help of
+random circuits, this little "helper" is also part of the SDK and can be achieved 
+this way:
 
-#Check out the job's config as it has been configured!
-job_config = config.job_config()
+```python
+from q_alchemy.random_circuits import get_vector
 
-# Now prepare to load a state vector. We support numpy arrays natively,
-# but under the hood pyarrow with parquet is used:
-vector = np.load("../tests/data/test_baa_state.12.1.npy")
+qb = 12
+state, entanglement, circuit_depth = get_vector(0.5, 0.8, qb, 0.5, 'geometric')
+```
 
+here we create a quantum state with *geometric* entanglement between 0.5 and 0.8, with
+12 qubits and some extra parameter for the generation. 
+
+After that, we can upload the state vector:
+
+```python
 # Upload the state vector now:
 state_vector = job.get_state_vector()
-state_vector.upload_vector(vector)
+state_vector.upload_vector(state)
+```
 
-# Check out, what the state actually is that you just uploaded:
-downloaded_vector = state_vector.get_vector()
+and then we can configure the q-alchemy job such we use an allowable fidelity loss
+of `0.21`
 
+```python
+# Set the fidelity loss and some helpful tags to find the job again
+fid_loss = 0.21
+config.set_config(fid_loss, [f"{qb}qb", str(fid_loss)])
+```
+
+Finally, we simply start the job and wait for the result, and then print out the 
+qiskit circuit:
+
+```python
 # Start the Job
 job.schedule()
+
+# Wait for the result
+import time
+time.sleep(60)
+
+# Now get the best result and plot it as given
+qc = job.get_result().get_best_node().to_circuit()
+qc.draw(fold=-1)
 ```
+
+You can use the transpile function of qiskit to get the IMB-Q basis gates:
+
+```python
+import qiskit
+
+qiskit.transpile(qc, basis_gates=['u1', 'u2', 'u3', 'cx'], optimization_level=3).draw(output="text", fold=-1)
+```
+
 
 You can play around with this as you please and check out the [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
 for more info!

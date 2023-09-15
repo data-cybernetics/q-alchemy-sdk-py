@@ -14,6 +14,7 @@ requests = "*"
 pydantic = "*"
 python-dateutil = "*"
 retry = "*"
+qiskit_aer = "*"
 qclib = { git = "https://github.com/qclib/qclib.git", branch = "master" }
 
 [tool.poetry.dev-dependencies]
