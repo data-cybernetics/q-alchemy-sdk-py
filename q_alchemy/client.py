@@ -12,6 +12,7 @@ import json
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import os
 import warnings
 from datetime import datetime
 from io import BytesIO
@@ -40,9 +41,9 @@ class RawClient:
     api_key: str
     host: str
 
-    def __init__(self, api_key: str, host: str, schema: str = "https", added_headers: Optional[dict] = None) -> None:
+    def __init__(self, api_key: Optional[str] = None, host: str = "jobs.api.q-alchemy.com", schema: str = "https", added_headers: Optional[dict] = None) -> None:
         self.schema = schema
-        self.api_key = api_key
+        self.api_key = api_key if api_key is not None else os.getenv("Q_ALCHEMY_API_KEY", "")
         self.host = host
         self.added_headers = added_headers
 
@@ -842,7 +843,7 @@ class JobsRoot(Document):
 
 class Client(RawClient):
 
-    def __init__(self, api_key: str, host: str = "jobs.api.q-alchemy.com", schema: str = "https", added_headers: Optional[dict] = None) -> None:
+    def __init__(self, api_key: Optional[str] = None, host: str = "jobs.api.q-alchemy.com", schema: str = "https", added_headers: Optional[dict] = None) -> None:
         super().__init__(api_key, host, schema, added_headers)
 
     def get_jobs_root(self) -> JobsRoot:
