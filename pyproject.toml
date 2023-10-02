@@ -11,17 +11,18 @@ python = ">=3.9,<4"
 numpy = "*"
 pyarrow = "*"
 requests = "*"
-pydantic = "*"
+pydantic = "<2"
 python-dateutil = "*"
 retry = "*"
 qiskit_aer = "*"
-qclib = { git = "https://github.com/qclib/qclib.git", branch = "master" }
+qclib = { git = "https://github.com/carstenblank/qclib.git", branch = "bugfix/make_sure_ndarray" }
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
 jupyter = "*"
 matplotlib = "*"
 pandas = "*"
+scikit-learn = "*"
 
 [build-system]
 requires = ["poetry-core"]
