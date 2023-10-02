@@ -22,6 +22,7 @@ import dateutil.parser
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+import qiskit.circuit.library
 import requests
 from qclib.state_preparation import LowRankInitialize
 from qclib.state_preparation.util.baa import Node
@@ -450,20 +451,27 @@ class ResultNode(Document):
         """
         opt_params = {} if opt_params is None else opt_params
         circuit = QuantumCircuit(self.num_qubits)
-
-        vector: np.ndarray
-        for vector, qubits, rank, partition in zip(
-                self.get_vectors(), self.qubits, self.ranks, self.partitions
-        ):
-            opt_params = {
-                "iso_scheme": opt_params.get("isometry_scheme"),
-                "unitary_scheme": opt_params.get("unitary_scheme"),
-                "partition": partition,
-                "lr": rank,
-            }
-
-            gate = LowRankInitialize(list(vector), opt_params=opt_params)
-            circuit.compose(gate, qubits[::-1], inplace=True)  # qiskit little-endian.
+        try:
+            vector: np.ndarray
+            for vector, qubits, rank, partition in zip(
+                    self.get_vectors(), self.qubits, self.ranks, self.partitions
+            ):
+                # There may be no operation necessary, if so, add identity
+                if vector is None:
+                    for qb in qubits[::-1]:  # qiskit little-endian.
+                        circuit.compose(qiskit.circuit.library.IGate(), [qb], inplace=True)
+                else:
+                    opt_params = {
+                        "iso_scheme": opt_params.get("isometry_scheme"),
+                        "unitary_scheme": opt_params.get("unitary_scheme"),
+                        "partition": partition,
+                        "lr": rank,
+                    }
+                    # Add the gate to the circuit
+                    gate = LowRankInitialize(list(vector), opt_params=opt_params)
+                    circuit.compose(gate, qubits[::-1], inplace=True)  # qiskit little-endian.
+        except Exception as ex:
+            LOG.error(f"Error while converting to circuit for job {self.get_self_url()}", ex)
 
         return circuit.reverse_bits()
 
