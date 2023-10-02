@@ -213,7 +213,7 @@ class JobConfigWrapper:
         return self
 
     def upload(self):
-        self.config_doc.upload(self.job_config)
+        return self.config_doc.upload(self.job_config)
 
     def __repr__(self):
         return json.dumps(self.job_config.dict(), indent=2)
