@@ -148,3 +148,8 @@ class JobState(str, Enum):
     CANCELED = 'Canceled',
     DATA_MISSING = 'DataMissing',
     MARKED_FOR_DELETION = 'MarkedForDeletion'
+
+
+class QAlchemyError(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)

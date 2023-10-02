@@ -22,6 +22,7 @@ import dateutil.parser
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+import qiskit.circuit.library
 import requests
 from qclib.state_preparation import LowRankInitialize
 from qclib.state_preparation.util.baa import Node
@@ -41,10 +42,13 @@ class RawClient:
     api_key: str
     host: str
 
-    def __init__(self, api_key: Optional[str] = None, host: str = "jobs.api.q-alchemy.com", schema: str = "https", added_headers: Optional[dict] = None) -> None:
-        self.schema = schema
+    default_host = "jobs.api.q-alchemy.com"
+    default_schema = "https"
+
+    def __init__(self, api_key: Optional[str] = None, host: Optional[str] = None, schema: Optional[str] = None, added_headers: Optional[dict] = None) -> None:
+        self.schema = schema if schema is not None else RawClient.default_schema
         self.api_key = api_key if api_key is not None else os.getenv("Q_ALCHEMY_API_KEY", "")
-        self.host = host
+        self.host = host if host is not None else RawClient.default_host
         self.added_headers = added_headers
 
     def get_header(self):
@@ -209,7 +213,7 @@ class JobConfigWrapper:
         return self
 
     def upload(self):
-        self.config_doc.upload(self.job_config)
+        return self.config_doc.upload(self.job_config)
 
     def __repr__(self):
         return json.dumps(self.job_config.dict(), indent=2)
@@ -447,20 +451,27 @@ class ResultNode(Document):
         """
         opt_params = {} if opt_params is None else opt_params
         circuit = QuantumCircuit(self.num_qubits)
-
-        vector: np.ndarray
-        for vector, qubits, rank, partition in zip(
-                self.get_vectors(), self.qubits, self.ranks, self.partitions
-        ):
-            opt_params = {
-                "iso_scheme": opt_params.get("isometry_scheme"),
-                "unitary_scheme": opt_params.get("unitary_scheme"),
-                "partition": partition,
-                "lr": rank,
-            }
-
-            gate = LowRankInitialize(list(vector), opt_params=opt_params)
-            circuit.compose(gate, qubits[::-1], inplace=True)  # qiskit little-endian.
+        try:
+            vector: np.ndarray
+            for vector, qubits, rank, partition in zip(
+                    self.get_vectors(), self.qubits, self.ranks, self.partitions
+            ):
+                # There may be no operation necessary, if so, add identity
+                if vector is None:
+                    for qb in qubits[::-1]:  # qiskit little-endian.
+                        circuit.compose(qiskit.circuit.library.IGate(), [qb], inplace=True)
+                else:
+                    opt_params = {
+                        "iso_scheme": opt_params.get("isometry_scheme"),
+                        "unitary_scheme": opt_params.get("unitary_scheme"),
+                        "partition": partition,
+                        "lr": rank,
+                    }
+                    # Add the gate to the circuit
+                    gate = LowRankInitialize(list(vector), opt_params=opt_params)
+                    circuit.compose(gate, qubits[::-1], inplace=True)  # qiskit little-endian.
+        except Exception as ex:
+            LOG.error(f"Error while converting to circuit for job {self.get_self_url()}", ex)
 
         return circuit.reverse_bits()
 
