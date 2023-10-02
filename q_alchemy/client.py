@@ -41,10 +41,13 @@ class RawClient:
     api_key: str
     host: str
 
-    def __init__(self, api_key: Optional[str] = None, host: str = "jobs.api.q-alchemy.com", schema: str = "https", added_headers: Optional[dict] = None) -> None:
-        self.schema = schema
+    default_host = "jobs.api.q-alchemy.com"
+    default_schema = "https"
+
+    def __init__(self, api_key: Optional[str] = None, host: Optional[str] = None, schema: Optional[str] = None, added_headers: Optional[dict] = None) -> None:
+        self.schema = schema if schema is not None else RawClient.default_schema
         self.api_key = api_key if api_key is not None else os.getenv("Q_ALCHEMY_API_KEY", "")
-        self.host = host
+        self.host = host if host is not None else RawClient.default_host
         self.added_headers = added_headers
 
     def get_header(self):
