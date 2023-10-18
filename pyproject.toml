@@ -23,6 +23,7 @@ jupyter = "*"
 matplotlib = "*"
 pandas = "*"
 scikit-learn = "*"
+quantum_linear_solvers = { git = "https://github.com/anedumla/quantum_linear_solvers", branch = "main" }
 
 [build-system]
 requires = ["poetry-core"]
