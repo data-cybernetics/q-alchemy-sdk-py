@@ -7,14 +7,13 @@ readme = "README.md"
 packages = [{include = "q_alchemy"}]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<4"
+python = ">=3.9,<3.11"  # mthree (a dependency quantum_linear_solvers) has no binaries for 3.11 an above!
 numpy = "*"
 pyarrow = "*"
 requests = "*"
-pydantic = "<2"
+pydantic = "<2"  # We want to use only pydantic 1 (breaking changes since 2.0)
 python-dateutil = "*"
 retry = "*"
-qiskit_aer = "*"
 qclib = { git = "https://github.com/carstenblank/qclib.git", branch = "bugfix/make_sure_ndarray" }
 
 [tool.poetry.dev-dependencies]
@@ -23,7 +22,7 @@ jupyter = "*"
 matplotlib = "*"
 pandas = "*"
 scikit-learn = "*"
-quantum_linear_solvers = { git = "https://github.com/anedumla/quantum_linear_solvers", branch = "main" }
+quantum_linear_solvers = { git = "https://github.com/carstenblank/quantum_linear_solvers", branch = "bugfix/remove_dist" }
 
 [build-system]
 requires = ["poetry-core"]
