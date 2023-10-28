@@ -39,7 +39,7 @@ class _OptParams:
             self.added_headers = None
             self.isometry_scheme = "ccd"
             self.unitary_scheme = "qsd"
-            self.job_completion_timeout_sec = 5 * 60
+            self.job_completion_timeout_sec = None
             self.use_result_after_sec = self.job_completion_timeout_sec
         else:
             self.max_fidelity_loss = 0.0 if opt_params.get("max_fidelity_loss") is None \
@@ -66,7 +66,7 @@ class _OptParams:
             self.unitary_scheme = "qsd" if opt_params.get("unitary_scheme") is None else \
                 opt_params.get("unitary_scheme")
 
-            self.job_completion_timeout_sec = 5 * 60 \
+            self.job_completion_timeout_sec = None \
                 if opt_params.get("job_completion_timeout_sec") is None else \
                 int(opt_params.get("job_completion_timeout_sec"))
 
@@ -158,13 +158,15 @@ class QAlchemyInitialize(Initialize):
         use_preliminary_result = False
         while not self.job.update().has_stopped:
             time.sleep(5)
+            check_timeout_error = self.opt_params.job_completion_timeout_sec is not None
+            check_premature_stop = self.opt_params.use_result_after_sec is not None
             time_passed_sec = (datetime.datetime.now() - start).total_seconds()
-            if time_passed_sec > self.opt_params.job_completion_timeout_sec:
+            if check_timeout_error and time_passed_sec > self.opt_params.job_completion_timeout_sec:
                 raise TimeoutError(
                     f"Waiting for the job to finish exceeded the "
                     f"timeout of {self.opt_params.job_completion_timeout_sec}!"
                 )
-            elif time_passed_sec > self.opt_params.use_result_after_sec:
+            elif check_premature_stop and time_passed_sec > self.opt_params.use_result_after_sec:
                 use_preliminary_result = True
                 self.job.cancel()
                 break
