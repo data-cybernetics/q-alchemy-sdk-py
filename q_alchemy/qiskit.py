@@ -40,6 +40,7 @@ class _OptParams:
             self.isometry_scheme = "ccd"
             self.unitary_scheme = "qsd"
             self.job_completion_timeout_sec = 5 * 60
+            self.use_result_after_sec = self.job_completion_timeout_sec
         else:
             self.max_fidelity_loss = 0.0 if opt_params.get("max_fidelity_loss") is None \
                 else opt_params.get("max_fidelity_loss")
@@ -68,6 +69,10 @@ class _OptParams:
             self.job_completion_timeout_sec = 5 * 60 \
                 if opt_params.get("job_completion_timeout_sec") is None else \
                 int(opt_params.get("job_completion_timeout_sec"))
+
+            self.use_result_after_sec = self.job_completion_timeout_sec \
+                if opt_params.get("use_result_after_sec") is None else \
+                int(opt_params.get("use_result_after_sec"))
 
         if self.max_fidelity_loss < 0 or self.max_fidelity_loss > 1:
             self.max_fidelity_loss = 0.0
@@ -150,15 +155,21 @@ class QAlchemyInitialize(Initialize):
 
     def _define_initialize(self):
         start = datetime.datetime.now()
+        use_preliminary_result = False
         while not self.job.update().has_stopped:
             time.sleep(5)
-            if (datetime.datetime.now() - start).total_seconds() > self.opt_params.job_completion_timeout_sec:
+            time_passed_sec = (datetime.datetime.now() - start).total_seconds()
+            if time_passed_sec > self.opt_params.job_completion_timeout_sec:
                 raise TimeoutError(
                     f"Waiting for the job to finish exceeded the "
                     f"timeout of {self.opt_params.job_completion_timeout_sec}!"
                 )
+            elif time_passed_sec > self.opt_params.use_result_after_sec:
+                use_preliminary_result = True
+                self.job.cancel()
+                break
 
-        if self.job.is_success:
+        if self.job.is_success or use_preliminary_result:
             return self.job.get_result().update().get_best_node().to_circuit(opt_params=asdict(self.opt_params))
         else:
             raise QAlchemyError(json.dumps(self.job.error))
