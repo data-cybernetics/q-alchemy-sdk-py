@@ -14,7 +14,7 @@ from q_alchemy.qiskit import QAlchemyInitialize
 import multiprocessing
 import pandas as pd
 
-data_path = 'exampels/hhl_data'
+data_path = 'examples/hhl_data'
 
 def get_solution_vector(solution, length):
     raw_solution_vector = Statevector(solution.state)
@@ -71,9 +71,12 @@ if __name__=="__main__":
     b = np.random.rand(8)
     LOG.info(b)
     b = b/np.linalg.norm(b)
+    step_size = 0.01
+    np.savetxt(f'{data_path}/trial_solution_{step_size}.npy', b)
+    b = np.loadtxt('examples/hhl_data/trial_solution.npy')
     print(b)
-    np.savetxt(f'{data_path}/trial_solution.npy', b)
-    fid_losses = np.linspace(0, 1, 11)
+    fid_losses = np.linspace(0, 1, int(1/step_size)+1)
+    print(fid_losses)
     
     length = 8
     
@@ -97,13 +100,16 @@ if __name__=="__main__":
             
             final_results = { "solution": ans, "norms": norms}
             df = pd.DataFrame(final_results)
-            df.to_csv(f'{data_path}/hhl_qalchemy_results.csv')
+            df.to_csv(f'{data_path}/hhl_qalchemy_results_{step_size}.csv')
     
         final_results = { "fid_loss": fid_losses, "solution": ans, "norms": norms}
         df = pd.DataFrame(final_results)
-        df.to_csv(f'{data_path}/hhl_qalchemy_results.csv')
+        df.to_csv(f'{data_path}/hhl_qalchemy_results_{step_size}.csv')
+    # df1 = pd.read_csv('examples/hhl_data/hhl_qalchemy_results_0.01_0.73.csv', index_col=0)
+    # df2 = pd.read_csv('examples/hhl_data/hhl_qalchemy_results_0.74_0.01.csv', index_col=0)
     
-    
+    # df = pd.concat([df1, df2], ignore_index=True)
+    # df.to_csv('examples/hhl_data/hhl_qalchemy_results_0_1.00.csv')
 
     
     # for fidel_loss in fidel_losses:
