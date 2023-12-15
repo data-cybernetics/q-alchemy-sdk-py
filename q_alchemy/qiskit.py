@@ -13,18 +13,19 @@
 
 import datetime
 import json
-
-from dataclasses import dataclass, asdict
+import logging
 import time
+from dataclasses import dataclass, asdict
 
 import numpy as np
-from qclib.util import get_state
-
 from qclib.gates.initialize import Initialize
+from qclib.util import get_state
 from qiskit import QuantumCircuit
 
-from .client import Client, JobConfigWrapper, StateVector
-from .models import QAlchemyError
+from q_alchemy.client import Client, JobConfigWrapper, StateVector
+from q_alchemy.models import QAlchemyError
+
+LOG = logging.getLogger(__name__)
 
 
 @dataclass
