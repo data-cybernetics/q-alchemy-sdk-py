@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "q_alchemy"}]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"  # mthree (a dependency quantum_linear_solvers) has no binaries for 3.11 an above!
+python = ">=3.9,<4"  # mthree (a dependency quantum_linear_solvers)
 numpy = "*"
 pyarrow = "*"
 requests = "*"
