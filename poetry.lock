@@ -2594,7 +2594,7 @@ cffi = {version = "*", markers = "implementation_name == \"pypy\""}
 
 [[package]]
 name = "qclib"
-version = "0.0.23"
+version = "0.1.1"
 description = "A quantum computing library using qiskit"
 optional = false
 python-versions = ">=3.8"
@@ -2613,7 +2613,7 @@ tensorly = ">=0.8.0"
 type = "git"
 url = "https://github.com/carstenblank/qclib.git"
 reference = "bugfix/raise_exceptions"
-resolved_reference = "3529c4a24fe0ca6de76b692859b597d032bf22aa"
+resolved_reference = "1bff69330beb3001c52b221c4414ac8ffda70c17"
 
 [[package]]
 name = "qiskit"
