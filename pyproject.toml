@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "q_alchemy"}]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.11"  # mthree (a dependency quantum_linear_solvers) has no binaries for 3.11 an above!
+python = ">=3.9,<4"
 numpy = "*"
 pyarrow = "*"
 requests = "*"
@@ -18,11 +18,16 @@ qclib = { git = "https://github.com/carstenblank/qclib.git", branch = "bugfix/ma
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
-jupyter = "*"
-matplotlib = "*"
-pandas = "*"
-scikit-learn = "*"
-quantum_linear_solvers = { git = "https://github.com/carstenblank/quantum_linear_solvers", branch = "bugfix/remove_dist" }
+jupyter = { version="*", optional = true }
+matplotlib = { version="*", optional = true }
+pandas = { version="*", optional = true }
+scikit-learn = { version="*", optional = true }
+quantum_linear_solvers = { git = "https://github.com/carstenblank/quantum_linear_solvers", branch = "bugfix/remove_dist", optional = true}
+
+[tool.poetry.extras]
+hhl-examples = ["quantum_linear_solvers", "pandas", "jupyter", "matplotlib"]
+qml-examples = ["scikit-learn", "pandas", "jupyter", "matplotlib"]
+examples = ["jupyter", "matplotlib"]
 
 [build-system]
 requires = ["poetry-core"]
