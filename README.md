@@ -18,7 +18,7 @@ has similar characteristics.
 We have decided not to go through pypi, but you can install this through pip or poetry nonetheless
 
 ```bash
-pip install git+https://github.com/data-cybernetics/q-alchemy-sdk-py@main
+pip install q-alchemy-sdk-py
 ```
 
 and even anaconda can use pip installations, so you should be fine. The dependencies that this 
@@ -28,11 +28,11 @@ SDK has are currently the following:
 numpy = "*"
 pyarrow = "*"
 requests = "*"
-pydantic = "*"
+pydantic = "<2"
 python-dateutil = "*"
 retry = "*"
 qiskit_aer = "*"
-qclib = { git = "https://github.com/qclib/qclib.git", branch = "master" }
+qclib = "*"
 ````
 
 We use poetry and have tested this all with Python 3.9 or higher (but less than 4!). So the way to install 
