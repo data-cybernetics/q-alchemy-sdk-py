@@ -32,16 +32,15 @@ steps:
     poetry install
   displayName: 'Install dependencies'
 
-- script: |
-    poetry build
-    tree
-    
+- script: |    
     poetry config repositories.test-pypi https://test.pypi.org/legacy/
     poetry config pypi-token.test-pypi  $(TestPyPI-Token)
-    
     poetry config pypi-token.pypi $(PyPI-Token)
     
     poetry version patch
+    poetry build
+    tree
+    
     poetry publish --build -r test-pypi
 #    poetry publish
   displayName: 'Publish to PyPi'
