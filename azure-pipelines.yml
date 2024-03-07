@@ -21,6 +21,11 @@ strategy:
 
 
 steps:
+- checkout: self
+  clean: true
+  persistCredentials: true
+  fetchTags: true
+
 - task: UsePythonVersion@0
   inputs:
     versionSpec: '$(python.version)'
@@ -41,6 +46,10 @@ steps:
     poetry build
     tree
     
-    poetry publish -r test-pypi
+#    poetry publish -r test-pypi
 #    poetry publish
   displayName: 'Publish to PyPi'
+
+- script: |
+    git status
+  displayName: 'Update git'
