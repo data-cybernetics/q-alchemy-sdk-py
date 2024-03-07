@@ -34,6 +34,7 @@ steps:
 
 - script: |
     poetry build
+    tree
     
     poetry config repositories.test-pypi https://test.pypi.org/legacy/
     poetry config pypi-token.test-pypi  $(TestPyPI-Token)
@@ -41,6 +42,6 @@ steps:
     poetry config pypi-token.pypi $(PyPI-Token)
     
     poetry version patch
-    poetry publish -r test-pypi
+    poetry publish --build -r test-pypi
 #    poetry publish
   displayName: 'Publish to PyPi'
