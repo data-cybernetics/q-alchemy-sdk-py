@@ -41,6 +41,6 @@ steps:
     poetry build
     tree
     
-    poetry publish --build -r test-pypi
+    poetry publish -r test-pypi
 #    poetry publish
   displayName: 'Publish to PyPi'
