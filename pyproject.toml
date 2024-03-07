@@ -15,7 +15,7 @@ pydantic = "<2"
 python-dateutil = "*"
 retry = "*"
 qiskit_aer = "*"
-qclib = { git = "https://github.com/carstenblank/qclib.git", branch = "bugfix/raise_exceptions" }
+qclib = "*"
 
 [tool.poetry.dev-dependencies]
 pytest = "*"
