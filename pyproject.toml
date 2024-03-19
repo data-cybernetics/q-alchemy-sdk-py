@@ -1,30 +1,3 @@
-[tool.poetry]
-name = "q-alchemy-sdk-py"
-version = "0.1.0"
-description = ""
-authors = ["Carsten Blank <blank@data-cybernetics.com>"]
-readme = "README.md"
-packages = [{include = "q_alchemy"}]
-
-[tool.poetry.dependencies]
-python = ">=3.9,<4"
-numpy = "*"
-pyarrow = "*"
-requests = "*"
-pydantic = "<2"
-python-dateutil = "*"
-retry = "*"
-qiskit_aer = "*"
-qclib = "*"
-
-[tool.poetry.dev-dependencies]
-pytest = "*"
-jupyter = "*"
-matplotlib = "*"
-pandas = "*"
-scikit-learn = "*"
-
-
 [tool.pdm]
 distribution = true
 
@@ -38,7 +11,7 @@ dev = [
 ]
 
 [tool.pdm.build]
-includes = ["q_alchemy_sdk_py"]
+includes = ["q_alchemy"]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
@@ -52,11 +25,6 @@ authors = [
     {name = "Carsten Blank", email = "blank@data-cybernetics.com"},
 ]
 dependencies = [
-    "numpy",
-    "pyarrow",
-    "requests",
-    "python-dateutil",
-    "retry",
     "datacybernetics-job-management-hypermedia-client @ file:///${PROJECT_ROOT}/build/datacybernetics_job_management_hypermedia_client-0.2.0.2024.319.1-py3-none-any.whl",
     "qiskit>=1.0.2",
 ]
