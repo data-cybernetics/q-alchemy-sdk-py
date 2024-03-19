@@ -57,7 +57,7 @@ class QAlchemyInitialize(Instruction):
     def __init__(self,
                  params: Statevector | List[complex] | np.ndarray,
                  label=None,
-                 opt_params: dict | None = None):
+                 opt_params: dict | OptParams | None = None):
         """
         Parameters
         ----------
@@ -83,12 +83,20 @@ class QAlchemyInitialize(Instruction):
                 Default is ``unitary_scheme='qsd'``.
         """
         num_qubits = int(np.ceil(np.log2(len(params))))
-        self.opt_params = OptParams(**opt_params)
+        if opt_params is None:
+            self.opt_params = OptParams()
+        elif isinstance(opt_params, OptParams):
+            self.opt_params = opt_params
+        else:
+            self.opt_params = OptParams(**opt_params)
+
+        headers = {"x-api-key": self.opt_params.api_key}
+        headers.update(self.opt_params.added_headers)
         if label is None:
             label = "QAl"
         self.client = httpx.Client(
             base_url=f"{self.opt_params.schema}://{self.opt_params.host}",
-            headers={"x-api-key": self.opt_params.api_key},
+            headers=headers,
             timeout=httpx.Timeout(timeout=self.opt_params.job_completion_timeout_sec + 10.0, connect=10.0)
         )
         super().__init__("q-alchemy", num_qubits, 0, params=params, label=label)
