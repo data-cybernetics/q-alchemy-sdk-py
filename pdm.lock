@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:f15533305e57a90ea4bcce15fcf5aee604dd2752b1b86678db3edf8c0989e475"
+content_hash = "sha256:94ed7e603459997489d685f533b07a32e3c4c284f29ee828bf8715a985cdc15f"
 
 [[package]]
 name = "annotated-types"
@@ -339,21 +339,6 @@ groups = ["dev"]
 files = [
     {file = "cycler-0.12.1-py3-none-any.whl", hash = "sha256:85cef7cff222d8644161529808465972e51340599459b8ac3ccbac5a854e0d30"},
     {file = "cycler-0.12.1.tar.gz", hash = "sha256:88bb128f02ba341da8ef447245a9e138fae777f6a23943da4540077d3601eb1c"},
-]
-
-[[package]]
-name = "datacybernetics-job-management-hypermedia-client"
-version = "0.2.0.2024.319.1"
-requires_python = "<4.0,>=3.11"
-path = "./build/datacybernetics_job_management_hypermedia_client-0.2.0.2024.319.1-py3-none-any.whl"
-summary = "Hypermedia client for the DataCybernetics siren APIs"
-groups = ["default"]
-dependencies = [
-    "httpx<1.0.0,>=0.25.0",
-    "pydantic==2.*",
-]
-files = [
-    {file = "datacybernetics_job_management_hypermedia_client-0.2.0.2024.319.1-py3-none-any.whl", hash = "sha256:287ac68de6a6ff1dcf0050503004f141888b35703bcc5cdf6545d5cbb7dedf6a"},
 ]
 
 [[package]]
