@@ -11,7 +11,8 @@ dev = [
 ]
 
 [tool.pdm.build]
-includes = ["q_alchemy"]
+includes = ["src/hypermedia_client", "src/q_alchemy"]
+
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
@@ -25,8 +26,7 @@ authors = [
     {name = "Carsten Blank", email = "blank@data-cybernetics.com"},
 ]
 dependencies = [
-    "datacybernetics-job-management-hypermedia-client @ file:///${PROJECT_ROOT}/build/datacybernetics_job_management_hypermedia_client-0.2.0.2024.319.1-py3-none-any.whl",
-    "qiskit>=1.0.2",
+    "qiskit>=1.0.2"
 ]
 requires-python = "<4,>=3.11"
 readme = "README.md"
