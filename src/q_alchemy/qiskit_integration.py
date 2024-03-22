@@ -27,6 +27,7 @@ from hypermedia_client.core.hco.upload_action_hco import UploadParameters
 from hypermedia_client.job_management.model import JobStates, SetTagsWorkDataParameters, WorkDataQueryParameters, \
     WorkDataFilterParameter
 
+logging.getLogger("httpx").setLevel(logging.WARN)
 LOG = logging.getLogger(__name__)
 
 
