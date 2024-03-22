@@ -11,19 +11,23 @@ dev = [
 ]
 
 [tool.pdm.build]
-includes = ["src/hypermedia_client", "src/q_alchemy"]
+includes = [
+    "src/hypermedia_client",
+    "src/q_alchemy",
+]
 
 [build-system]
-requires = ["pdm-backend"]
+requires = [
+    "pdm-backend",
+]
 build-backend = "pdm.backend"
-
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.2.0"
+version = "0.2.1"
 description = ""
 authors = [
-    {name = "Carsten Blank", email = "blank@data-cybernetics.com"},
+    { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
 ]
 dependencies = [
     "qiskit>=1.0.2",
@@ -32,5 +36,6 @@ dependencies = [
 ]
 requires-python = "<4,>=3.11"
 readme = "README.md"
-license = {text = "Apache"}
 
+[project.license]
+text = "Apache"
