@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:94ed7e603459997489d685f533b07a32e3c4c284f29ee828bf8715a985cdc15f"
+content_hash = "sha256:a1269cd9be8a130fb25516d0465b6a9ce1a3dd4d149eaaaaad64aef9952fa6c9"
 
 [[package]]
 name = "annotated-types"
@@ -31,6 +31,16 @@ dependencies = [
 files = [
     {file = "anyio-4.3.0-py3-none-any.whl", hash = "sha256:048e05d0f6caeed70d731f3db756d35dcc1f35747c8c403364a8332c630441b8"},
     {file = "anyio-4.3.0.tar.gz", hash = "sha256:f75253795a87df48568485fd18cdd2a3fa5c4f7c5be8e5e36637733fce06fed6"},
+]
+
+[[package]]
+name = "appdirs"
+version = "1.4.4"
+summary = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
+groups = ["default"]
+files = [
+    {file = "appdirs-1.4.4-py2.py3-none-any.whl", hash = "sha256:a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128"},
+    {file = "appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41"},
 ]
 
 [[package]]
@@ -143,6 +153,31 @@ files = [
 ]
 
 [[package]]
+name = "autograd"
+version = "1.6.2"
+summary = "Efficiently computes derivatives of numpy code."
+groups = ["default"]
+dependencies = [
+    "future>=0.15.2",
+    "numpy>=1.12",
+]
+files = [
+    {file = "autograd-1.6.2-py3-none-any.whl", hash = "sha256:208dde2a938e63b4f8f5049b1985505139e529068b0d26f8cd7771fd3eb145d5"},
+    {file = "autograd-1.6.2.tar.gz", hash = "sha256:8731e08a0c4e389d8695a40072ada4512641c113b6cace8f4cfbe8eb7e9aedeb"},
+]
+
+[[package]]
+name = "autoray"
+version = "0.6.9"
+requires_python = ">=3.8"
+summary = "Abstract your array operations."
+groups = ["default"]
+files = [
+    {file = "autoray-0.6.9-py3-none-any.whl", hash = "sha256:5685759f6e705f33cc3c614e57a55ba4822dc601969511465985159f2ea1573f"},
+    {file = "autoray-0.6.9.tar.gz", hash = "sha256:9f41759f6a286bc280c4f6aece436da1c87ce75eb00efe7dc7319860c43654fa"},
+]
+
+[[package]]
 name = "babel"
 version = "2.14.0"
 requires_python = ">=3.7"
@@ -180,6 +215,17 @@ dependencies = [
 files = [
     {file = "bleach-6.1.0-py3-none-any.whl", hash = "sha256:3225f354cfc436b9789c66c4ee030194bee0568fbf9cbdad3bc8b5c26c5f12b6"},
     {file = "bleach-6.1.0.tar.gz", hash = "sha256:0a31f1837963c41d46bbf1331b8778e1308ea0791db03cc4e7357b97cf42a8fe"},
+]
+
+[[package]]
+name = "cachetools"
+version = "5.3.3"
+requires_python = ">=3.7"
+summary = "Extensible memoizing collections and decorators"
+groups = ["default"]
+files = [
+    {file = "cachetools-5.3.3-py3-none-any.whl", hash = "sha256:0abad1021d3f8325b2fc1d2e9c8b9c9d57b04c3932657a72465447332c24d945"},
+    {file = "cachetools-5.3.3.tar.gz", hash = "sha256:ba29e2dfa0b8b556606f097407ed1aa62080ee108ab0dc5ec9d6a723a007d105"},
 ]
 
 [[package]]
@@ -232,7 +278,7 @@ name = "charset-normalizer"
 version = "3.3.2"
 requires_python = ">=3.7.0"
 summary = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
-groups = ["dev"]
+groups = ["default", "dev"]
 files = [
     {file = "charset-normalizer-3.3.2.tar.gz", hash = "sha256:f30c3cb33b24454a82faecaf01b19c18562b1e89558fb6c56de4d9118a032fd5"},
     {file = "charset_normalizer-3.3.2-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:802fe99cca7457642125a8a88a084cef28ff0cf9407060f7b93dca5aa25480db"},
@@ -450,6 +496,17 @@ groups = ["dev"]
 files = [
     {file = "fqdn-1.5.1-py3-none-any.whl", hash = "sha256:3a179af3761e4df6eb2e026ff9e1a3033d3587bf980a0b1b2e1e5d08d7358014"},
     {file = "fqdn-1.5.1.tar.gz", hash = "sha256:105ed3677e767fb5ca086a0c1f4bb66ebc3c100be518f0e0d755d9eae164d89f"},
+]
+
+[[package]]
+name = "future"
+version = "1.0.0"
+requires_python = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+summary = "Clean single-source support for Python 3 and 2"
+groups = ["default"]
+files = [
+    {file = "future-1.0.0-py3-none-any.whl", hash = "sha256:929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216"},
+    {file = "future-1.0.0.tar.gz", hash = "sha256:bd2968309307861edae1458a4f8a4f3598c03be43b97521076aebf5d94c07b05"},
 ]
 
 [[package]]
@@ -1165,6 +1222,17 @@ files = [
 ]
 
 [[package]]
+name = "networkx"
+version = "3.2.1"
+requires_python = ">=3.9"
+summary = "Python package for creating and manipulating graphs and networks"
+groups = ["default"]
+files = [
+    {file = "networkx-3.2.1-py3-none-any.whl", hash = "sha256:f18c69adc97877c42332c170849c96cefa91881c99a7cb3e95b7c659ebdc1ec2"},
+    {file = "networkx-3.2.1.tar.gz", hash = "sha256:9f1bb5cf3409bf324e0a722c20bdb4c20ee39bf1c30ce8ae499c8502b0b5e0c6"},
+]
+
+[[package]]
 name = "notebook"
 version = "7.1.2"
 requires_python = ">=3.8"
@@ -1309,6 +1377,55 @@ groups = ["default"]
 files = [
     {file = "pbr-6.0.0-py2.py3-none-any.whl", hash = "sha256:4a7317d5e3b17a3dccb6a8cfe67dab65b20551404c52c8ed41279fa4f0cb4cda"},
     {file = "pbr-6.0.0.tar.gz", hash = "sha256:d1377122a5a00e2f940ee482999518efe16d745d423a670c27773dfbc3c9a7d9"},
+]
+
+[[package]]
+name = "pennylane"
+version = "0.35.1"
+summary = "PennyLane is a cross-platform Python library for quantum computing, quantum machine learning, and quantum chemistry. Train a quantum computer the same way as a neural network."
+groups = ["default"]
+dependencies = [
+    "appdirs",
+    "autograd",
+    "autoray>=0.6.1",
+    "cachetools",
+    "networkx",
+    "numpy",
+    "pennylane-lightning>=0.35",
+    "requests",
+    "rustworkx",
+    "scipy",
+    "semantic-version>=2.7",
+    "toml",
+    "typing-extensions",
+]
+files = [
+    {file = "PennyLane-0.35.1-py3-none-any.whl", hash = "sha256:d1fbeada4f2e8561bbba6a8a19ee84e129665c396b880ae66ab076ce5acb3ad0"},
+]
+
+[[package]]
+name = "pennylane-lightning"
+version = "0.35.1"
+summary = "PennyLane-Lightning plugin"
+groups = ["default"]
+dependencies = [
+    "pennylane>=0.34",
+]
+files = [
+    {file = "PennyLane_Lightning-0.35.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:7fa2f0e6caabd710e58e8df5c0833ef9f650c2f054d5285b8338be1f0bc2de5e"},
+    {file = "PennyLane_Lightning-0.35.1-cp311-cp311-macosx_11_0_x86_64.whl", hash = "sha256:61d3a97f318bed0366ce6262a6796f79a013f855bc20060db9ec2f42126cde1d"},
+    {file = "PennyLane_Lightning-0.35.1-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:904b541463a545bba760a65053f37dfa0d163984e2d2eb731a268b29e4506785"},
+    {file = "PennyLane_Lightning-0.35.1-cp311-cp311-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:146975c9c314361530cc93155715a65aa4c0bc109aae2b72a8c76c19c6341a3c"},
+    {file = "PennyLane_Lightning-0.35.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f75495176cfee64afbf1c01ae1d5956c8d13486ecb0a58ac23ae1567ef6b1ada"},
+    {file = "PennyLane_Lightning-0.35.1-cp311-cp311-win_amd64.whl", hash = "sha256:6c174715cb0f7df1873b0c1b550c9d6762210b2df246650a7160dcc2d91213ac"},
+    {file = "PennyLane_Lightning-0.35.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:2c238de128c249761e4013f3f52943c5d36534ad1db44ec4a04ce2b3a4f84992"},
+    {file = "PennyLane_Lightning-0.35.1-cp312-cp312-macosx_11_0_x86_64.whl", hash = "sha256:795375e487f86b20b7c3ebb4ad9bd0537856f33ffbeb6b07b8faa835e629bc8b"},
+    {file = "PennyLane_Lightning-0.35.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3282ad268e0f2179d297e3e2a3f67a28194079675684929a48d0b98e48f30b08"},
+    {file = "PennyLane_Lightning-0.35.1-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:47a1302767185ca532eb8f17201dd090ba8befecfba03713c30d94ce6f317d88"},
+    {file = "PennyLane_Lightning-0.35.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1d78ea43fad81af7b6296433733d819668540d01781f81affccd0fadcbf3532d"},
+    {file = "PennyLane_Lightning-0.35.1-cp312-cp312-win_amd64.whl", hash = "sha256:a0adc8d56c712fd11be8a7d12f35b1fcfab9f17256f4a6466106e4b343a9b90f"},
+    {file = "PennyLane_Lightning-0.35.1-py3-none-any.whl", hash = "sha256:ff16da4b79aed57610a3c64615085b07ccab8ebbbbbb69dd0be7ef9ea4433ed4"},
+    {file = "PennyLane_Lightning-0.35.1.tar.gz", hash = "sha256:bc35d0d6c586dfc90791189fc1ed554bb88888b7bd2189b5970870c3a20aeb30"},
 ]
 
 [[package]]
@@ -1805,7 +1922,7 @@ name = "requests"
 version = "2.31.0"
 requires_python = ">=3.7"
 summary = "Python HTTP for Humans."
-groups = ["dev"]
+groups = ["default", "dev"]
 dependencies = [
     "certifi>=2017.4.17",
     "charset-normalizer<4,>=2",
@@ -2000,6 +2117,17 @@ files = [
 ]
 
 [[package]]
+name = "semantic-version"
+version = "2.10.0"
+requires_python = ">=2.7"
+summary = "A library implementing the 'SemVer' scheme."
+groups = ["default"]
+files = [
+    {file = "semantic_version-2.10.0-py2.py3-none-any.whl", hash = "sha256:de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177"},
+    {file = "semantic_version-2.10.0.tar.gz", hash = "sha256:bdabb6d336998cbb378d4b9db3a4b56a1e3235701dc05ea2690d9a997ed5041c"},
+]
+
+[[package]]
 name = "send2trash"
 version = "1.8.2"
 requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7"
@@ -2154,6 +2282,17 @@ files = [
 ]
 
 [[package]]
+name = "toml"
+version = "0.10.2"
+requires_python = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
+summary = "Python Library for Tom's Obvious, Minimal Language"
+groups = ["default"]
+files = [
+    {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
+    {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
+]
+
+[[package]]
 name = "tornado"
 version = "6.4"
 requires_python = ">= 3.8"
@@ -2233,7 +2372,7 @@ name = "urllib3"
 version = "2.2.1"
 requires_python = ">=3.8"
 summary = "HTTP library with thread-safe connection pooling, file post, and more."
-groups = ["dev"]
+groups = ["default", "dev"]
 files = [
     {file = "urllib3-2.2.1-py3-none-any.whl", hash = "sha256:450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d"},
     {file = "urllib3-2.2.1.tar.gz", hash = "sha256:d0570876c61ab9e520d776c38acbbb5b05a776d3f9ff98a5c8fd5162a444cf19"},
