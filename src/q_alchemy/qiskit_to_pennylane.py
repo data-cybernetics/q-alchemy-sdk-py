@@ -83,7 +83,7 @@ class convert_qiskit(Operation):
                 basis_gates=["id", "rx", "ry", "rz", "cx"]
             )
         )
-        inst = init.definition
+        inst = init.definition.data
         gates = []
         params = []
         num_qubits = init.num_qubits
