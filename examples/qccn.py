@@ -50,9 +50,12 @@ def preparation_circuit(X):
 
 dev = qml.device('default.qubit', wires = 6)
 @qml.qnode(dev)
-def QCNN(X, U, params):
-
-    qml_convert.convert_qiskit(X, range(6))
+def QCNN(X, U, params, state_prep):
+    if state_prep == 'q-alchemy':
+        qml_convert.convert_qiskit(X, range(6))
+    elif state_prep == 'motten':
+         qml.MottonenStatePreparation(X, wires=range(6))
+        
 
     U(params[:15], wires=[0, 5])
     for i in range(0, 6, 2):
@@ -80,13 +83,13 @@ def cross_entropy(labels, predictions):
     LOG.info(f"loss: {loss}")
     return -1 * loss
 
-def cost(v, X, Y, U, params):
-    pred = [QCNN(x, U, params) for x in X]
+def cost(v, X, Y, U, params, state_prep):
+    pred = [QCNN(x, U, params, state_prep) for x in X]
     LOG.info(f"predictions: {pred}")
     loss = cross_entropy(Y, pred)
     return loss
     
-def train_circuit(X_train, y_train, U, U_params):
+def train_circuit(X_train, y_train, U, U_params, state_prep):
     params = pnp.random.randn(3*U_params, requires_grad=True)
     opt = qml.NesterovMomentumOptimizer(stepsize=0.01)
     loss_history = []
@@ -97,7 +100,7 @@ def train_circuit(X_train, y_train, U, U_params):
         batch_index = np.random.randint(0, len(X_train), (batch_size,))
         X_batch = [X_train[i] for i in batch_index]
         Y_batch = [y_train[i] for i in batch_index]
-        params, cost_new = opt.step_and_cost(lambda v: cost(v, X_batch, Y_batch, U, params),
+        params, cost_new = opt.step_and_cost(lambda v: cost(v, X_batch, Y_batch, U, params, state_prep),
                                                      params)
         loss_history.append(cost_new)
         if it % 10 == 0:
@@ -131,22 +134,9 @@ if __name__=='__main__':
     X_train, X_test, Y_train, Y_test = load_sklearn()
     X_train = X_train*1j
     print(X_train[0])
-
-    # X_train, X_test, y_train, y_test = load_minist01()
-    state_vector = np.array(X_train[0])
-    # print(state_vector.shape)
-    # # state_vector = np.ones([256])
-    # # state_vector = np.array(state_vector*1j)
-    # # state_vector = state_vector/(np.linalg.norm(state_vector))
-    # print(state_vector)
-    # print(np.linalg.norm(state_vector))
-    # init: Instruction = QAlchemyInitialize(
-    #         state_vector,
-    #         opt_params=OptParams(
-    #             max_fidelity_loss=0.0,
-    #             basis_gates=["id", "rx", "ry", "rz", "cx"]
-    #         )
-    #     )
-    # print(init.definition.data)
     
-    loss_history, params = train_circuit(X_train, Y_train, U_SU4, 15)
+    loss_history, params = train_circuit(X_train, Y_train, U_SU4, 15, 'q-alchemy')
+    # loss = np.load('loss.npy')
+    # params = np.load('params.npy')
+    # LOG.info(loss)
+    # LOG.info(params)
