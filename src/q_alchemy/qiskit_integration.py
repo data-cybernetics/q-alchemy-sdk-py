@@ -132,8 +132,10 @@ class QAlchemyInitialize(Instruction):
                 image_shape_y=self.opt_params.image_size[1]
             )
             .assign_input_dataslot(0, wd_link)
+            .allow_output_data_deletion()
             .start()
             .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
+            .hide()
         )
         self.result_summary: dict = job.get_result()
         if self.result_summary["status"].startswith("OK"):
