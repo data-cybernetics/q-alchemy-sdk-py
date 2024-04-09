@@ -138,8 +138,8 @@ class QAlchemyInitialize(Instruction):
             .hide()
         )
         self.result_summary: dict = job.get_result()
+        inner_job = job._job
         if self.result_summary["status"].startswith("OK"):
-            inner_job = job._job
             qasm_wd = [s.assigned_workdata for s in inner_job.output_dataslots if s.assigned_workdata.name == "qasm_circuit.qasm"][0]
             if qasm_wd.size_in_bytes > 0:
                 qasm: str = qasm_wd.download_link.download().decode("utf-8")
@@ -149,3 +149,10 @@ class QAlchemyInitialize(Instruction):
                 raise IOError("Q-Alchemy API call failed for unknown reasons.")
         else:
             raise IOError(f"Q-Alchemy API call failed. Reason: {self.result_summary['status']}.")
+        # Clean-up now.
+        if inner_job is not None:
+            for wd in inner_job.output_dataslots:
+                delete_action = wd.assigned_workdata.delete_action
+                if delete_action is not None:
+                    delete_action.execute()
+
