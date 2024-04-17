@@ -24,10 +24,10 @@ from hypermedia_client.job_management.model.open_api_generated import (
     WorkDataRootHtoOpenApiProperties,
     ProcessingStepRootHtoOpenApiProperties,
     ProcessingStepQueryResultHtoOpenApiProperties,
-    WorkDataUsedTagsHtoOpenApiProperties,
     JobUsedTagsHtoOpenApiProperties,
     ProcessingStepUsedTagsHtoOpenApiProperties,
     UserHtoOpenApiProperties,
+    WorkDataUsedTagsQueryResultHtoOpenApiProperties,
 )
 
 
@@ -78,8 +78,8 @@ class ProcessingStepQueryResultEntity(Entity):
     properties: ProcessingStepQueryResultHtoOpenApiProperties | None = None
 
 
-class WorkDataUsedTagsEntity(Entity):
-    properties: WorkDataUsedTagsHtoOpenApiProperties | None = None
+class WorkDataUsedTagsQueryResultEntity(Entity):
+    properties: WorkDataUsedTagsQueryResultHtoOpenApiProperties | None = None
 
 
 class ProcessingStepUsedTagsEntity(Entity):

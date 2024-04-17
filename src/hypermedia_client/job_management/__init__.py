@@ -14,4 +14,4 @@ from .enterjma import enter_jma
 from .tool import Job
 
 # Protocol version the JMA is using
-__jma_version__ = [5, 0, 0]
+__jma_version__ = [5, 1, 1]
