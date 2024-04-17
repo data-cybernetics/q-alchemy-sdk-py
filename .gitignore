@@ -5,3 +5,4 @@ dist/
 .pdm-python
 .pdm-build/
 .venv/
+.ipynb_checkpoints/
