@@ -33,6 +33,7 @@ LOG = logging.getLogger(__name__)
 
 @dataclass
 class OptParams:
+    remove_data: bool = field(default=True)
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
     api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
@@ -102,7 +103,7 @@ class QAlchemyInitialize(Instruction):
         self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
 
     def _define(self):
-        sequence_wd_tags = [self.param_hash, "Q-Alchemy", "Qiskit-Integration"]
+        sequence_wd_tags = [f"Hash={self.param_hash}", "Source=Qiskit-Integration", f"ImageSize={self.opt_params.image_size}"]
         wd_root = enter_jma(self.client).work_data_root_link.navigate()
 
         existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
@@ -135,7 +136,6 @@ class QAlchemyInitialize(Instruction):
             .allow_output_data_deletion()
             .start()
             .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
-            .hide()
         )
         self.result_summary: dict = job.get_result()
         inner_job = job._job
@@ -150,7 +150,8 @@ class QAlchemyInitialize(Instruction):
         else:
             raise IOError(f"Q-Alchemy API call failed. Reason: {self.result_summary['status']}.")
         # Clean-up now.
-        if inner_job is not None:
+        if self.opt_params.remove_data and inner_job is not None:
+            job.hide()
             for wd in inner_job.output_dataslots:
                 delete_action = wd.assigned_workdata.delete_action
                 if delete_action is not None:
