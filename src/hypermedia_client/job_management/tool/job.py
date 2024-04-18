@@ -15,7 +15,6 @@ from typing import Any, Self
 import httpx
 from httpx import URL
 
-
 from hypermedia_client.core import Link, MediaTypes
 from hypermedia_client.core.polling import wait_until, PollingException
 from hypermedia_client.job_management.enterjma import enter_jma
@@ -42,7 +41,7 @@ from hypermedia_client.job_management.model import (
     JobQueryParameters,
     JobSortPropertiesSortParameter,
     JobFilterParameter,
-    SelectWorkDataForDataSlotParameters,
+    SelectWorkDataForDataSlotParameters, SetJobTagsParameters,
 )
 
 
@@ -231,7 +230,6 @@ class Job:
         result = self._job.result
         return json_.loads(result) if result else None
 
-
     def wait_for_state(self, state: JobStates, timeout_ms: int = 5000) -> Self:
         """Wait for this job to reach a state.
 
@@ -304,12 +302,12 @@ class Job:
         return self
 
     def _get_sub_jobs(
-        self,
-        sort_by: JobSortPropertiesSortParameter | None = None,
-        state: JobStates | None = None,
-        name: str | None = None,
-        show_deleted: bool | None = None,
-        processing_step_url: str | None = None,
+            self,
+            sort_by: JobSortPropertiesSortParameter | None = None,
+            state: JobStates | None = None,
+            name: str | None = None,
+            show_deleted: bool | None = None,
+            processing_step_url: str | None = None,
     ) -> JobQueryResultHco:
         filter_param = JobFilterParameter(
             is_sub_job=True,
@@ -404,5 +402,16 @@ class Job:
         Returns:
             This `Job` object"""
         self._job.disallow_output_data_deletion_action.execute()
+        self.refresh()
+        return self
+
+    def set_tags(self, tags: list[str]):
+        """Set tags to the job.
+
+        Returns:
+            This `Job` object"""
+        self._job.edit_tags_action.execute(SetJobTagsParameters(
+            tags=tags
+        ))
         self.refresh()
         return self

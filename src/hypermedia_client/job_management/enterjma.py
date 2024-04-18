@@ -27,8 +27,8 @@ LOG = logging.getLogger(__name__)
 THco = TypeVar("THco", bound=Hco)
 
 
-def _version_match(ver1: list[int], ver2: list[int]) -> bool:
-    return all([v1 == v2 for v1, v2 in zip(ver1, ver2)])
+def _version_match_major_minor(ver1: list[int], ver2: list[int]) -> bool:
+    return all([v1 == v2 for v1, v2 in zip(ver1[:2], ver2[:2])])
 
 
 def enter_jma(
@@ -44,7 +44,7 @@ def enter_jma(
     # Check for matching protocol versions
     client_version = hypermedia_client.job_management.__jma_version__
     jma_version = [int(i) for i in str.split(info.api_version, '.')]
-    if not _version_match(jma_version, client_version):
+    if not _version_match_major_minor(jma_version, client_version):
         LOG.warning(
             f"Version mismatch between 'hypermedia_client' (v{'.'.join(map(str ,client_version))}) "
             f"and 'JobManagementAPI' (v{'.'.join(map(str, jma_version))})! "

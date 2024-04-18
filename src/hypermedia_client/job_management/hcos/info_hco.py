@@ -29,6 +29,7 @@ class InfoHco(Hco[InfoEntity]):
     api_version: str = Property()
     build_version: str = Property()
     current_user: UserHco
+    used_storage_in_bytes: int = Property()
 
     self_link: InfoLink
 

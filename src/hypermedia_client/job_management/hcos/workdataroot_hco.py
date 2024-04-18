@@ -18,7 +18,7 @@ from hypermedia_client.core.hco.action_with_parameters_hco import ActionWithPara
 from hypermedia_client.core.hco.hco_base import Hco
 from hypermedia_client.core.hco.link_hco import LinkHco
 from hypermedia_client.core.hco.upload_action_hco import UploadAction, UploadParameters
-from hypermedia_client.job_management.hcos.workdata_used_tags_hco import WorkDataUsedTagsLink
+from hypermedia_client.job_management.hcos.workdata_used_tags_query_result_hco import WorkDataUsedTagsLink
 from hypermedia_client.job_management.hcos.workdata_hco import WorkDataLink
 from hypermedia_client.job_management.hcos.workdata_query_result_hco import (
     WorkDataQueryResultHco,
@@ -26,7 +26,7 @@ from hypermedia_client.job_management.hcos.workdata_query_result_hco import (
     WorkDataQueryResultPaginationLink
 )
 from hypermedia_client.job_management.known_relations import Relations
-from hypermedia_client.job_management.model import WorkDataQueryParameters
+from hypermedia_client.job_management.model import WorkDataQueryParameters, WorkDataUsedTagsFilterParameter
 from hypermedia_client.job_management.model.sirenentities import WorkDataRootEntity
 
 
@@ -39,6 +39,16 @@ class WorkDataQueryAction(ActionWithParametersHco[WorkDataQueryParameters]):
 
     def default_parameters(self) -> WorkDataQueryParameters:
         return self._get_default_parameters(WorkDataQueryParameters, WorkDataQueryParameters())
+
+
+class WorkDataUsedTagsQueryAction(ActionWithParametersHco[WorkDataUsedTagsFilterParameter]):
+    def execute(self, parameters: WorkDataUsedTagsFilterParameter) -> WorkDataUsedTagsLink:
+        url = self._execute_returns_url(parameters)
+        link = Link.from_url(url, [str(Relations.CREATED_RESSOURCE)], "Created query", MediaTypes.SIREN)
+        return WorkDataUsedTagsLink.from_link(self._client, link)
+
+    def default_parameters(self) -> WorkDataUsedTagsFilterParameter:
+        return self._get_default_parameters(WorkDataUsedTagsFilterParameter, WorkDataUsedTagsFilterParameter())
 
 
 class WorkDataUploadAction(UploadAction):
@@ -55,6 +65,7 @@ class WorkDataRootLink(LinkHco):
 
 class WorkDataRootHco(Hco[WorkDataRootEntity]):
     query_action: WorkDataQueryAction | None
+    query_tags_action: WorkDataUsedTagsQueryAction | None
     upload_action: WorkDataUploadAction | None
 
     self_link: WorkDataRootLink
@@ -68,6 +79,8 @@ class WorkDataRootHco(Hco[WorkDataRootEntity]):
 
         instance.query_action = WorkDataQueryAction.from_entity_optional(
             client, instance._entity, "CreateWorkDataQuery")
+        instance.query_tags_action = WorkDataUsedTagsQueryAction.from_entity_optional(
+            client, instance._entity, "CreateWorkDataTagsQuery")
         instance.upload_action = WorkDataUploadAction.from_entity_optional(
             client, instance._entity, "Upload")
 

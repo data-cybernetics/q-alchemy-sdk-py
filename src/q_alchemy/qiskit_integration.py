@@ -3,12 +3,13 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #     http://www.apache.org/licenses/LICENSE-2.0
-
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import datetime
 import logging
 import os
 import hashlib
@@ -27,11 +28,13 @@ from hypermedia_client.core.hco.upload_action_hco import UploadParameters
 from hypermedia_client.job_management.model import JobStates, SetTagsWorkDataParameters, WorkDataQueryParameters, \
     WorkDataFilterParameter
 
+logging.getLogger("httpx").setLevel(logging.WARN)
 LOG = logging.getLogger(__name__)
 
 
 @dataclass
 class OptParams:
+    remove_data: bool = field(default=True)
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
     api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
@@ -101,7 +104,7 @@ class QAlchemyInitialize(Instruction):
         self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
 
     def _define(self):
-        sequence_wd_tags = [self.param_hash, "Q-Alchemy", "Qiskit-Integration"]
+        sequence_wd_tags = [f"Hash={self.param_hash}", "Source=Qiskit-Integration", f"ImageSize={self.opt_params.image_size}"]
         wd_root = enter_jma(self.client).work_data_root_link.navigate()
 
         existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
@@ -122,7 +125,7 @@ class QAlchemyInitialize(Instruction):
         job_timeout = self.opt_params.job_completion_timeout_sec * 1000
         job = (
             Job(self.client)
-            .create(name='Execute Transformation')
+            .create(name=f'Execute Transformation ({datetime.datetime.now()})')
             .select_processing(processing_step='convert_circuit_layers')
             .configure_parameters(
                 min_fidelity=1.0 - self.opt_params.max_fidelity_loss,
@@ -131,12 +134,13 @@ class QAlchemyInitialize(Instruction):
                 image_shape_y=self.opt_params.image_size[1]
             )
             .assign_input_dataslot(0, wd_link)
+            .allow_output_data_deletion()
             .start()
             .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
         )
         self.result_summary: dict = job.get_result()
+        inner_job = job._job
         if self.result_summary["status"].startswith("OK"):
-            inner_job = job._job
             qasm_wd = [s.assigned_workdata for s in inner_job.output_dataslots if s.assigned_workdata.name == "qasm_circuit.qasm"][0]
             if qasm_wd.size_in_bytes > 0:
                 qasm: str = qasm_wd.download_link.download().decode("utf-8")
@@ -146,3 +150,11 @@ class QAlchemyInitialize(Instruction):
                 raise IOError("Q-Alchemy API call failed for unknown reasons.")
         else:
             raise IOError(f"Q-Alchemy API call failed. Reason: {self.result_summary['status']}.")
+        # Clean-up now.
+        if self.opt_params.remove_data and inner_job is not None:
+            job.hide()
+            for wd in inner_job.output_dataslots:
+                delete_action = wd.assigned_workdata.delete_action
+                if delete_action is not None:
+                    delete_action.execute()
+
