@@ -47,6 +47,13 @@ class OptParams:
     basis_gates: List[str] = field(default_factory=lambda: ["u1", "u2", "u3", "cx"])
     image_size: Tuple[int, int] = field(default=(-1, -1))
 
+    @classmethod
+    def from_dict(cls, env):
+        return cls(**{
+            k: v for k, v in env.items()
+            if k in inspect.signature(cls).parameters
+        })
+
 
 class QAlchemyInitialize(Instruction):
     """
