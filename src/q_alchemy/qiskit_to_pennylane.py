@@ -92,7 +92,7 @@ class QAlchemyStatePreparation(Operation):
         op_list = []
         
         init: Instruction = QAlchemyInitialize(
-            np.array(state_vector, dtype=complex),
+            np.array(state_vector, dtype=np.complex128).tolist(),
             opt_params=opt_params
         )
         inst = init.definition.data
