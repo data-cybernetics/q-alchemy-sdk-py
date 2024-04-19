@@ -107,7 +107,7 @@ class QAlchemyStatePreparation(Operation):
             if gate_name == 'rz':
                 op_list.append(qml.RZ(gate_param[0], wires=wires))
             elif gate_name == 'cx':
-                op_list.append(qml.CNOT(wires=[num_qubits-1-int(qubits[i][0]), num_qubits-1-int(qubits[i][1])]))
+                op_list.append(qml.CNOT(wires=wires))
             elif gate_name == 'ry':
                 op_list.append(qml.RY(gate_param[0], wires=wires))
             elif gate_name == 'rx':
