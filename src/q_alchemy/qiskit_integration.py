@@ -112,7 +112,10 @@ class QAlchemyInitialize(Instruction):
             timeout=httpx.Timeout(timeout=self.opt_params.job_completion_timeout_sec + 10.0, connect=10.0)
         )
         super().__init__("q-alchemy", num_qubits, 0, params=params, label=label)
-        self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
+        if self.opt_params.assign_data_hash:
+            self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
+        else:
+            self.param_hash = datetime.datetime.utcnow().timestamp()
 
     def _define(self):
         sequence_wd_tags = [f"Hash={self.param_hash}", "Source=Qiskit-Integration", f"ImageSize={self.opt_params.image_size}"]
