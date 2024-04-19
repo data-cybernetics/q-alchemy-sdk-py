@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import datetime
+import inspect
 import logging
 import os
 import hashlib
@@ -44,8 +45,10 @@ class OptParams:
     isometry_scheme: str = field(default="ccd")
     unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int = field(default=300)
-    basis_gates: List[str] = field(default_factory=lambda: ["u1", "u2", "u3", "cx"])
+    basis_gates: List[str] = field(default_factory=lambda: ["rx", "ry", "rz", "cx"])
     image_size: Tuple[int, int] = field(default=(-1, -1))
+    with_debug_data: bool = field(default=False)
+    assign_data_hash: bool = field(default=True)
 
     @classmethod
     def from_dict(cls, env):
