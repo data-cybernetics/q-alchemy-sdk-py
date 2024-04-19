@@ -93,6 +93,7 @@ class QAlchemyInitialize(Instruction):
                 Shannon decomposition).
                 Default is ``unitary_scheme='qsd'``.
         """
+        params = np.asarray(params, dtype=complex).tolist()
         num_qubits = int(np.ceil(np.log2(len(params))))
         if opt_params is None:
             self.opt_params = OptParams()
