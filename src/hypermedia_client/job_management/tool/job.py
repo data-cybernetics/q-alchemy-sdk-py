@@ -172,13 +172,14 @@ class Job:
             )
         )
         query_result = self._processing_step_root.query_action.execute(query_param)
-        if len(query_result.processing_steps) == 0:
+        candidates = [p for p in query_result.processing_steps if p.function_name == processing_step]
+        if len(candidates) == 0:
             raise AttributeError(f"No processing step with the name '{processing_step}' registered!")
-        if len(query_result.processing_steps) > 1:
+        if len(candidates) > 1:
             raise AttributeError(f"Multiple results querying processing step '{processing_step}'!")
-        assert len(query_result.processing_steps) == 1
+        assert len(candidates) == 1
         # Todo: For now we choose the first and only result. Make this more flexible?
-        processing_url = query_result.processing_steps[0].self_link.get_url()
+        processing_url = candidates[0].self_link.get_url()
 
         self._job.select_processing_action.execute(
             SelectProcessingParameters(processing_step_url=str(processing_url))
