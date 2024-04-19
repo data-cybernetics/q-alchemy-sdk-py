@@ -118,7 +118,12 @@ class QAlchemyInitialize(Instruction):
             self.param_hash = datetime.datetime.utcnow().timestamp()
 
     def _define(self):
-        sequence_wd_tags = [f"Hash={self.param_hash}", "Source=Qiskit-Integration", f"ImageSize={self.opt_params.image_size}"]
+        sequence_wd_tags = [
+            f"Hash={self.param_hash}",
+            "Source=Qiskit-Integration",
+            f"ImageSize={self.opt_params.image_size}"
+        ]
+        sequence_wd_tags += self.opt_params.job_tags
         wd_root = enter_jma(self.client).work_data_root_link.navigate()
 
         existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
