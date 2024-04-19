@@ -10,6 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import datetime
+import inspect
 import logging
 import os
 import hashlib
@@ -44,8 +45,17 @@ class OptParams:
     isometry_scheme: str = field(default="ccd")
     unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int = field(default=300)
-    basis_gates: List[str] = field(default_factory=lambda: ["u1", "u2", "u3", "cx"])
+    basis_gates: List[str] = field(default_factory=lambda: ["rx", "ry", "rz", "cx"])
     image_size: Tuple[int, int] = field(default=(-1, -1))
+    with_debug_data: bool = field(default=False)
+    assign_data_hash: bool = field(default=True)
+
+    @classmethod
+    def from_dict(cls, env):
+        return cls(**{
+            k: v for k, v in env.items()
+            if k in inspect.signature(cls).parameters
+        })
 
 
 class QAlchemyInitialize(Instruction):
@@ -83,6 +93,7 @@ class QAlchemyInitialize(Instruction):
                 Shannon decomposition).
                 Default is ``unitary_scheme='qsd'``.
         """
+        params = np.asarray(params, dtype=complex).tolist()
         num_qubits = int(np.ceil(np.log2(len(params))))
         if opt_params is None:
             self.opt_params = OptParams()
@@ -101,10 +112,18 @@ class QAlchemyInitialize(Instruction):
             timeout=httpx.Timeout(timeout=self.opt_params.job_completion_timeout_sec + 10.0, connect=10.0)
         )
         super().__init__("q-alchemy", num_qubits, 0, params=params, label=label)
-        self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
+        if self.opt_params.assign_data_hash:
+            self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
+        else:
+            self.param_hash = datetime.datetime.utcnow().timestamp()
 
     def _define(self):
-        sequence_wd_tags = [f"Hash={self.param_hash}", "Source=Qiskit-Integration", f"ImageSize={self.opt_params.image_size}"]
+        sequence_wd_tags = [
+            f"Hash={self.param_hash}",
+            "Source=Qiskit-Integration",
+            f"ImageSize={self.opt_params.image_size}"
+        ]
+        sequence_wd_tags += self.opt_params.job_tags
         wd_root = enter_jma(self.client).work_data_root_link.navigate()
 
         existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
@@ -115,24 +134,32 @@ class QAlchemyInitialize(Instruction):
             wd_root = enter_jma(self.client).work_data_root_link.navigate()
             wd_link = wd_root.upload_action.execute(UploadParameters(
                 filename=f"{self.param_hash}.bin",
-                binary=np.asarray(self.params).tobytes(),
+                binary=np.asarray(self.params, dtype=np.complex128).tobytes(),
                 mediatype=MediaTypes.OCTET_STREAM,
             ))
-            wd_link.navigate().edit_tags_action.execute(SetTagsWorkDataParameters(tags=sequence_wd_tags))
+            wd_link.navigate().edit_tags_action.execute(
+                SetTagsWorkDataParameters(tags=sequence_wd_tags)
+            )
         else:
             wd_link = existing_wd_query.workdatas[0].self_link
 
         job_timeout = self.opt_params.job_completion_timeout_sec * 1000
+        processing_name = "convert_circuit_layers_qasm_only"
+        job_parameters = dict(
+            min_fidelity=1.0 - self.opt_params.max_fidelity_loss,
+            basis_gates=self.opt_params.basis_gates,
+        )
+        if all(i > 0 for i in self.opt_params.image_size) or self.opt_params.with_debug_data:
+            processing_name = "convert_circuit_layers"
+            job_parameters.update(dict(
+                image_shape_x=self.opt_params.image_size[0],
+                image_shape_y=self.opt_params.image_size[1]
+            ))
         job = (
             Job(self.client)
             .create(name=f'Execute Transformation ({datetime.datetime.now()})')
-            .select_processing(processing_step='convert_circuit_layers')
-            .configure_parameters(
-                min_fidelity=1.0 - self.opt_params.max_fidelity_loss,
-                basis_gates=self.opt_params.basis_gates,
-                image_shape_x=self.opt_params.image_size[0],
-                image_shape_y=self.opt_params.image_size[1]
-            )
+            .select_processing(processing_step=processing_name)
+            .configure_parameters(**job_parameters)
             .assign_input_dataslot(0, wd_link)
             .allow_output_data_deletion()
             .start()
