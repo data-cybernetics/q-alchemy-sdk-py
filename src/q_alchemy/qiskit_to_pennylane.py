@@ -102,7 +102,7 @@ class QAlchemyStatePreparation(Operation):
         for instruction in inst:
             gate_name = instruction.operation.name
             gate_param = instruction.operation.params
-            wires = [num_qubits - q.index for q in instruction.qubits]
+            wires = [num_qubits - (q._index + 1) for q in instruction.qubits]
 
             if gate_name == 'rz':
                 op_list.append(qml.RZ(gate_param[0], wires=wires))
