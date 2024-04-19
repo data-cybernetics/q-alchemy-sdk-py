@@ -134,7 +134,7 @@ class QAlchemyInitialize(Instruction):
             wd_root = enter_jma(self.client).work_data_root_link.navigate()
             wd_link = wd_root.upload_action.execute(UploadParameters(
                 filename=f"{self.param_hash}.bin",
-                binary=np.asarray(self.params).tobytes(),
+                binary=np.asarray(self.params, dtype=np.complex128).tobytes(),
                 mediatype=MediaTypes.OCTET_STREAM,
             ))
             wd_link.navigate().edit_tags_action.execute(
