@@ -137,21 +137,29 @@ class QAlchemyInitialize(Instruction):
                 binary=np.asarray(self.params).tobytes(),
                 mediatype=MediaTypes.OCTET_STREAM,
             ))
-            wd_link.navigate().edit_tags_action.execute(SetTagsWorkDataParameters(tags=sequence_wd_tags))
+            wd_link.navigate().edit_tags_action.execute(
+                SetTagsWorkDataParameters(tags=sequence_wd_tags)
+            )
         else:
             wd_link = existing_wd_query.workdatas[0].self_link
 
         job_timeout = self.opt_params.job_completion_timeout_sec * 1000
+        processing_name = "convert_circuit_layers_qasm_only"
+        job_parameters = dict(
+            min_fidelity=1.0 - self.opt_params.max_fidelity_loss,
+            basis_gates=self.opt_params.basis_gates,
+        )
+        if all(i > 0 for i in self.opt_params.image_size) or self.opt_params.with_debug_data:
+            processing_name = "convert_circuit_layers"
+            job_parameters.update(dict(
+                image_shape_x=self.opt_params.image_size[0],
+                image_shape_y=self.opt_params.image_size[1]
+            ))
         job = (
             Job(self.client)
             .create(name=f'Execute Transformation ({datetime.datetime.now()})')
-            .select_processing(processing_step='convert_circuit_layers')
-            .configure_parameters(
-                min_fidelity=1.0 - self.opt_params.max_fidelity_loss,
-                basis_gates=self.opt_params.basis_gates,
-                image_shape_x=self.opt_params.image_size[0],
-                image_shape_y=self.opt_params.image_size[1]
-            )
+            .select_processing(processing_step=processing_name)
+            .configure_parameters(**job_parameters)
             .assign_input_dataslot(0, wd_link)
             .allow_output_data_deletion()
             .start()
