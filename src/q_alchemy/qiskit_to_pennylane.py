@@ -38,6 +38,7 @@ class QAlchemyStatePreparation(Operation):
             raise Warning(f"Basis Gates cannot be set currently. The inpot will be ignored.")
         opt_params = OptParams.from_dict(kwargs)
         opt_params.basis_gates = ["id", "rx", "ry", "rz", "cx"]
+        opt_params.job_tags += ["Source=PennyLane-Integration"]
         self._hyperparameters = {
             "opt_params": opt_params
         }
