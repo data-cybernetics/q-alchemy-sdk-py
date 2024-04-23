@@ -19,6 +19,7 @@ from typing import List, Dict, Tuple
 
 import httpx
 import numpy as np
+from httpx import HTTPTransport
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
@@ -109,7 +110,11 @@ class QAlchemyInitialize(Instruction):
         self.client = httpx.Client(
             base_url=f"{self.opt_params.schema}://{self.opt_params.host}",
             headers=headers,
-            timeout=httpx.Timeout(timeout=self.opt_params.job_completion_timeout_sec + 10.0, connect=10.0)
+            timeout=httpx.Timeout(
+                timeout=self.opt_params.job_completion_timeout_sec + 10.0,
+                connect=10.0
+            ),
+            transport=HTTPTransport(retries=3)
         )
         super().__init__("q-alchemy", num_qubits, 0, params=params, label=label)
         if self.opt_params.assign_data_hash:
