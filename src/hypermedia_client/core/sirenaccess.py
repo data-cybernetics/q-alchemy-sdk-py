@@ -19,17 +19,21 @@ from httpx import Response
 from httpx import URL
 from pydantic import BaseModel
 
-from .exceptions import SirenException
+from tenacity import retry, retry_if_exception_type, stop_after_attempt
+
+from .exceptions import SirenException, RateLimitError
 from .http_headers import Headers
 from .base_relations import BaseRelations
 from .media_types import MediaTypes
 from .model.error import ProblemDetails
 from .model.sirenmodels import Entity, Link, Action, TEntity
+from .resilience_handling import wait_retry_generator
 
 logger = logging.getLogger(__name__)
 
 
 # for now, we do not support navigations to non siren links (e.g. external)
+@retry(retry=retry_if_exception_type(RateLimitError), wait=wait_retry_generator, stop=stop_after_attempt(4))
 def get_resource(client: httpx.Client, href: str, media_type: str = MediaTypes.SIREN,
                  parse_type: type[TEntity] = Entity) -> TEntity | ProblemDetails | Response:
     try:
@@ -37,6 +41,8 @@ def get_resource(client: httpx.Client, href: str, media_type: str = MediaTypes.S
         response = client.get(href)
     except (httpx.ConnectTimeout, httpx.ConnectError) as exc:
         raise SirenException(f"Http-client error requesting resource: {href}") from exc
+    if response.status_code == 429:
+        raise RateLimitError(response.headers)
     expected_type = media_type or MediaTypes.SIREN  # if not specified expect siren
 
     if response.status_code == httpx.codes.OK:
@@ -94,6 +100,7 @@ def upload_binary(client: httpx.Client, action: Action, content: str | bytes | I
 
 
 # for now no support for multi file upload
+@retry(retry=retry_if_exception_type(RateLimitError), wait=wait_retry_generator, stop=stop_after_attempt(4))
 def upload_file(client: httpx.Client, action: Action, file: BinaryIO, filename: str,
                 mediatype: str = MediaTypes.OCTET_STREAM) -> None | URL | ProblemDetails | Response:
     if action.type != MediaTypes.MULTIPART_FORM_DATA:
@@ -105,6 +112,8 @@ def upload_file(client: httpx.Client, action: Action, file: BinaryIO, filename: 
         response = client.request(method=action.method, url=action.href, files=files)
     except httpx.RequestError as exc:
         raise SirenException(f"Error from httpx while uploading data to: {action.href}") from exc
+    if response.status_code == 429:
+        raise RateLimitError(response.headers)
     return handle_action_result(response)
 
 
@@ -116,6 +125,7 @@ def execute_action_on_entity(client: httpx.Client, entity: Entity, name: str, pa
     return execute_action(client, action, parameters)
 
 
+@retry(retry=retry_if_exception_type(RateLimitError), wait=wait_retry_generator, stop=stop_after_attempt(4))
 def execute_action(client: httpx.Client, action: Action,
                    parameters: BaseModel | None = None) -> None | URL | ProblemDetails | Response:
     if action.has_parameters() is False:
@@ -140,6 +150,8 @@ def execute_action(client: httpx.Client, action: Action,
         )
     except httpx.RequestError as exc:
         raise SirenException(f"Error from httpx while executing action: {action.href}") from exc
+    if response.status_code == 429:
+        raise RateLimitError(response.headers)
 
     return handle_action_result(response)
 
