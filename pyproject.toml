@@ -35,6 +35,7 @@ dependencies = [
     "pydantic>=2.6.4",
     "httpx<1.0.0,>=0.25.0",
     "pennylane>=0.35.1",
+    "tenacity>=8.2.3",
 ]
 requires-python = "<4,>=3.11"
 readme = "README.md"
