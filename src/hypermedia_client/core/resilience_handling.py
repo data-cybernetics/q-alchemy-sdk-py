@@ -22,7 +22,7 @@ def wait_retry_generator(retry_state):
     if isinstance(exception, RateLimitError):
         if exception.retry_after_sec is not None:
             retry_after_sec = exception.retry_after_sec + random.random() / 2
-            print(f"Rate limited. Retrying after {retry_after_sec} seconds.")
+            logger.debug(f"Rate limited. Retrying after {retry_after_sec} seconds.")
             return retry_after_sec
     else:
         return 0.5
