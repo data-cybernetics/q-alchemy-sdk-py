@@ -1,13 +1,11 @@
 import logging
 import re
-import sys
-from typing import Tuple
 
 import numpy as np
 import pennylane as qml
 from pennylane.operation import Operation
 from qiskit._accelerate.quantum_circuit import CircuitInstruction
-from qiskit.circuit import Instruction, Qubit
+from qiskit.circuit import Instruction
 
 from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams
 

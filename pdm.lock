@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["cross_platform", "inherit_metadata"]
 lock_version = "4.4.1"
-content_hash = "sha256:f6924c3caee268b7db0219cfd027e0c5ee1322c02f781efeb3b741c899eb82f7"
+content_hash = "sha256:efae6b7715cc9d3f30098aa36cfd9a0f936aa7d1bdb78ed85d46c8fed12b1932"
 
 [[package]]
 name = "annotated-types"
@@ -1485,6 +1485,20 @@ files = [
     {file = "pillow-10.2.0-pp39-pypy39_pp73-manylinux_2_28_x86_64.whl", hash = "sha256:d1b35bcd6c5543b9cb547dee3150c93008f8dd0f1fef78fc0cd2b141c5baf58a"},
     {file = "pillow-10.2.0-pp39-pypy39_pp73-win_amd64.whl", hash = "sha256:fe4c15f6c9285dc54ce6553a3ce908ed37c8f3825b5a51a15c91442bb955b868"},
     {file = "pillow-10.2.0.tar.gz", hash = "sha256:e87f0b2c78157e12d7686b27d63c070fd65d994e8ddae6f328e0dcf4a0cd007e"},
+]
+
+[[package]]
+name = "pinexq-client"
+version = "0.3.0.20240620.2"
+requires_python = ">=3.11"
+summary = "A hypermedia-based client for the DataCybernetics PinexQ platform."
+groups = ["default"]
+dependencies = [
+    "httpx<1.0.0,>=0.25.0",
+    "pydantic<3.0.0,>=2.1.0",
+]
+files = [
+    {file = "pinexq_client-0.3.0.20240620.2-py3-none-any.whl", hash = "sha256:fb9559503207353b427b33e6aa37c831538f6188d5857212d359bac0fc6b845f"},
 ]
 
 [[package]]

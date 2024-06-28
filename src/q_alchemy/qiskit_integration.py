@@ -24,10 +24,10 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
 
-from hypermedia_client.job_management import enter_jma, Job
-from hypermedia_client.core import MediaTypes
-from hypermedia_client.core.hco.upload_action_hco import UploadParameters
-from hypermedia_client.job_management.model import JobStates, SetTagsWorkDataParameters, WorkDataQueryParameters, \
+from pinexq_client.job_management import enter_jma, Job
+from pinexq_client.core import MediaTypes
+from pinexq_client.core.hco.upload_action_hco import UploadParameters
+from pinexq_client.job_management.model import JobStates, SetTagsWorkDataParameters, WorkDataQueryParameters, \
     WorkDataFilterParameter
 
 logging.getLogger("httpx").setLevel(logging.WARN)
@@ -163,7 +163,7 @@ class QAlchemyInitialize(Instruction):
         job = (
             Job(self.client)
             .create(name=f'Execute Transformation ({datetime.datetime.now()})')
-            .select_processing(processing_step=processing_name)
+            .select_processing(function_name=processing_name)
             .configure_parameters(**job_parameters)
             .assign_input_dataslot(0, wd_link)
             .allow_output_data_deletion()
@@ -173,7 +173,7 @@ class QAlchemyInitialize(Instruction):
         self.result_summary: dict = job.get_result()
         inner_job = job._job
         if self.result_summary["status"].startswith("OK"):
-            qasm_wd = [s.assigned_workdata for s in inner_job.output_dataslots if s.assigned_workdata.name == "qasm_circuit.qasm"][0]
+            qasm_wd = [wd for s in inner_job.output_dataslots for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"][0]
             if qasm_wd.size_in_bytes > 0:
                 qasm: str = qasm_wd.download_link.download().decode("utf-8")
                 qc = QuantumCircuit.from_qasm_str(qasm)
@@ -184,9 +184,9 @@ class QAlchemyInitialize(Instruction):
             raise IOError(f"Q-Alchemy API call failed. Reason: {self.result_summary['status']}.")
         # Clean-up now.
         if self.opt_params.remove_data and inner_job is not None:
-            job.hide()
-            for wd in inner_job.output_dataslots:
-                delete_action = wd.assigned_workdata.delete_action
-                if delete_action is not None:
-                    delete_action.execute()
-
+            for od in inner_job.output_dataslots:
+                for wd in od.assigned_workdatas:
+                    delete_action = wd.delete_action
+                    if delete_action is not None:
+                        delete_action.execute()
+            job.refresh().delete()
