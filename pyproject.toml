@@ -41,5 +41,11 @@ dependencies = [
 requires-python = "<4,>=3.11"
 readme = "README.md"
 
+[project.optional-dependencies]
+hhl = [
+    "qiskit<1.0.0",
+    "quantum-linear-solvers @ git+https://github.com/carstenblank/quantum_linear_solvers@q-alchemy-sdk"
+]
+
 [project.license]
 text = "Apache"
