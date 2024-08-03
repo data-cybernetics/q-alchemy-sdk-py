@@ -1,16 +1,6 @@
 [tool.pdm]
 distribution = true
 
-[tool.pdm.dev-dependencies]
-dev = [
-    "pytest",
-    "jupyter",
-    "matplotlib",
-    "pandas",
-    "scikit-learn",
-    "tqdm"
-]
-
 [tool.pdm.build]
 includes = [
     "src/hypermedia_client",
@@ -31,15 +21,27 @@ authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
 ]
 dependencies = [
-    "qiskit>=1.0.2",
     "pydantic>=2.6.4",
     "httpx<1.0.0,>=0.25.0",
-    "pennylane>=0.35.1",
     "tenacity>=8.2.3",
     "pinexq-client>=0.3.0.20240620.2",
 ]
 requires-python = "<4,>=3.11"
 readme = "README.md"
+
+[tool.pdm.dev-dependencies]
+dev = [
+    "pytest",
+    "jupyter",
+    "matplotlib",
+    "pandas",
+    "scikit-learn",
+    "tqdm"
+]
+
+[project.optional-dependencies]
+qiskit = ["qiskit>=1.0.2"]
+pennylane = ["qiskit>=1.0.2", "pennylane>=0.35.1"]
 
 [project.license]
 text = "Apache"
