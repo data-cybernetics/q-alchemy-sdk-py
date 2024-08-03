@@ -1,34 +1,45 @@
-[tool.poetry]
-name = "q-alchemy-sdk-py"
-version = "0.1.0"
-description = ""
-authors = ["Carsten Blank <blank@data-cybernetics.com>"]
-readme = "README.md"
-packages = [{include = "q_alchemy"}]
+[tool.pdm]
+distribution = true
 
-[tool.poetry.dependencies]
-python = ">=3.9,<4"
-numpy = "*"
-pyarrow = "*"
-requests = "*"
-pydantic = "<2"  # We want to use only pydantic 1 (breaking changes since 2.0)
-python-dateutil = "*"
-retry = "*"
-qclib = { git = "https://github.com/carstenblank/qclib.git", branch = "bugfix/make_sure_ndarray" }
+[tool.pdm.dev-dependencies]
+dev = [
+    "pytest",
+    "jupyter",
+    "matplotlib",
+    "pandas",
+    "scikit-learn",
+    "tqdm"
+]
 
-[tool.poetry.dev-dependencies]
-pytest = "*"
-jupyter = { version="*", optional = true }
-matplotlib = { version="*", optional = true }
-pandas = { version="*", optional = true }
-scikit-learn = { version="*", optional = true }
-quantum_linear_solvers = { git = "https://github.com/carstenblank/quantum_linear_solvers", branch = "bugfix/remove_dist", optional = true}
-
-[tool.poetry.extras]
-hhl-examples = ["quantum_linear_solvers", "pandas", "jupyter", "matplotlib"]
-qml-examples = ["scikit-learn", "pandas", "jupyter", "matplotlib"]
-examples = ["jupyter", "matplotlib"]
+[tool.pdm.build]
+includes = [
+    "src/hypermedia_client",
+    "src/q_alchemy",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = [
+    "pdm-backend",
+]
+build-backend = "pdm.backend"
+
+[project]
+name = "q-alchemy-sdk-py"
+version = "0.2.8"
+description = ""
+authors = [
+    { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
+]
+dependencies = [
+    "qiskit>=1.0.2",
+    "pydantic>=2.6.4",
+    "httpx<1.0.0,>=0.25.0",
+    "pennylane>=0.35.1",
+    "tenacity>=8.2.3",
+    "pinexq-client>=0.3.0.20240620.2",
+]
+requires-python = "<4,>=3.11"
+readme = "README.md"
+
+[project.license]
+text = "Apache"
