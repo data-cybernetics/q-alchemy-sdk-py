@@ -21,6 +21,16 @@ We have decided not to go through pypi, but you can install this through pip or 
 pip install q-alchemy-sdk-py
 ```
 
+If you want to use the qiskit-integration, please use
+```bash
+pip install q-alchemy-sdk-py[qiskit]
+```
+
+And if you want the PennyLane-integration, please use
+```bash
+pip install q-alchemy-sdk-py[pennylane]
+```
+
 We use [python-pdm](https://pdm-project.org/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
 it after cloning is simply
 
@@ -28,12 +38,40 @@ it after cloning is simply
 pdm install
 ```
 
+Again, for qiskit- or PennyLane-integrations, please add the groups
+```bash
+pdm install -G qiskit -G pennylane
+```
+Or whatever combination you need. Currently, the PennyLane-integration is dependent on the qiskit-integration... what a 
+fallacy! We will -- of course -- fix this soon!
+
 ## Usage
 
 There are examples under the `/examples` folder, but for those that are eager to find out, here it is.
 First, you will want to get an API key from the [Q-Alchemy Portal](https://portal.q-alchemy.com/). You 
 need to sign up for this, sorry, but this is necessary. Once you have the API key (free of charge of course)
 you can test it!
+
+### Direct Example
+
+```python
+import numpy as np
+from sklearn.datasets import fetch_openml
+
+from q_alchemy.initialize import q_alchemy_as_qasm
+
+mnist = fetch_openml('mnist_784', version=1, parser="auto")
+
+zero: np.ndarray = mnist.data[mnist.target == "0"].iloc[0].to_numpy()
+filler = np.empty(2 ** 10 - zero.shape[0])
+filler.fill(0)
+
+zero = np.hstack([zero, filler])
+zero = zero / np.linalg.norm(zero)
+
+qasm, summary = q_alchemy_as_qasm(zero, max_fidelity_loss=0.2, api_key="<your api key>", return_summary=True)
+print(summary)
+```
 
 ### Qiskit Example
 
