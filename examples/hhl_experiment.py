@@ -1,20 +1,22 @@
-from qiskit import transpile
-import numpy as np
-from qiskit import QuantumCircuit, QuantumRegister
-from scipy.sparse import diags
 import logging
-from typing import Optional, Union, List, Callable, Tuple
-from linear_solvers import NumPyLinearSolver, HHL
-from qiskit.circuit.library.arithmetic.exact_reciprocal import ExactReciprocal
-from qiskit.quantum_info import Statevector
-import sys
 import os
-sys.path.append('./')
-from q_alchemy.qiskit import QAlchemyInitialize
+import sys
+
+import numpy as np
+from linear_solvers import HHL
+from qiskit import QuantumCircuit
+from qiskit import transpile
+from qiskit.quantum_info import Statevector
+
 import multiprocessing
 import pandas as pd
 
+from q_alchemy.initialize import q_alchemy_as_qasm
+
+sys.path.append('./')
+os.environ["Q_ALCHEMY_API_KEY"] = "<your key here>"
 data_path = 'examples/hhl_data'
+
 
 def get_solution_vector(solution, length):
     raw_solution_vector = Statevector(solution.state)
@@ -26,11 +28,12 @@ def get_solution_vector(solution, length):
     norm = solution.euclidean_norm
     return norm * solution_vector / np.linalg.norm(solution_vector)
 
+
 def solve_HHL(A, b, length, fid_loss,type):
     if type == 'qalchemy':
         print('constructing circuit....')
-        sp_org = QAlchemyInitialize(b, opt_params={f'max_fidelity_loss':fid_loss})
-        b_qc = transpile(sp_org.definition, basis_gates=["id", "rx", "ry", "rz", "cx"])
+        sp_qasm = q_alchemy_as_qasm(b, max_fidelity_loss=fid_loss, basis_gates=["id", "rx", "ry", "rz", "cx"])
+        b_qc = transpile(QuantumCircuit.from_qasm_str(sp_qasm))
         print(b_qc)
         print('solving....')
         hhl_solution = HHL().solve(A, b_qc)
@@ -52,10 +55,10 @@ def solve_HHL(A, b, length, fid_loss,type):
     
     return hhl_circuit, hhl_ans, hhl_norm
 
-os.environ["Q_ALCHEMY_API_KEY"] = "JnvkpMCsyr4nB9nHcwa6CbxqhtZXyF1b"
 
 logging.getLogger().setLevel(logging.INFO)
 LOG = logging.getLogger(__name__)
+
 
 if __name__=="__main__":
    
@@ -122,8 +125,3 @@ if __name__=="__main__":
     #     circuits.append(circuit)
     #     solutions.append(sol)
     #     norms.append(norm)
-        
-        
-        
-    
-    
