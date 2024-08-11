@@ -126,11 +126,13 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
         .start()
         .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
     )
-    result_summary: dict = job.get_result()
+    result_summary: dict = job.refresh().get_result()
     inner_job = job._job
     if result_summary["status"].startswith("OK"):
-        qasm_wd = \
-        [wd for s in inner_job.output_dataslots for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"][0]
+        qasm_wd = [
+            wd for s in inner_job.output_dataslots
+            for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
+        ][0]
         if qasm_wd.size_in_bytes > 0:
             qasm: str = qasm_wd.download_link.download().decode("utf-8")
         else:
@@ -150,3 +152,29 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
         return qasm, result_summary
     else:
         return qasm
+
+
+from time import sleep
+
+
+def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
+    from threading import Thread
+    from tqdm import tqdm
+
+    threads = []
+    result = []
+    for opt in opt_params:
+        def func(_opt):
+            sp_qasm = q_alchemy_as_qasm(state_vector, _opt, client, return_summary)
+            result.append(sp_qasm)
+
+        job = Thread(target=func, args=(opt,))
+        job.start()
+        sleep(0.05)  # be easy on the API
+        threads.append(job)
+
+    # print(f"Waiting for {len(threads)} jobs to finish.")
+    for x in tqdm(threads):
+        x.join()
+
+    return result
