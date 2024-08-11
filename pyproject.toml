@@ -44,7 +44,8 @@ qiskit = ["qiskit>=1.0.2"]
 pennylane = ["qiskit>=1.0.2", "pennylane>=0.35.1"]
 hhl = [
     "qiskit<1.0.0",
-    "quantum-linear-solvers @ git+https://github.com/carstenblank/quantum_linear_solvers@q-alchemy-sdk"
+    "quantum-linear-solvers @ git+https://github.com/carstenblank/quantum_linear_solvers@q-alchemy-sdk",
+    "qiskit-aer>=0.14.2"
 ]
 
 [project.license]
