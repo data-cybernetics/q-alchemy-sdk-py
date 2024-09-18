@@ -69,7 +69,7 @@ class QAlchemyInitialize(Instruction):
         else:
             self.opt_params = OptParams(**opt_params)
 
-        self.client = create_client(opt_params)
+        self.client = create_client(self.opt_params)
 
         if label is None:
             label = "QAl"
