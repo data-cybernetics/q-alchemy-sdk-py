@@ -5,7 +5,7 @@
 groups = ["default", "dev", "pennylane"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:68bb79b6c0d4b3cb60e803d9c796a5f4e843a81e4ab12f50f96fb44ff7eb4a06"
+content_hash = "sha256:990a6e4f2614cb5d798f47f96c364682ae88ba286d3166bd61cd5ca717ed4bb4"
 
 [[metadata.targets]]
 requires_python = "~=3.11"
