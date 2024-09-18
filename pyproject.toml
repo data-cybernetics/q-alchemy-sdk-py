@@ -41,7 +41,7 @@ dev = [
 
 [project.optional-dependencies]
 qiskit = ["qiskit>=1.0.2"]
-pennylane = ["qiskit>=1.0.2", "pennylane>=0.35.1"]
+pennylane = ["pennylane>=0.35.1", "openqasm3[parser]"]
 
 [project.license]
 text = "Apache"
