@@ -26,7 +26,7 @@ class OptParams:
     added_headers: Dict[str, str] = field(default_factory=dict)
     isometry_scheme: str = field(default="ccd")
     unitary_scheme: str = field(default="qsd")
-    job_completion_timeout_sec: int = field(default=300)
+    job_completion_timeout_sec: int | None = field(default=300)
     basis_gates: List[str] = field(default_factory=lambda: ["rx", "ry", "rz", "cx"])
     image_size: Tuple[int, int] = field(default=(-1, -1))
     with_debug_data: bool = field(default=False)
@@ -48,7 +48,9 @@ def create_client(opt_params: OptParams):
         base_url=f"{opt_params.schema}://{opt_params.host}",
         headers=headers,
         timeout=httpx.Timeout(
-            timeout=opt_params.job_completion_timeout_sec + 10.0,
+            timeout=opt_params.job_completion_timeout_sec + 10.0
+            if opt_params.job_completion_timeout_sec is not None
+            else None,
             connect=10.0
         ),
         transport=HTTPTransport(retries=3)
