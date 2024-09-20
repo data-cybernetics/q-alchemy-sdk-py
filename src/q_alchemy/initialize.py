@@ -3,6 +3,7 @@ import inspect
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
+from time import sleep
 from typing import List, Tuple, Dict
 
 import httpx
@@ -154,3 +155,49 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
         return qasm, result_summary
     else:
         return qasm
+
+
+def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
+    from threading import Thread
+    from tqdm import tqdm
+
+    threads = []
+    result = []
+    for opt in opt_params:
+        def func(_opt):
+            sp_qasm = q_alchemy_as_qasm(state_vector, _opt, client, return_summary)
+            result.append(sp_qasm)
+
+        job = Thread(target=func, args=(opt,))
+        job.start()
+        sleep(0.05)  # be easy on the API
+        threads.append(job)
+
+    # print(f"Waiting for {len(threads)} jobs to finish.")
+    for x in tqdm(threads):
+        x.join()
+
+    return result
+
+
+def q_alchemy_as_qasm_parallel_states(state_vector: List[List[complex] | np.ndarray], opt_params: dict | OptParams, client: httpx.Client | None = None, return_summary=False):
+    from threading import Thread
+    from tqdm import tqdm
+
+    threads = []
+    result = []
+    for vec in state_vector:
+        def func(_vec):
+            sp_qasm = q_alchemy_as_qasm(_vec, opt_params, client, return_summary)
+            result.append(sp_qasm)
+
+        job = Thread(target=func, args=(vec,))
+        job.start()
+        sleep(0.05)  # be easy on the API
+        threads.append(job)
+
+    # print(f"Waiting for {len(threads)} jobs to finish.")
+    for x in tqdm(threads):
+        x.join()
+
+    return result
