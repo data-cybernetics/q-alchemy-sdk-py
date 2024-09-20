@@ -128,11 +128,13 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
         .start()
         .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
     )
-    result_summary: dict = job.get_result()
+    result_summary: dict = job.refresh().get_result()
     inner_job = job._job
     if result_summary["status"].startswith("OK"):
-        qasm_wd = \
-        [wd for s in inner_job.output_dataslots for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"][0]
+        qasm_wd = [
+            wd for s in inner_job.output_dataslots
+            for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
+        ][0]
         if qasm_wd.size_in_bytes > 0:
             qasm: str = qasm_wd.download_link.download().decode("utf-8")
         else:
