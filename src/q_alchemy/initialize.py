@@ -214,24 +214,70 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_par
     return result
 
 
-def q_alchemy_as_qasm_parallel_states(state_vector: List[List[complex] | np.ndarray], opt_params: dict | OptParams, client: httpx.Client | None = None, return_summary=False):
+def q_alchemy_as_qasm_parallel_states(
+        state_vector: List[List[complex] | np.ndarray],
+        opt_params: dict | OptParams, client: httpx.Client | None = None, return_summary=False
+) -> List[str | Tuple[str, dict]]:
     from threading import Thread
     from tqdm import tqdm
+    from pinexq_client.job_management.tool.job_group import JobGroup
+
+    opt_params: OptParams = populate_opt_params(opt_params)
+    client = client if client is not None else create_client(opt_params)
+
+    threads = []
+    job_list = []
+    for vec in state_vector:
+        def func(_vec):
+            statevector_link = upload_statevector(client, _vec, opt_params)
+            job = configure_job(client, statevector_link, opt_params)
+            job_list.append(job)
+        t = Thread(target=func, args=(vec,))
+        t.start()
+        sleep(0.3)
+        threads.append(t)
+
+    for x in tqdm(threads, desc="Preparing Jobs", unit="jobs"):
+        x.join()
+
+    job_timeout = (
+        opt_params.job_completion_timeout_sec * 1000
+        if opt_params.job_completion_timeout_sec is not None
+        else 24 * 60 * 60 * 1000
+    )
+
+    print("Executing Jobs")
+    group = (
+        JobGroup(client)
+        .add_jobs(job_list)
+        .start_all()
+        .wait_all(job_timeout)
+    )
 
     threads = []
     result = []
-    for vec in state_vector:
-        def func(_vec):
-            sp_qasm = q_alchemy_as_qasm(_vec, opt_params, client, return_summary)
-            result.append(sp_qasm)
+    for j in group.get_jobs():
+        def func(_j):
+            if _j.get_state() == JobStates.completed:
+                try:
+                    summary, qasm = extract_result(_j)
+                    if return_summary:
+                        result.append((qasm, summary))
+                    else:
+                        result.append(qasm)
+                except Exception as ex:
+                    print("Error extracting result!", ex)
+            try:
+                clean_up_job(_j, opt_params)  # TODO: check if other states can safely be deleted
+            except Exception as ex:
+                print("Error while removing old jobs!", ex)
 
-        job = Thread(target=func, args=(vec,))
-        job.start()
-        sleep(0.05)  # be easy on the API
-        threads.append(job)
+        t = Thread(target=func, args=(j,))
+        t.start()
+        sleep(0.2)
+        threads.append(t)
 
-    # print(f"Waiting for {len(threads)} jobs to finish.")
-    for x in tqdm(threads):
+    for x in tqdm(threads, desc="Cleaning up Jobs", unit="jobs"):
         x.join()
 
     return result
