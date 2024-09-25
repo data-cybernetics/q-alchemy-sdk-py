@@ -12,6 +12,7 @@ from httpx import HTTPTransport
 from pinexq_client.core import MediaTypes
 from pinexq_client.core.hco.upload_action_hco import UploadParameters
 from pinexq_client.job_management import enter_jma, Job
+from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates
 
@@ -67,19 +68,7 @@ def hash_state_vector(state_vector: List[complex] | np.ndarray, opt_params: OptP
     return param_hash
 
 
-def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict | OptParams | None = None, client: httpx.Client | None = None, return_summary=False,  **kwargs) -> str:
-    if opt_params is None:
-        opt_params = OptParams()
-    elif isinstance(opt_params, OptParams):
-        opt_params = opt_params
-    else:
-        opt_params = OptParams(**opt_params)
-
-    for attr in kwargs:
-        if hasattr(opt_params, attr):
-            setattr(opt_params, attr, kwargs[attr])
-
-    client = client if client is not None else create_client(opt_params)
+def upload_statevector(client: httpx.Client, state_vector: np.ndarray, opt_params: OptParams) -> WorkDataLink:
     param_hash = hash_state_vector(state_vector, opt_params)
 
     sequence_wd_tags = [
@@ -107,7 +96,24 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
     else:
         wd_link = existing_wd_query.workdatas[0].self_link
 
-    job_timeout = opt_params.job_completion_timeout_sec * 1000
+    return wd_link
+
+
+def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) -> OptParams:
+    if opt_params is None:
+        opt_params = OptParams()
+    elif isinstance(opt_params, OptParams):
+        opt_params = opt_params
+    else:
+        opt_params = OptParams(**opt_params)
+
+    for attr in kwargs:
+        if hasattr(opt_params, attr):
+            setattr(opt_params, attr, kwargs[attr])
+    return opt_params
+
+
+def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_params: OptParams) -> Job:
     processing_name = "convert_circuit_layers_qasm_only"
     job_parameters = dict(
         min_fidelity=1.0 - opt_params.max_fidelity_loss,
@@ -124,11 +130,13 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
         .create(name=f'Execute Transformation ({datetime.now()})')
         .select_processing(function_name=processing_name)
         .configure_parameters(**job_parameters)
-        .assign_input_dataslot(0, work_data_link=wd_link)
+        .assign_input_dataslot(0, work_data_link=statevector_link)
         .allow_output_data_deletion()
-        .start()
-        .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
     )
+    return job
+
+
+def extract_result(job: Job):
     result_summary: dict = job.refresh().get_result()
     inner_job = job._job
     if result_summary["status"].startswith("OK"):
@@ -142,7 +150,12 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
             raise IOError("Q-Alchemy API call failed for unknown reasons.")
     else:
         raise IOError(f"Q-Alchemy API call failed. Reason: {result_summary['status']}.")
+    return result_summary, qasm
+
+
+def clean_up_job(job: Job, opt_params: OptParams) -> None:
     # Clean-up now.
+    inner_job = job._job
     if opt_params.remove_data and inner_job is not None:
         for od in inner_job.output_dataslots:
             for wd in od.assigned_workdatas:
@@ -150,6 +163,27 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
                 if delete_action is not None:
                     delete_action.execute()
         job.refresh().delete()
+
+
+def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict | OptParams | None = None,
+                      client: httpx.Client | None = None, return_summary=False,  **kwargs) -> str | Tuple[str, dict]:
+
+    opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    client = client if client is not None else create_client(opt_params)
+    statevector_link = upload_statevector(client, state_vector, opt_params)
+
+    job_timeout = (
+        opt_params.job_completion_timeout_sec * 1000
+        if opt_params.job_completion_timeout_sec is not None
+        else 24 * 60 * 60 * 1000
+    )
+    job = (
+       configure_job(client, statevector_link, opt_params)
+        .start()
+        .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
+    )
+    result_summary, qasm = extract_result(job)
+    clean_up_job(job, opt_params)
 
     if return_summary:
         return qasm, result_summary
