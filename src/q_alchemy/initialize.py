@@ -232,18 +232,18 @@ def q_alchemy_as_qasm_parallel_states(
 
     threads = []
     job_list = []
-    for vec in state_vector:
+    for vec in tqdm(state_vector, desc="Starting Jobs", unit="jobs"):
         def func(_vec):
             statevector_link = upload_statevector(client, _vec, opt_params)
             job = configure_job(client, statevector_link, opt_params)
-            job_list.append(job)
+            job_list.append(job.start())
         t = Thread(target=func, args=(vec,))
         t.start()
-        sleep(0.3)
+        sleep(0.33)
         threads.append(t)
 
-    for x in tqdm(threads, desc="Preparing Jobs", unit="jobs"):
-        x.join()
+    for t in threads:
+        t.join()
 
     job_timeout = (
         opt_params.job_completion_timeout_sec * 1000
@@ -255,17 +255,16 @@ def q_alchemy_as_qasm_parallel_states(
     group = (
         JobGroup(client)
         .add_jobs(job_list)
-        .start_all()
         .wait_all(job_timeout)
     )
 
     threads = []
     result = []
-    for j in group.get_jobs():
+    for j in tqdm(group.get_jobs(), desc="Retrieving Results", unit="jobs"):
         def func(_j):
             if _j.get_state() == JobStates.completed:
                 try:
-                    summary, qasm = extract_result(_j)
+                    summary, qasm = extract_result(_j, opt_params)
                     if return_summary:
                         result.append((qasm, summary))
                     else:
@@ -279,10 +278,10 @@ def q_alchemy_as_qasm_parallel_states(
 
         t = Thread(target=func, args=(j,))
         t.start()
-        sleep(0.2)
+        sleep(0.33)
         threads.append(t)
 
-    for x in tqdm(threads, desc="Cleaning up Jobs", unit="jobs"):
+    for x in threads:
         x.join()
 
     return result
