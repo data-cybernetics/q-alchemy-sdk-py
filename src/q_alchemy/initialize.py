@@ -137,8 +137,9 @@ def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_para
         .select_processing(function_name=processing_name)
         .configure_parameters(**job_parameters)
         .assign_input_dataslot(0, work_data_link=statevector_link)
-        .allow_output_data_deletion()
     )
+    if opt_params.remove_data:
+        job.allow_output_data_deletion()
     return job
 
 
