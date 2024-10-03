@@ -1,3 +1,4 @@
+import dataclasses
 import hashlib
 import inspect
 import os
@@ -40,6 +41,9 @@ class OptParams:
             k: v for k, v in env.items()
             if k in inspect.signature(cls).parameters
         })
+
+    def clone(self):
+        return OptParams(**dataclasses.asdict(self))
 
 
 def create_client(opt_params: OptParams):
