@@ -72,8 +72,10 @@ def hash_state_vector(state_vector: List[complex] | np.ndarray, opt_params: OptP
     return param_hash
 
 
-def upload_statevector(client: httpx.Client, state_vector: np.ndarray, opt_params: OptParams) -> WorkDataLink:
+def upload_statevector(client: httpx.Client, state_vector: np.ndarray,
+                       opt_params: OptParams, override_filename: str | None = None) -> WorkDataLink:
     param_hash = hash_state_vector(state_vector, opt_params)
+    filename = f"param_hash.bin" if override_filename is None else override_filename
 
     sequence_wd_tags = [
         f"Hash={param_hash}",
@@ -90,7 +92,7 @@ def upload_statevector(client: httpx.Client, state_vector: np.ndarray, opt_param
     if existing_wd_query.total_entities == 0:
         wd_root = enter_jma(client).work_data_root_link.navigate()
         wd_link = wd_root.upload_action.execute(UploadParameters(
-            filename=f"{param_hash}.bin",
+            filename=filename,
             binary=np.asarray(state_vector, dtype=np.complex128).tobytes(),
             mediatype=MediaTypes.OCTET_STREAM,
         ))
