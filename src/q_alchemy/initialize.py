@@ -145,14 +145,15 @@ def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_para
 
 def extract_result(job: Job):
     result_summary: dict = job.refresh().get_result()
-    inner_job = job._job
     if result_summary["status"].startswith("OK"):
         qasm_wd = [
-            wd for s in inner_job.output_dataslots
-            for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
+            wd
+            for output in job.get_output_data_slots() for wd in output.assigned_workdatas
+            if output.title == "Resulting QASM" and wd.name == "qasm_circuit.qasm"
         ][0]
         if qasm_wd.size_in_bytes > 0:
             qasm: str = qasm_wd.download_link.download().decode("utf-8")
+            qasm_wd.edit_tags_action.execute(SetTagsWorkDataParameters(tags=opt_params.job_tags + qasm_wd.tags))
         else:
             raise IOError("Q-Alchemy API call failed for unknown reasons.")
     else:
