@@ -68,7 +68,7 @@ if __name__ == "__main__":
     client = create_client(opt_params)
     LOG.info("Loading MNIST...")
     X, y = embed_mnist(fetch_openml('mnist_784', version=1, parser="auto"))
-    targets = set(y)
+    targets = sorted(set(y))
     for target in targets:
         data = X[y == target]
         internal_opt_params = opt_params.clone()
