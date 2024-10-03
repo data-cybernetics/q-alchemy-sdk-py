@@ -143,7 +143,7 @@ def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_para
     return job
 
 
-def extract_result(job: Job):
+def extract_result(job: Job, opt_params: OptParams):
     result_summary: dict = job.refresh().get_result()
     if result_summary["status"].startswith("OK"):
         qasm_wd = [
@@ -162,15 +162,12 @@ def extract_result(job: Job):
 
 
 def clean_up_job(job: Job, opt_params: OptParams) -> None:
-    # Clean-up now.
-    inner_job = job._job
-    if opt_params.remove_data and inner_job is not None:
-        for od in inner_job.output_dataslots:
-            for wd in od.assigned_workdatas:
-                delete_action = wd.delete_action
-                if delete_action is not None:
-                    delete_action.execute()
-        job.refresh().delete()
+    if opt_params.remove_data:
+        job.delete_with_associated(
+            delete_input_workdata=True,
+            delete_output_workdata=True,
+            delete_subjobs_with_data=True
+        )
 
 
 def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict | OptParams | None = None,
