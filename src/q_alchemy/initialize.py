@@ -29,7 +29,7 @@ class OptParams:
     isometry_scheme: str = field(default="ccd")
     unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int | None = field(default=300)
-    basis_gates: List[str] = field(default_factory=lambda: ["rx", "ry", "rz", "cx"])
+    basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     image_size: Tuple[int, int] = field(default=(-1, -1))
     with_debug_data: bool = field(default=False)
     assign_data_hash: bool = field(default=True)
