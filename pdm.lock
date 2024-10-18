@@ -1427,22 +1427,30 @@ dependencies = [
 files = [
     {file = "pandas-2.2.3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:66108071e1b935240e74525006034333f98bcdb87ea116de573a6a0dccb6c039"},
     {file = "pandas-2.2.3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:7c2875855b0ff77b2a64a0365e24455d9990730d6431b9e0ee18ad8acee13dbd"},
+    {file = "pandas-2.2.3-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cd8d0c3be0515c12fed0bdbae072551c8b54b7192c7b1fda0ba56059a0179698"},
     {file = "pandas-2.2.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c124333816c3a9b03fbeef3a9f230ba9a737e9e5bb4060aa2107a86cc0a497fc"},
+    {file = "pandas-2.2.3-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:63cc132e40a2e084cf01adf0775b15ac515ba905d7dcca47e9a251819c575ef3"},
     {file = "pandas-2.2.3-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:29401dbfa9ad77319367d36940cd8a0b3a11aba16063e39632d98b0e931ddf32"},
     {file = "pandas-2.2.3-cp311-cp311-win_amd64.whl", hash = "sha256:3fc6873a41186404dad67245896a6e440baacc92f5b716ccd1bc9ed2995ab2c5"},
     {file = "pandas-2.2.3-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:b1d432e8d08679a40e2a6d8b2f9770a5c21793a6f9f47fdd52c5ce1948a5a8a9"},
     {file = "pandas-2.2.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:a5a1595fe639f5988ba6a8e5bc9649af3baf26df3998a0abe56c02609392e0a4"},
+    {file = "pandas-2.2.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:5de54125a92bb4d1c051c0659e6fcb75256bf799a732a87184e5ea503965bce3"},
     {file = "pandas-2.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fffb8ae78d8af97f849404f21411c95062db1496aeb3e56f146f0355c9989319"},
+    {file = "pandas-2.2.3-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:6dfcb5ee8d4d50c06a51c2fffa6cff6272098ad6540aed1a76d15fb9318194d8"},
     {file = "pandas-2.2.3-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:062309c1b9ea12a50e8ce661145c6aab431b1e99530d3cd60640e255778bd43a"},
     {file = "pandas-2.2.3-cp312-cp312-win_amd64.whl", hash = "sha256:59ef3764d0fe818125a5097d2ae867ca3fa64df032331b7e0917cf5d7bf66b13"},
     {file = "pandas-2.2.3-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:f00d1345d84d8c86a63e476bb4955e46458b304b9575dcf71102b5c705320015"},
     {file = "pandas-2.2.3-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:3508d914817e153ad359d7e069d752cdd736a247c322d932eb89e6bc84217f28"},
+    {file = "pandas-2.2.3-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:22a9d949bfc9a502d320aa04e5d02feab689d61da4e7764b62c30b991c42c5f0"},
     {file = "pandas-2.2.3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f3a255b2c19987fbbe62a9dfd6cff7ff2aa9ccab3fc75218fd4b7530f01efa24"},
+    {file = "pandas-2.2.3-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:800250ecdadb6d9c78eae4990da62743b857b470883fa27f652db8bdde7f6659"},
     {file = "pandas-2.2.3-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:6374c452ff3ec675a8f46fd9ab25c4ad0ba590b71cf0656f8b6daa5202bca3fb"},
     {file = "pandas-2.2.3-cp313-cp313-win_amd64.whl", hash = "sha256:61c5ad4043f791b61dd4752191d9f07f0ae412515d59ba8f005832a532f8736d"},
     {file = "pandas-2.2.3-cp313-cp313t-macosx_10_13_x86_64.whl", hash = "sha256:3b71f27954685ee685317063bf13c7709a7ba74fc996b84fc6821c59b0f06468"},
     {file = "pandas-2.2.3-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:38cf8125c40dae9d5acc10fa66af8ea6fdf760b2714ee482ca691fc66e6fcb18"},
+    {file = "pandas-2.2.3-cp313-cp313t-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:ba96630bc17c875161df3818780af30e43be9b166ce51c9a18c1feae342906c2"},
     {file = "pandas-2.2.3-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1db71525a1538b30142094edb9adc10be3f3e176748cd7acc2240c2f2e5aa3a4"},
+    {file = "pandas-2.2.3-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:15c0e1e02e93116177d29ff83e8b1619c93ddc9c49083f237d4312337a61165d"},
     {file = "pandas-2.2.3-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:ad5b65698ab28ed8d7f18790a0dc58005c7629f227be9ecc1072aa74c0c1d43a"},
     {file = "pandas-2.2.3.tar.gz", hash = "sha256:4f18ba62b61d7e192368b84517265a99b4d7ee8912f8708660fb4a366cc82667"},
 ]
@@ -1589,7 +1597,7 @@ files = [
 
 [[package]]
 name = "pinexq-client"
-version = "0.4.0.2024.717.1"
+version = "0.4.2.20241009.1"
 requires_python = ">=3.11"
 summary = "A hypermedia-based client for the DataCybernetics PinexQ platform."
 groups = ["default"]
@@ -1598,7 +1606,7 @@ dependencies = [
     "pydantic<3.0.0,>=2.1.0",
 ]
 files = [
-    {file = "pinexq_client-0.4.0.2024.717.1-py3-none-any.whl", hash = "sha256:4063ae1ed3e4db4c70f36a7cbbe27ddf1999a214768e353a8fff27c98630324f"},
+    {file = "pinexq_client-0.4.2.20241009.1-py3-none-any.whl", hash = "sha256:be917f8ecf18ad403ab79da77ff79264d2b5de76195c424316fcfa1a1cc45c21"},
 ]
 
 [[package]]
@@ -1964,7 +1972,7 @@ files = [
 
 [[package]]
 name = "qiskit"
-version = "1.2.1"
+version = "1.2.4"
 requires_python = ">=3.8"
 summary = "An open-source SDK for working with quantum computers at the level of extended quantum circuits, operators, and primitives."
 groups = ["examples", "qiskit"]
@@ -1975,22 +1983,22 @@ dependencies = [
     "rustworkx>=0.15.0",
     "scipy>=1.5",
     "stevedore>=3.0.0",
-    "symengine>=0.11",
+    "symengine<0.14,>=0.11",
     "sympy>=1.3",
     "typing-extensions",
 ]
 files = [
-    {file = "qiskit-1.2.1-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:b5ded55318c19f6810bf343ffca2260523538fc51381a1649de7ca13e6a49cc8"},
-    {file = "qiskit-1.2.1-cp38-abi3-macosx_10_9_x86_64.whl", hash = "sha256:205fe6edad8e708d3e5ca1488ff509109dbbc7083ec2bc1caee6da9432c981df"},
-    {file = "qiskit-1.2.1-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:ae61858a7b18ecb5661d25a30a99942efa369cb4460fa2a4fa014720accbeee9"},
-    {file = "qiskit-1.2.1-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:a13059794763c51199787bef1fe22f82f644567b009f39eda1ea8ddfccd955fd"},
-    {file = "qiskit-1.2.1-cp38-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:03c72dff7b2189da8ff1920c5fea9933e95bac5550ee532c994d73e5abeacd4e"},
-    {file = "qiskit-1.2.1-cp38-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:d79f9c8a564156cc2b2ec89f51e4969567d27ab4f7460206a96ce1ec4c0e82c3"},
-    {file = "qiskit-1.2.1-cp38-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:c06e4d994b0258d21727a3544d5950c58f44e7c15459d87eff575b4191e3b471"},
-    {file = "qiskit-1.2.1-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c011a5db14d305fbd23a24fbdb71107d07a570a01d14e1314e66d9c0c617703d"},
-    {file = "qiskit-1.2.1-cp38-abi3-win32.whl", hash = "sha256:7384b1ffe86b3ebbca8adab7e06fe827c432bde728bca6ac0a3e157359c87180"},
-    {file = "qiskit-1.2.1-cp38-abi3-win_amd64.whl", hash = "sha256:1a13e6281b6cad07724a3a3d08434837bc0783e5f50021f98f85d9071e8932ad"},
-    {file = "qiskit-1.2.1.tar.gz", hash = "sha256:da69c84ab052416af35a43f0695845797de6d3207760354b7c8c8b93cbb19f47"},
+    {file = "qiskit-1.2.4-cp38-abi3-macosx_10_9_universal2.whl", hash = "sha256:1cdabddeed74956ac22db8b11b3479044a305b0895b142198f11a75e745aa079"},
+    {file = "qiskit-1.2.4-cp38-abi3-macosx_10_9_x86_64.whl", hash = "sha256:9daad1c3a0608c4a32a03112d0650cc51ced2cab16479703230acedafafa0548"},
+    {file = "qiskit-1.2.4-cp38-abi3-macosx_11_0_arm64.whl", hash = "sha256:3394ec724adeb481c02b050ac6e5929ca5e1f91ab94a1d571dadf0c702d6967e"},
+    {file = "qiskit-1.2.4-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:124777b0d9caf40932e02d1d2c6be3a12ff058990e6ae55f45a315a9a51da75b"},
+    {file = "qiskit-1.2.4-cp38-abi3-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:2c8d9fa7fdb0cf7727f27a1881cc9f9be7de2b6aaf7cab6861686e1a6e34d6c8"},
+    {file = "qiskit-1.2.4-cp38-abi3-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:3a973089d54f379006df8ae9b0d406e909e02b11a9390b3e2f50aefd5e8070eb"},
+    {file = "qiskit-1.2.4-cp38-abi3-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:409b43d48e33e5bbc316fd85f44f29a71db2d5ff802affabc5ee355fe9573d7e"},
+    {file = "qiskit-1.2.4-cp38-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a66303ab4f939080ca0b8c4102040a89417a99f2621978c7bca8b1d5f6c6e103"},
+    {file = "qiskit-1.2.4-cp38-abi3-win32.whl", hash = "sha256:93aa20398c5ab79adb4baf89a76d034a7c608fcc5bcbbd77355314378583e56a"},
+    {file = "qiskit-1.2.4-cp38-abi3-win_amd64.whl", hash = "sha256:87175e179bbaa3d2e280f14fe90efa77d6d7521d58ee5afd9528ec6716a6d8e6"},
+    {file = "qiskit-1.2.4.tar.gz", hash = "sha256:3f30b1fc6c66dec240428991da75cc6c35cc75152baff8daf3f8ca71b60684e8"},
 ]
 
 [[package]]
@@ -2167,6 +2175,11 @@ files = [
     {file = "scikit_learn-1.5.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f60021ec1574e56632be2a36b946f8143bf4e5e6af4a06d85281adc22938e0dd"},
     {file = "scikit_learn-1.5.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:394397841449853c2290a32050382edaec3da89e35b3e03d6cc966aebc6a8ae6"},
     {file = "scikit_learn-1.5.2-cp312-cp312-win_amd64.whl", hash = "sha256:57cc1786cfd6bd118220a92ede80270132aa353647684efa385a74244a41e3b1"},
+    {file = "scikit_learn-1.5.2-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:e9a702e2de732bbb20d3bad29ebd77fc05a6b427dc49964300340e4c9328b3f5"},
+    {file = "scikit_learn-1.5.2-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:b0768ad641981f5d3a198430a1d31c3e044ed2e8a6f22166b4d546a5116d7908"},
+    {file = "scikit_learn-1.5.2-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:178ddd0a5cb0044464fc1bfc4cca5b1833bfc7bb022d70b05db8530da4bb3dd3"},
+    {file = "scikit_learn-1.5.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f7284ade780084d94505632241bf78c44ab3b6f1e8ccab3d2af58e0e950f9c12"},
+    {file = "scikit_learn-1.5.2-cp313-cp313-win_amd64.whl", hash = "sha256:b7b0f9a0b1040830d38c39b91b3a44e1b643f4b36e36567b80b7c6bd2202a27f"},
     {file = "scikit_learn-1.5.2.tar.gz", hash = "sha256:b4237ed7b3fdd0a4882792e68ef2545d5baa50aca3bb45aa7df468138ad8f94d"},
 ]
 
