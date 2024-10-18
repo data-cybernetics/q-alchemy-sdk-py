@@ -187,7 +187,7 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict
         .start()
         .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
     )
-    result_summary, qasm = extract_result(job)
+    result_summary, qasm = extract_result(job, opt_params)
     clean_up_job(job, opt_params)
 
     if return_summary:
