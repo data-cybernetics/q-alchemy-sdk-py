@@ -23,7 +23,7 @@ class OptParams:
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
     api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
-    host: str = field(default="jobs.api.q-alchemy.com")
+    host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
     added_headers: Dict[str, str] = field(default_factory=dict)
     isometry_scheme: str = field(default="ccd")
