@@ -138,10 +138,9 @@ def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_para
 
 def extract_result(job: Job):
     result_summary: dict = job.refresh().get_result()
-    inner_job = job._job
     if result_summary["status"].startswith("OK"):
         qasm_wd = [
-            wd for s in inner_job.output_dataslots
+            wd for s in job.get_output_data_slots()
             for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
         ][0]
         if qasm_wd.size_in_bytes > 0:
@@ -155,9 +154,8 @@ def extract_result(job: Job):
 
 def clean_up_job(job: Job, opt_params: OptParams) -> None:
     # Clean-up now.
-    inner_job = job._job
-    if opt_params.remove_data and inner_job is not None:
-        for od in inner_job.output_dataslots:
+    if opt_params.remove_data:
+        for od in job.get_output_data_slots():
             for wd in od.assigned_workdatas:
                 delete_action = wd.delete_action
                 if delete_action is not None:
