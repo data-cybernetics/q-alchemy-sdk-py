@@ -44,7 +44,15 @@ dev = [
 dev = ["pytest", "jupyter", "matplotlib", "pandas", "scikit-learn"]
 qiskit = ["qiskit>=1.0.2"]
 pennylane = ["pennylane>=0.35.1", "openqasm3[parser]"]
-examples = ["qiskit>=1.0.2", "pennylane>=0.35.1", "openqasm3[parser]", "qutip"]
+examples = [
+    "qiskit>=1.0.2",
+    "pennylane>=0.35.1",
+    "openqasm3[parser]",
+    "qutip",
+    "pylatexenc",
+    "qiskit_experiments",
+    "qiskit_aer"
+]
 
 [project.license]
 text = "Apache"
