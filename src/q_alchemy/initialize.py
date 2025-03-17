@@ -98,7 +98,7 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
         wd_root = enter_jma(client).work_data_root_link.navigate()
         wd_link = wd_root.upload_action.execute(UploadParameters(
             filename=f"{param_hash}.parquet",
-            binary=buffer,
+            binary=buffer.read(),
             mediatype=MediaTypes.OCTET_STREAM,
         ))
         wd_link.navigate().edit_tags_action.execute(
