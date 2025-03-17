@@ -181,7 +181,10 @@ def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray | sparse.coo_arra
     client = client if client is not None else create_client(opt_params)
 
     # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
-    data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
+    if isinstance(state_vector, sparse.coo_array):
+        data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector.reshape(1, -1)).reshape(1, -1)
+    else:
+        data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
     statevector_link = upload_statevector(client, data_matrix_pyarrow, opt_params)
 
