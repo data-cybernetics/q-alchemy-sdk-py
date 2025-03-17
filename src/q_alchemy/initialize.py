@@ -39,6 +39,8 @@ class OptParams:
     image_size: Tuple[int, int] = field(default=(-1, -1))
     with_debug_data: bool = field(default=False)
     assign_data_hash: bool = field(default=True)
+    use_research_function: str | None = field(default=None)
+    extra_kwargs: dict = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, env):
@@ -124,18 +126,53 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
     return opt_params
 
 
-def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_params: OptParams) -> Job:
+def create_processing_input(opt_params: OptParams) -> tuple[str, dict[str, float | list[str]]]:
     processing_name = "convert_circuit_layers_qasm_only"
     job_parameters = dict(
         min_fidelity=1.0 - opt_params.max_fidelity_loss,
         basis_gates=opt_params.basis_gates,
     )
-    if all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
+    if opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
         processing_name = "convert_circuit_layers"
         job_parameters.update(dict(
             image_shape_x=opt_params.image_size[0],
             image_shape_y=opt_params.image_size[1]
         ))
+    elif opt_params.use_research_function is not None:
+        processing_name = opt_params.use_research_function
+        if processing_name == "baa_tucker_initialize":
+            job_parameters.update(dict(
+                options={
+                    "isometry_scheme": opt_params.isometry_scheme,
+                    "unitary_scheme": opt_params.unitary_scheme,
+                    "strategy": opt_params.extra_kwargs.get("strategy", "brute_force"),
+                    "max_combination_size": opt_params.extra_kwargs.get("max_combination_size", 0),
+                    "use_low_rank": opt_params.extra_kwargs.get("use_low_rank", False),
+                    "initializer": opt_params.extra_kwargs.get("initializer", "BruteForceTuckerInitialize")
+                }
+            ))
+        elif processing_name == "pivot_initialize":
+            job_parameters.update(dict(
+                options={
+                    "aux": opt_params.extra_kwargs.get("aux", False),
+                    "initializer": opt_params.extra_kwargs.get("initializer", "BaaTuckerInitialize")
+                }
+            ))
+        elif processing_name == "brute_force_tucker_initialize":
+            job_parameters.update(dict(
+                options={
+                    "isometry_scheme": opt_params.isometry_scheme,
+                    "unitary_scheme": opt_params.unitary_scheme,
+                    "strategy": opt_params.extra_kwargs.get("strategy", "brute_force"),
+                    "max_blocks": opt_params.extra_kwargs.get("max_blocks", 3)
+                }
+            ))
+
+    return processing_name, job_parameters
+
+def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_params: OptParams) -> Job:
+    processing_name, job_parameters = create_processing_input(opt_params)
+
     job = (
         Job(client)
         .create(name=f'Execute Transformation ({datetime.now()})')
@@ -174,8 +211,13 @@ def clean_up_job(job: Job, opt_params: OptParams) -> None:
         job.refresh().delete()
 
 
-def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray | sparse.coo_array | sparse.coo_matrix, opt_params: dict | OptParams | None = None,
-                      client: httpx.Client | None = None, return_summary=False,  **kwargs) -> str | Tuple[str, dict]:
+def q_alchemy_as_qasm(
+        state_vector: List[complex] | np.ndarray | sparse.coo_array | sparse.coo_matrix,
+        opt_params: dict | OptParams | None = None,
+        client: httpx.Client | None = None,
+        return_summary=False,
+        **kwargs
+) -> str | Tuple[str, dict]:
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
     client = client if client is not None else create_client(opt_params)
