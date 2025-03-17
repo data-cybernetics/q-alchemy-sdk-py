@@ -168,12 +168,16 @@ def clean_up_job(job: Job, opt_params: OptParams) -> None:
         job.refresh().delete()
 
 
-def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray, opt_params: dict | OptParams | None = None,
+def q_alchemy_as_qasm(state_vector: List[complex] | np.ndarray | sparse.coo_array, opt_params: dict | OptParams | None = None,
                       client: httpx.Client | None = None, return_summary=False,  **kwargs) -> str | Tuple[str, dict]:
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
     client = client if client is not None else create_client(opt_params)
-    statevector_link = upload_statevector(client, state_vector, opt_params)
+
+    # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
+    data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
+    data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
+    statevector_link = upload_statevector(client, data_matrix_pyarrow, opt_params)
 
     job_timeout = (
         opt_params.job_completion_timeout_sec * 1000
