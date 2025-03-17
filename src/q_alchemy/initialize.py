@@ -1,13 +1,17 @@
 import hashlib
 import inspect
+import io
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, UTC
 from time import sleep
 from typing import List, Tuple, Dict
 
 import httpx
 import numpy as np
+from scipy import sparse
+import pyarrow as pa
+import pyarrow.parquet as pq
 from httpx import HTTPTransport
 from pinexq_client.core import MediaTypes
 from pinexq_client.core.hco.upload_action_hco import UploadParameters
@@ -15,6 +19,8 @@ from pinexq_client.job_management import enter_jma, Job
 from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates
+
+from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 
 @dataclass
