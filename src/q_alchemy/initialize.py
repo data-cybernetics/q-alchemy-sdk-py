@@ -60,11 +60,12 @@ def create_client(opt_params: OptParams):
     return client
 
 
-def hash_state_vector(state_vector: List[complex] | np.ndarray, opt_params: OptParams):
+def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
     if opt_params.assign_data_hash:
-        param_hash = hashlib.md5(np.asarray(state_vector).tobytes()).hexdigest()
+        param_hash = hashlib.md5(buffer.read()).hexdigest()
+        buffer.seek(0)
     else:
-        param_hash = datetime.utcnow().timestamp()
+        param_hash = datetime.now(UTC).timestamp()
     return param_hash
 
 
