@@ -235,6 +235,7 @@ def q_alchemy_as_qasm_parallel_states(
     threads = []
     job_list = []
     for vec in state_vector:
+        vec = convert_sparse_coo_to_arrow(sparse.coo_matrix(vec).reshape(1, -1))
         def func(_vec):
             statevector_link = upload_statevector(client, _vec, opt_params)
             job = configure_job(client, statevector_link, opt_params)
