@@ -15,7 +15,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.2.14"
+version = "0.2.15"
 description = ""
 authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
@@ -25,7 +25,8 @@ dependencies = [
     "httpx<1.0.0,>=0.25.0",
     "tenacity>=8.2.3",
     "pinexq-client>=0.3.0.20240620.2",
-    "tqdm"
+    "tqdm",
+    "pyarrow>=19.0.1"
 ]
 requires-python = "<4,>=3.11"
 readme = "README.md"
