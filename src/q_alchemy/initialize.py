@@ -15,7 +15,7 @@ import pyarrow.parquet as pq
 from httpx import HTTPTransport
 from pinexq_client.core import MediaTypes
 from pinexq_client.core.hco.upload_action_hco import UploadParameters
-from pinexq_client.job_management import enter_jma, Job
+from pinexq_client.job_management import enter_jma, Job, ProcessingStep
 from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates
@@ -170,13 +170,38 @@ def create_processing_input(opt_params: OptParams) -> tuple[str, dict[str, float
 
     return processing_name, job_parameters
 
+
+def find_processing_step(client, processing_name):
+    from pinexq_client.job_management.model import ProcessingStepQueryParameters
+    from pinexq_client.job_management.model import ProcessingStepFilterParameter
+    from pinexq_client.job_management.model import FunctionNameMatchTypes
+
+    query_param = ProcessingStepQueryParameters(
+        filter=ProcessingStepFilterParameter(
+            function_name=processing_name,
+            function_name_match_type=FunctionNameMatchTypes.match_exact
+        )
+    )
+    processing_step_root = enter_jma(client).processing_step_root_link.navigate()
+    query_result = processing_step_root.query_action.execute(query_param)
+    if len(query_result.processing_steps) < 1:
+        raise NameError(
+            f"There is a misconfiguration. Please contact customer support. "
+            f"We are very sorry! Reason: no step known for function name: {processing_name}"
+        )
+    sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
+    step = ProcessingStep.from_hco(query_result.processing_steps[0])
+
+    return step
+
+
 def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_params: OptParams) -> Job:
     processing_name, job_parameters = create_processing_input(opt_params)
-
+    step = find_processing_step(client, processing_name)
     job = (
         Job(client)
         .create(name=f'Execute Transformation ({datetime.now()})')
-        .select_processing(function_name=processing_name)
+        .select_processing(processing_step_instance=step)
         .configure_parameters(**job_parameters)
         .assign_input_dataslot(0, work_data_link=statevector_link)
         .allow_output_data_deletion()

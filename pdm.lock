@@ -1814,7 +1814,7 @@ files = [
 
 [[package]]
 name = "pinexq-client"
-version = "0.9.1.20241213.2"
+version = "0.9.2.20250317.3"
 requires_python = ">=3.11"
 summary = "A hypermedia-based client for the DataCybernetics PinexQ platform."
 groups = ["default"]
@@ -1823,7 +1823,7 @@ dependencies = [
     "pydantic<3.0.0,>=2.1.0",
 ]
 files = [
-    {file = "pinexq_client-0.9.1.20241213.2-py3-none-any.whl", hash = "sha256:6d9919e694d062a41abe0b5d8895b2a305fe4b7a41ead666c6417bd8260215ce"},
+    {file = "pinexq_client-0.9.2.20250317.3-py3-none-any.whl", hash = "sha256:e002db378c966fe4bc5f57ac2457e38d512ed307b6d77217b07308feaa716cad"},
 ]
 
 [[package]]
