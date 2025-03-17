@@ -69,8 +69,12 @@ def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
     return param_hash
 
 
-def upload_statevector(client: httpx.Client, state_vector: np.ndarray, opt_params: OptParams) -> WorkDataLink:
-    param_hash = hash_state_vector(state_vector, opt_params)
+def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
+    # Convert to buffer to get hash and later possibly upload
+    buffer = io.BytesIO()
+    pq.write_table(state_vector, buffer)
+    buffer.seek(0)
+    param_hash = hash_state_vector(buffer, opt_params)
 
     sequence_wd_tags = [
         f"Hash={param_hash}",
@@ -87,8 +91,8 @@ def upload_statevector(client: httpx.Client, state_vector: np.ndarray, opt_param
     if existing_wd_query.total_entities == 0:
         wd_root = enter_jma(client).work_data_root_link.navigate()
         wd_link = wd_root.upload_action.execute(UploadParameters(
-            filename=f"{param_hash}.bin",
-            binary=np.asarray(state_vector, dtype=np.complex128).tobytes(),
+            filename=f"{param_hash}.parquet",
+            binary=buffer,
             mediatype=MediaTypes.OCTET_STREAM,
         ))
         wd_link.navigate().edit_tags_action.execute(
