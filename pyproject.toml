@@ -24,7 +24,7 @@ dependencies = [
     "pydantic>=2.6.4",
     "httpx<1.0.0,>=0.25.0",
     "tenacity>=8.2.3",
-    "pinexq-client>=0.3.0.20240620.2",
+    "pinexq-client>=0.9.2.20250403.1",
     "tqdm",
     "pyarrow>=19.0.1"
 ]
@@ -43,10 +43,10 @@ dev = [
 
 [project.optional-dependencies]
 dev = ["pytest", "jupyter", "matplotlib", "pandas", "scikit-learn"]
-qiskit = ["qiskit>=1.0.2"]
+qiskit = ["qiskit>=1.0.2,<2.0"]
 pennylane = ["pennylane>=0.35.1", "openqasm3[parser]"]
 examples = [
-    "qiskit>=1.0.2",
+    "qiskit>=1.0.2,<2.0",
     "pennylane>=0.35.1",
     "openqasm3[parser]",
     "qutip",
