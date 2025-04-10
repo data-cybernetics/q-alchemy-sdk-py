@@ -4,7 +4,6 @@ import pennylane as qml
 from pennylane.operation import Operation
 
 from q_alchemy.initialize import q_alchemy_as_qasm, OptParams
-from q_alchemy.parser.qasm_pennylane import from_qasm
 
 LOG = logging.getLogger(__name__)
 
