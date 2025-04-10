@@ -69,4 +69,7 @@ class QAlchemyStatePreparation(Operation):
             )
 
         qasm = q_alchemy_as_qasm(state_vector, opt_params)
-        return from_qasm(qasm)
+        loaded_circuit = qml.from_qasm(qasm)
+        # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
+        qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
+        return qs.operations
