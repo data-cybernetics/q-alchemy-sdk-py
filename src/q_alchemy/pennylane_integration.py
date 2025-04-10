@@ -16,7 +16,7 @@ class QAlchemyStatePreparation(Operation):
             opt_params = kwargs["opt_params"]
         else:
             if "basis_gates" in kwargs:
-                raise Warning(f"Basis Gates cannot be set currently. The inpot will be ignored.")
+                raise Warning("Basis Gates cannot be set currently. The input will be ignored.")
             opt_params = OptParams.from_dict(kwargs)
 
         # Append options
