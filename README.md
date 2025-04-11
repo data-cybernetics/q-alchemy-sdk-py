@@ -101,9 +101,41 @@ instr = QAlchemyInitialize(
 instr.definition.draw(fold=-1)
 ```
 
-### PennyLane
+### PennyLane Example
 
-Will come soon!
+```python
+import numpy as np
+import pennylane as qml
+from sklearn.datasets import fetch_openml
+
+from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams
+
+mnist = fetch_openml('mnist_784', version=1, parser="auto")
+
+zero: np.ndarray = mnist.data[mnist.target == "0"].iloc[0].to_numpy()
+filler = np.empty(2 ** 10 - zero.shape[0])
+filler.fill(0)
+
+zero = np.hstack([zero, filler])
+zero = zero / np.linalg.norm(zero)
+
+dev = qml.device('lightning.qubit', wires=10)
+
+@qml.qnode(dev)
+def circuit(state=None):
+    QAlchemyStatePreparation(
+        state,
+        wires=range(10),
+        opt_params=OptParams(
+            max_fidelity_loss=0.1,
+            basis_gates=["id", "rx", "ry", "rz", "cx"],
+            api_key="<your api key>"
+        )
+    )
+    return qml.state()
+
+print(qml.draw(circuit, level="device", max_length=100)(zero.tolist()))
+```
 
 ### Developer UI
 
