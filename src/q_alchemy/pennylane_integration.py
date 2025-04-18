@@ -1,12 +1,74 @@
+from typing import Optional, Union
+
 import logging
 
+from scipy.sparse import csr_matrix
+
 import pennylane as qml
-from pennylane.operation import Operation
+from pennylane.ops.qubit.state_preparation import StatePrep
+from pennylane.operation import Operation, Operator
+from pennylane.typing import TensorLike
+from pennylane.wires import WiresLike
 
 from q_alchemy.initialize import q_alchemy_as_qasm, OptParams
 
 LOG = logging.getLogger(__name__)
 
+class AmplitudeEmbedding(StatePrep):
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
+        self,
+        state: Union[TensorLike, csr_matrix],
+        wires: WiresLike,
+        pad_with=None,
+        normalize=False,
+        id: Optional[str] = None,
+        validate_norm: bool = True,
+        **kwargs
+    ):
+        self.kwargs = kwargs
+
+        super().__init__(
+            state,
+            wires,
+            pad_with,
+            normalize,
+            id,
+            validate_norm
+        )
+
+        if "opt_params" in kwargs:
+            opt_params = kwargs["opt_params"]
+        else:
+            opt_params = OptParams.from_dict(kwargs)
+
+        self._hyperparameters['opt_params'] = opt_params
+
+    # pylint: disable=unused-argument
+    @staticmethod
+    def compute_decomposition(state: TensorLike, wires: WiresLike, **kwargs) -> list[Operator]:
+        r"""Representation of the operator as a product of other operators (static method). :
+
+        .. math:: O = O_1 O_2 \dots O_n.
+
+
+        .. seealso:: :meth:`~.AmplitudeEmbedding.decomposition`.
+
+        Args:
+            state (array[complex]): a state vector of size 2**len(wires)
+            wires (Iterable, Wires): the wire(s) the operation acts on
+
+        Returns:
+            list[Operator]: decomposition into lower level operations
+
+        **Example:**
+
+        >>> qml.AmplitudeEmbedding.compute_decomposition(np.array([1, 0, 0, 0]), wires=range(2))
+        [QAlchemyStatePreparation(tensor([1, 0, 0, 0], requires_grad=True), wires=[0, 1])]
+
+        """
+
+        return [QAlchemyStatePreparation(state, wires, id=None, **kwargs)]
 
 class QAlchemyStatePreparation(Operation):
     def __init__(self, state_vector, wires, id=None, **kwargs):
