@@ -173,9 +173,8 @@ def circuit(x):
     return qml.expval(qml.PauliZ(0))
 
 # Run the circuit on a batch of inputs
-X_tensor = torch.tensor(X, dtype=torch.float32)
-results = torch.stack([circuit(x) for x in X_tensor])
-print(results)
+X_tensor = torch.tensor(X, dtype=torch.float64)
+print(qml.draw(circuit, level="device", max_length=100)(X_tensor))
 ```
 
 This example demonstrates how batched data can be processed using broadcasting with `AmplitudeEmbedding`, and how Q-Alchemy is triggered on simulators like `qiskit.aer`. When moving to real hardware or gate-based backends that lack `StatePrep` gate, Q-Alchemy will transparently handle the state preparation.
