@@ -165,7 +165,6 @@ def circuit(x):
     AmplitudeEmbedding(
         x,
         wires=[0],
-        use_research_function="baa_tucker_initialize",
         opt_params=OptParams(
             max_fidelity_loss=0.0,
             api_key="<your api key>"
