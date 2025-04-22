@@ -7,6 +7,9 @@ from datetime import datetime, UTC
 from time import sleep
 from typing import List, Tuple, Dict
 
+from threading import Thread, Lock
+from tqdm import tqdm
+
 import httpx
 import numpy as np
 from scipy import sparse
@@ -275,9 +278,6 @@ def q_alchemy_as_qasm(
 
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
-    from threading import Thread
-    from tqdm import tqdm
-
     threads = []
     result = []
     for opt in opt_params:
@@ -298,70 +298,41 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_par
 
 
 def q_alchemy_as_qasm_parallel_states(
-        state_vector: List[List[complex] | np.ndarray],
-        opt_params: dict | OptParams, client: httpx.Client | None = None, return_summary=False
+        state_vector: List[List[complex] | np.ndarray | sparse.coo_array | sparse.coo_matrix],
+        opt_params: dict | OptParams,
+        client: httpx.Client | None = None,
+        return_summary=False,
+        **kwargs
 ) -> List[str | Tuple[str, dict]]:
-    from threading import Thread
-    from tqdm import tqdm
-    from pinexq_client.job_management.tool.job_group import JobGroup
 
-    opt_params: OptParams = populate_opt_params(opt_params)
+    opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
     client = client if client is not None else create_client(opt_params)
 
-    threads = []
-    job_list = []
-    for vec in state_vector:
-        vec = convert_sparse_coo_to_arrow(sparse.coo_matrix(vec).reshape(1, -1))
-        def func(_vec):
-            statevector_link = upload_statevector(client, _vec, opt_params)
-            job = configure_job(client, statevector_link, opt_params)
-            job_list.append(job)
-        t = Thread(target=func, args=(vec,))
-        t.start()
-        sleep(0.3)
-        threads.append(t)
-
-    for x in tqdm(threads, desc="Preparing Jobs", unit="jobs"):
-        x.join()
-
-    job_timeout = (
-        opt_params.job_completion_timeout_sec * 1000
-        if opt_params.job_completion_timeout_sec is not None
-        else 24 * 60 * 60 * 1000
-    )
-
-    print("Executing Jobs")
-    group = (
-        JobGroup(client)
-        .add_jobs(job_list)
-        .start_all()
-        .wait_all(job_timeout)
-    )
-
-    threads = []
     result = []
-    for j in group.get_jobs():
-        def func(_j):
-            if _j.get_state() == JobStates.completed:
-                try:
-                    summary, qasm = extract_result(_j)
-                    if return_summary:
-                        result.append((qasm, summary))
-                    else:
-                        result.append(qasm)
-                except Exception as ex:
-                    print("Error extracting result!", ex)
-            try:
-                clean_up_job(_j, opt_params)  # TODO: check if other states can safely be deleted
-            except Exception as ex:
-                print("Error while removing old jobs!", ex)
+    result_lock = Lock()
+    threads = []
 
-        t = Thread(target=func, args=(j,))
+    def run_single(vec, opt_params, client):
+        try:
+            qasm_or_pair = q_alchemy_as_qasm(
+                vec,
+                opt_params=opt_params,
+                client=client,
+                return_summary=return_summary,
+                **kwargs
+            )
+            with result_lock:
+                result.append(qasm_or_pair)
+        except Exception as e:
+            print(f"Error processing vector: {e}")
+
+    for vec in state_vector:
+        t = Thread(target=run_single, args=(vec, opt_params, client,))
         t.start()
-        sleep(0.2)
         threads.append(t)
+        sleep(0.2)  # Slight delay to avoid spamming requests
 
-    for x in tqdm(threads, desc="Cleaning up Jobs", unit="jobs"):
-        x.join()
+    for t in tqdm(threads, desc="Running Jobs", unit="jobs"):
+        t.join()
 
     return result

@@ -11,7 +11,6 @@
 # limitations under the License.
 import datetime
 import hashlib
-import logging
 from typing import List
 
 import numpy as np
@@ -20,10 +19,6 @@ from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
 
 from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams
-
-logging.getLogger("httpx").setLevel(logging.WARN)
-LOG = logging.getLogger(__name__)
-
 
 class QAlchemyInitialize(Instruction):
     """
