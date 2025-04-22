@@ -98,6 +98,9 @@ class AmplitudeEmbedding(StatePrep):
         if isinstance(state, (list, tuple)):
             state = math.array(state)
 
+        if "torch" in str(state.dtype):
+            state = state.detach().numpy()
+
         # Promote from `float32` to `float64` to ensure normalization meets the required precision.
         if "float32" in str(state.dtype):
             state = state.astype(np.float64, copy=False)
