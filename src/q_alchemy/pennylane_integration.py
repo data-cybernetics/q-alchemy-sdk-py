@@ -1,7 +1,5 @@
 from typing import Optional, Union
 
-import logging
-
 from scipy.sparse import csr_matrix
 
 import pennylane as qml
