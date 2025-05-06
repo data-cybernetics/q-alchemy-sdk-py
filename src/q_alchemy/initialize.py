@@ -105,7 +105,22 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
     wd_root = enter_jma(client).work_data_root_link.navigate()
 
     existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
-        filter=WorkDataFilterParameter(tags_by_and=sequence_wd_tags)
+        Filter=WorkDataFilterParameter(
+            TagsByAnd=sequence_wd_tags,
+            NameContains=None,
+            ShowHidden=None,
+            MediaTypeContains=None,
+            TagsByOr=None,
+            IsKind=None,
+            CreatedBefore=None,
+            CreatedAfter=None,
+            IsDeletable=None,
+            IsUsed=None,
+            ProducerProcessingStepUrl=None,
+        ),
+        SortBy=None,
+        IncludeRemainingTags=None,
+        Pagination=None,
     ))
 
     if existing_wd_query.total_entities == 0:
@@ -114,9 +129,10 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
             filename=f"{param_hash}.parquet",
             binary=buffer.read(),
             mediatype=MediaTypes.OCTET_STREAM,
+            json=None,
         ))
         wd_link.navigate().edit_tags_action.execute(
-            SetTagsWorkDataParameters(tags=sequence_wd_tags)
+            SetTagsWorkDataParameters(Tags=sequence_wd_tags)
         )
     else:
         wd_link = existing_wd_query.workdatas[0].self_link
@@ -189,10 +205,19 @@ def find_processing_step(client, processing_name):
     from pinexq_client.job_management.model import FunctionNameMatchTypes
 
     query_param = ProcessingStepQueryParameters(
-        filter=ProcessingStepFilterParameter(
-            function_name=processing_name,
-            function_name_match_type=FunctionNameMatchTypes.match_exact
-        )
+        Filter=ProcessingStepFilterParameter(
+            FunctionName=processing_name,
+            FunctionNameMatchType=FunctionNameMatchTypes.match_exact,
+            TitleContains=None,
+            Version=None,
+            DescriptionContains=None,
+            TagsByAnd=None,
+            TagsByOr=None,
+            IsPublic=None,
+        ),
+        Pagination=None,
+        SortBy=None,
+        IncludeRemainingTags=None,
     )
     processing_step_root = enter_jma(client).processing_step_root_link.navigate()
     query_result = processing_step_root.query_action.execute(query_param)
