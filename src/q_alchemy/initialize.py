@@ -164,9 +164,6 @@ def create_processing_input(opt_params: OptParams) -> tuple[str, dict[str, float
         elif processing_name == "brute_force_tucker_initialize":
             job_parameters.update(dict(
                 options={
-                    "isometry_scheme": opt_params.isometry_scheme,
-                    "unitary_scheme": opt_params.unitary_scheme,
-                    "strategy": opt_params.extra_kwargs.get("strategy", "BruteForce"),
                     "max_blocks": opt_params.extra_kwargs.get("max_blocks", 3)
                 }
             ))
