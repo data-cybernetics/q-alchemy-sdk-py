@@ -271,15 +271,14 @@ def extract_result(job: Job):
     return result_summary, qasm
 
 
-def clean_up_job(job: Job, opt_params: OptParams) -> None:
+def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
     # Clean-up now.
     if opt_params.remove_data:
-        for od in job.get_output_data_slots():
-            for wd in od.assigned_workdatas:
-                delete_action = wd.delete_action
-                if delete_action is not None:
-                    delete_action.execute()
-        job.refresh().delete()
+        job.delete_with_associated(
+            delete_subjobs_with_data=True,
+            delete_input_workdata=num_qubits > USE_INLINE_STATE_NUM_QUBITS,
+            delete_output_workdata=True,
+        )
 
 
 def q_alchemy_as_qasm(
