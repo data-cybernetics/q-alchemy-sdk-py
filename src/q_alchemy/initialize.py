@@ -320,12 +320,20 @@ def q_alchemy_as_qasm(
         else 24 * 60 * 60 * 1000
     )
     job = (
-       configure_job(client, statevector_link, opt_params)
-        .start()
-        .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
+       configure_job(
+           client=client,
+           opt_params=opt_params,
+           num_qubits=num_qubits,
+           statevector_data=statevector_data
+       )
+       .start()
+       .wait_for_state(
+           state=JobStates.completed,
+           timeout_ms=job_timeout
+       )
     )
     result_summary, qasm = extract_result(job)
-    clean_up_job(job, opt_params)
+    clean_up_job(job, opt_params, num_qubits)
 
     if return_summary:
         return qasm, result_summary
