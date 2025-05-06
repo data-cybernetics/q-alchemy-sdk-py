@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import inspect
 import io
@@ -23,6 +24,7 @@ from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates
 
+from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 
@@ -78,6 +80,13 @@ def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
     else:
         param_hash = datetime.now(UTC).timestamp()
     return param_hash
+
+
+def encode_statevector(state_vector: pa.Table) -> str:
+    buffer = io.BytesIO()
+    pq.write_table(state_vector, buffer)
+    buffer.seek(0)
+    return base64.encodebytes(buffer.read()).decode("utf-8").replace("\n", "")
 
 
 def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
