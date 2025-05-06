@@ -240,17 +240,18 @@ def find_processing_step(client, processing_name):
     return step
 
 
-def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_params: OptParams) -> Job:
-    processing_name, job_parameters = create_processing_input(opt_params)
+def configure_job(client: httpx.Client, opt_params: OptParams, num_qubits: int, statevector_data: WorkDataLink | str) -> Job:
+    processing_name, job_parameters = create_processing_input(opt_params, num_qubits, statevector_data)
     step = find_processing_step(client, processing_name)
     job = (
         Job(client)
         .create(name=f'Execute Transformation ({datetime.now()})')
         .select_processing(processing_step_instance=step)
         .configure_parameters(**job_parameters)
-        .assign_input_dataslot(0, work_data_link=statevector_link)
         .allow_output_data_deletion()
     )
+    if isinstance(statevector_data, WorkDataLink):
+        job = job.assign_input_dataslot(0, work_data_link=statevector_data)
     return job
 
 
