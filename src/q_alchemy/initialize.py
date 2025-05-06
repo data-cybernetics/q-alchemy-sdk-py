@@ -154,13 +154,18 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
     return opt_params
 
 
-def create_processing_input(opt_params: OptParams) -> tuple[str, dict[str, float | list[str]]]:
+def create_processing_input(opt_params: OptParams, num_qubits: int, statevector_data: WorkDataLink | str) -> tuple[str, dict[str, float | list[str]]]:
     processing_name = "convert_circuit_layers_qasm_only"
-    job_parameters = dict(
-        min_fidelity=1.0 - opt_params.max_fidelity_loss,
-        basis_gates=opt_params.basis_gates,
-    )
-    if opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
+    job_parameters: Dict[str, str | float | int | bool | dict] = {
+        "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
+        "basis_gates": opt_params.basis_gates,
+    }
+    if num_qubits < 17 and isinstance(statevector_data, str):
+        processing_name = "convert_circuit_layers_inline_qasm_only"
+        job_parameters.update({
+            "state_vector_base64": statevector_data
+        })
+    elif opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
         processing_name = "convert_circuit_layers"
         job_parameters.update(dict(
             image_shape_x=opt_params.image_size[0],
