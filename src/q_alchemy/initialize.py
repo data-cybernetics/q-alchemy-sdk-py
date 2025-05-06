@@ -298,7 +298,21 @@ def q_alchemy_as_qasm(
     else:
         data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
-    statevector_link = upload_statevector(client, data_matrix_pyarrow, opt_params)
+
+    # Now we decide if we use inline state-vectors
+    # (saves hussle and resources) or if we use the
+    # work-data approach:
+    # currently, all states <= 16 qubits are going inline.
+    num_qubits = np.log2(data_matrix.shape[1])
+    if not is_power_of_two(data_matrix):
+        raise ValueError(
+            f"The state vector is not a power of two. "
+            f"The length of the state vector is {data_matrix.shape[1]}."
+        )
+    if num_qubits > USE_INLINE_STATE_NUM_QUBITS:
+        statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
+    else:
+        statevector_data = encode_statevector(data_matrix_pyarrow)
 
     job_timeout = (
         opt_params.job_completion_timeout_sec * 1000
