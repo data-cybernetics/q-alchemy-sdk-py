@@ -28,6 +28,9 @@ from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 
+USE_INLINE_STATE_NUM_QUBITS = 16
+
+
 @dataclass
 class OptParams:
     remove_data: bool = field(default=True)
@@ -160,7 +163,7 @@ def create_processing_input(opt_params: OptParams, num_qubits: int, statevector_
         "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
         "basis_gates": opt_params.basis_gates,
     }
-    if num_qubits < 17 and isinstance(statevector_data, str):
+    if num_qubits <= USE_INLINE_STATE_NUM_QUBITS and isinstance(statevector_data, str):
         processing_name = "convert_circuit_layers_inline_qasm_only"
         job_parameters.update({
             "state_vector_base64": statevector_data
