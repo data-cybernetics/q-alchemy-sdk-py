@@ -221,7 +221,9 @@ def find_processing_step(client, processing_name):
             DescriptionContains=None,
             TagsByAnd=None,
             TagsByOr=None,
-            IsPublic=None,
+            IsPublic=True,
+            IsConfigured=None,
+            ShowHidden=False
         ),
         Pagination=None,
         SortBy=None,
