@@ -157,13 +157,13 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
     return opt_params
 
 
-def create_processing_input(opt_params: OptParams, num_qubits: int, statevector_data: WorkDataLink | str) -> tuple[str, dict[str, float | list[str]]]:
+def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str) -> tuple[str, dict[str, float | list[str]]]:
     processing_name = "convert_circuit_layers_qasm_only"
     job_parameters: Dict[str, str | float | int | bool | dict] = {
         "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
         "basis_gates": opt_params.basis_gates,
     }
-    if num_qubits <= USE_INLINE_STATE_NUM_QUBITS and isinstance(statevector_data, str):
+    if isinstance(statevector_data, str):
         processing_name = "convert_circuit_layers_inline_qasm_only"
         job_parameters.update({
             "state_vector_base64": statevector_data
@@ -237,8 +237,8 @@ def find_processing_step(client, processing_name):
     return step
 
 
-def configure_job(client: httpx.Client, opt_params: OptParams, num_qubits: int, statevector_data: WorkDataLink | str) -> Job:
-    processing_name, job_parameters = create_processing_input(opt_params, num_qubits, statevector_data)
+def configure_job(client: httpx.Client, opt_params: OptParams, statevector_data: WorkDataLink | str) -> Job:
+    processing_name, job_parameters = create_processing_input(opt_params, statevector_data)
     step = find_processing_step(client, processing_name)
     job = (
         Job(client)
@@ -320,7 +320,6 @@ def q_alchemy_as_qasm(
        configure_job(
            client=client,
            opt_params=opt_params,
-           num_qubits=num_qubits,
            statevector_data=statevector_data
        )
        .start()
