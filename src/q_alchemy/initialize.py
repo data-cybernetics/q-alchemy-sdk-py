@@ -40,8 +40,8 @@ class OptParams:
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
     added_headers: Dict[str, str] = field(default_factory=dict)
-    isometry_scheme: str = field(default="CCD")
-    unitary_scheme: str = field(default="QSD")
+    isometry_scheme: str = field(default="ccd")
+    unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int | None = field(default=300)
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     image_size: Tuple[int, int] = field(default=(-1, -1))
@@ -197,9 +197,6 @@ def create_processing_input(opt_params: OptParams, num_qubits: int, statevector_
         elif processing_name == "brute_force_tucker_initialize":
             job_parameters.update(dict(
                 options={
-                    "isometry_scheme": opt_params.isometry_scheme,
-                    "unitary_scheme": opt_params.unitary_scheme,
-                    "strategy": opt_params.extra_kwargs.get("strategy", "BruteForce"),
                     "max_blocks": opt_params.extra_kwargs.get("max_blocks", 3)
                 }
             ))
