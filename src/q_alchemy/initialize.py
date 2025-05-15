@@ -311,7 +311,7 @@ def q_alchemy_as_qasm(
             f"The state vector is not a power of two. "
             f"The length of the state vector is {data_matrix.shape[1]}."
         )
-    if num_qubits > USE_INLINE_STATE_NUM_QUBITS:
+    if num_qubits > USE_INLINE_STATE_NUM_QUBITS or opt_params.use_research_function is not None:
         statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
     else:
         statevector_data = encode_statevector(data_matrix_pyarrow)
