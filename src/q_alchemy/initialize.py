@@ -1,4 +1,5 @@
 import base64
+import json
 import hashlib
 import inspect
 import io
@@ -22,7 +23,7 @@ from pinexq_client.core.hco.upload_action_hco import UploadParameters
 from pinexq_client.job_management import enter_jma, Job, ProcessingStep
 from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
-    SetTagsWorkDataParameters, JobStates
+    SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
 from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
@@ -225,21 +226,42 @@ def find_processing_step(client, processing_name):
 
     return step
 
-
-def configure_job(client: httpx.Client, opt_params: OptParams, statevector_data: WorkDataLink | str) -> Job:
+def configure_job(
+    client: httpx.Client,
+    opt_params: OptParams,
+    statevector_data: WorkDataLink | str
+) -> Job:
     processing_name, job_parameters = create_processing_input(opt_params, statevector_data)
     step = find_processing_step(client, processing_name)
-    job = (
-        Job(client)
-        .create(name=f'Execute Transformation ({datetime.now()})')
-        .select_processing(processing_step_instance=step)
-        .configure_parameters(**job_parameters)
-        .allow_output_data_deletion()
-    )
-    if isinstance(statevector_data, WorkDataLink):
-        job = job.assign_input_dataslot(0, work_data_link=statevector_data)
-    return job
 
+    if isinstance(statevector_data, WorkDataLink):
+        job_parameters = RapidJobSetupParameters(
+            Name=f'Execute Transformation ({datetime.now()})',
+            parameters=json.dumps(job_parameters),
+            ProcessingStepUrl=str(step.self_link().get_url()),
+            Tags=["SDK", "WorkDataLink"],
+            AllowOutputDataDeletion=True,
+            Start=True,
+            InputDataSlots=[
+                InputDataSlotParameter(
+                    Index=0,
+                    WorkDataUrls=[str(statevector_data.get_url())]
+                )
+            ]
+        )
+    else:
+        job_parameters = RapidJobSetupParameters(
+            Name=f'Execute Transformation ({datetime.now()})',
+            parameters=json.dumps(job_parameters),
+            ProcessingStepUrl=str(step.self_link().get_url()),
+            Tags=["SDK", "InLine"],
+            AllowOutputDataDeletion=True,
+            Start=True
+        )
+
+    job = Job(client=client).create_and_configure_rapidly(parameters=job_parameters)
+
+    return job
 
 def extract_result(job: Job):
     result_summary: dict = job.refresh().get_result()
@@ -305,25 +327,26 @@ def q_alchemy_as_qasm(
         if opt_params.job_completion_timeout_sec is not None
         else 24 * 60 * 60 * 1000
     )
-    job = (
-       configure_job(
-           client=client,
-           opt_params=opt_params,
-           statevector_data=statevector_data
-       )
-       .start()
-       .wait_for_state(
-           state=JobStates.completed,
-           timeout_ms=job_timeout
-       )
+
+    job = configure_job(
+        client=client,
+        opt_params=opt_params,
+        statevector_data=statevector_data
     )
+
+    job.wait_for_state(
+        state=JobStates.completed,
+        polling_interval_ms=250,
+        timeout_ms=job_timeout
+    )
+
     result_summary, qasm = extract_result(job)
     clean_up_job(job, opt_params, num_qubits)
 
     if return_summary:
         return qasm, result_summary
-    else:
-        return qasm
+
+    return qasm
 
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
