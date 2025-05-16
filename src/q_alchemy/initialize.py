@@ -179,28 +179,10 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
         ))
     elif opt_params.use_research_function is not None:
         processing_name = opt_params.use_research_function
-        if processing_name == "baa_tucker_initialize":
+        if processing_name == "swap_pivot_initialize":
             job_parameters.update(dict(
                 options={
-                    "isometry_scheme": opt_params.isometry_scheme,
-                    "unitary_scheme": opt_params.unitary_scheme,
-                    "strategy": opt_params.extra_kwargs.get("strategy", "BruteForce"),
-                    "max_combination_size": opt_params.extra_kwargs.get("max_combination_size", 0),
-                    "use_low_rank": opt_params.extra_kwargs.get("use_low_rank", False),
-                    "initializer": opt_params.extra_kwargs.get("initializer", "BruteForceTuckerInitialize")
-                }
-            ))
-        elif processing_name == "pivot_initialize":
-            job_parameters.update(dict(
-                options={
-                    "aux": opt_params.extra_kwargs.get("aux", False),
-                    "initializer": opt_params.extra_kwargs.get("initializer", "BaaTuckerInitialize")
-                }
-            ))
-        elif processing_name == "brute_force_tucker_initialize":
-            job_parameters.update(dict(
-                options={
-                    "max_blocks": opt_params.extra_kwargs.get("max_blocks", 3)
+                    "aux": opt_params.extra_kwargs.get("aux", False)
                 }
             ))
 
