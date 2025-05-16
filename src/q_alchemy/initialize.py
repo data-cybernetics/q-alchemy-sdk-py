@@ -222,7 +222,13 @@ def find_processing_step(client, processing_name):
             f"We are very sorry! Reason: no step known for function name: {processing_name}"
         )
     sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
-    step = ProcessingStep.from_hco(query_result.processing_steps[0])
+def find_processing_step(client, processing_name):
+    step_key = str(client.base_url) + '/' + processing_name
+    step = step_cache.get(step_key)
+
+    if step is None:
+        step = from_name(client=client, step_name=processing_name, version=None)
+        step_cache.set(step_key, step)
 
     return step
 
