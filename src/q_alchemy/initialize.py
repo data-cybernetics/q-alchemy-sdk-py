@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import inspect
 import io
@@ -23,7 +24,11 @@ from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates
 
+from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
+
+
+USE_INLINE_STATE_NUM_QUBITS = 16
 
 
 @dataclass
@@ -80,6 +85,13 @@ def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
     return param_hash
 
 
+def encode_statevector(state_vector: pa.Table) -> str:
+    buffer = io.BytesIO()
+    pq.write_table(state_vector, buffer)
+    buffer.seek(0)
+    return base64.encodebytes(buffer.read()).decode("utf-8").replace("\n", "")
+
+
 def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
     # Convert to buffer to get hash and later possibly upload
     buffer = io.BytesIO()
@@ -96,7 +108,22 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
     wd_root = enter_jma(client).work_data_root_link.navigate()
 
     existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
-        filter=WorkDataFilterParameter(tags_by_and=sequence_wd_tags)
+        Filter=WorkDataFilterParameter(
+            TagsByAnd=sequence_wd_tags,
+            NameContains=None,
+            ShowHidden=None,
+            MediaTypeContains=None,
+            TagsByOr=None,
+            IsKind=None,
+            CreatedBefore=None,
+            CreatedAfter=None,
+            IsDeletable=None,
+            IsUsed=None,
+            ProducerProcessingStepUrl=None,
+        ),
+        SortBy=None,
+        IncludeRemainingTags=None,
+        Pagination=None,
     ))
 
     if existing_wd_query.total_entities == 0:
@@ -105,9 +132,10 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
             filename=f"{param_hash}.parquet",
             binary=buffer.read(),
             mediatype=MediaTypes.OCTET_STREAM,
+            json=None,
         ))
         wd_link.navigate().edit_tags_action.execute(
-            SetTagsWorkDataParameters(tags=sequence_wd_tags)
+            SetTagsWorkDataParameters(Tags=sequence_wd_tags)
         )
     else:
         wd_link = existing_wd_query.workdatas[0].self_link
@@ -129,13 +157,21 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
     return opt_params
 
 
-def create_processing_input(opt_params: OptParams) -> tuple[str, dict[str, float | list[str]]]:
+def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str) -> tuple[str, dict[str, float | list[str]]]:
     processing_name = "convert_circuit_layers_qasm_only"
-    job_parameters = dict(
-        min_fidelity=1.0 - opt_params.max_fidelity_loss,
-        basis_gates=opt_params.basis_gates,
-    )
-    if opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
+    job_parameters: Dict[str, str | float | int | bool | dict] = {
+        "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
+        "basis_gates": opt_params.basis_gates,
+    }
+    if isinstance(statevector_data, str):
+        processing_name = "convert_circuit_layers_inline_qasm_only"
+        job_parameters.update({
+            "state_vector": dict(
+               state_vector_base64=statevector_data,
+               state_vector_type="parquet"
+           )
+        })
+    elif opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
         processing_name = "convert_circuit_layers"
         job_parameters.update(dict(
             image_shape_x=opt_params.image_size[0],
@@ -177,10 +213,21 @@ def find_processing_step(client, processing_name):
     from pinexq_client.job_management.model import FunctionNameMatchTypes
 
     query_param = ProcessingStepQueryParameters(
-        filter=ProcessingStepFilterParameter(
-            function_name=processing_name,
-            function_name_match_type=FunctionNameMatchTypes.match_exact
-        )
+        Filter=ProcessingStepFilterParameter(
+            FunctionName=processing_name,
+            FunctionNameMatchType=FunctionNameMatchTypes.match_exact,
+            TitleContains=None,
+            Version=None,
+            DescriptionContains=None,
+            TagsByAnd=None,
+            TagsByOr=None,
+            IsPublic=True,
+            IsConfigured=None,
+            ShowHidden=False
+        ),
+        Pagination=None,
+        SortBy=None,
+        IncludeRemainingTags=None,
     )
     processing_step_root = enter_jma(client).processing_step_root_link.navigate()
     query_result = processing_step_root.query_action.execute(query_param)
@@ -195,17 +242,18 @@ def find_processing_step(client, processing_name):
     return step
 
 
-def configure_job(client: httpx.Client, statevector_link: WorkDataLink, opt_params: OptParams) -> Job:
-    processing_name, job_parameters = create_processing_input(opt_params)
+def configure_job(client: httpx.Client, opt_params: OptParams, statevector_data: WorkDataLink | str) -> Job:
+    processing_name, job_parameters = create_processing_input(opt_params, statevector_data)
     step = find_processing_step(client, processing_name)
     job = (
         Job(client)
         .create(name=f'Execute Transformation ({datetime.now()})')
         .select_processing(processing_step_instance=step)
         .configure_parameters(**job_parameters)
-        .assign_input_dataslot(0, work_data_link=statevector_link)
         .allow_output_data_deletion()
     )
+    if isinstance(statevector_data, WorkDataLink):
+        job = job.assign_input_dataslot(0, work_data_link=statevector_data)
     return job
 
 
@@ -225,15 +273,14 @@ def extract_result(job: Job):
     return result_summary, qasm
 
 
-def clean_up_job(job: Job, opt_params: OptParams) -> None:
+def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
     # Clean-up now.
     if opt_params.remove_data:
-        for od in job.get_output_data_slots():
-            for wd in od.assigned_workdatas:
-                delete_action = wd.delete_action
-                if delete_action is not None:
-                    delete_action.execute()
-        job.refresh().delete()
+        job.delete_with_associated(
+            delete_subjobs_with_data=True,
+            delete_input_workdata=num_qubits > USE_INLINE_STATE_NUM_QUBITS,
+            delete_output_workdata=True,
+        )
 
 
 def q_alchemy_as_qasm(
@@ -253,7 +300,21 @@ def q_alchemy_as_qasm(
     else:
         data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
-    statevector_link = upload_statevector(client, data_matrix_pyarrow, opt_params)
+
+    # Now we decide if we use inline state-vectors
+    # (saves hussle and resources) or if we use the
+    # work-data approach:
+    # currently, all states <= 16 qubits are going inline.
+    num_qubits = np.log2(data_matrix.shape[1])
+    if not is_power_of_two(data_matrix):
+        raise ValueError(
+            f"The state vector is not a power of two. "
+            f"The length of the state vector is {data_matrix.shape[1]}."
+        )
+    if num_qubits > USE_INLINE_STATE_NUM_QUBITS or opt_params.use_research_function is not None:
+        statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
+    else:
+        statevector_data = encode_statevector(data_matrix_pyarrow)
 
     job_timeout = (
         opt_params.job_completion_timeout_sec * 1000
@@ -261,12 +322,19 @@ def q_alchemy_as_qasm(
         else 24 * 60 * 60 * 1000
     )
     job = (
-       configure_job(client, statevector_link, opt_params)
-        .start()
-        .wait_for_state(JobStates.completed, timeout_ms=job_timeout)
+       configure_job(
+           client=client,
+           opt_params=opt_params,
+           statevector_data=statevector_data
+       )
+       .start()
+       .wait_for_state(
+           state=JobStates.completed,
+           timeout_ms=job_timeout
+       )
     )
     result_summary, qasm = extract_result(job)
-    clean_up_job(job, opt_params)
+    clean_up_job(job, opt_params, num_qubits)
 
     if return_summary:
         return qasm, result_summary
