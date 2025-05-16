@@ -166,25 +166,27 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
     if isinstance(statevector_data, str):
         processing_name = "convert_circuit_layers_inline_qasm_only"
         job_parameters.update({
-            "state_vector": dict(
-               state_vector_base64=statevector_data,
-               state_vector_type="parquet"
-           )
+            "state_vector": {
+               "state_vector_base64":statevector_data,
+               "state_vector_type":"parquet"
+           }
         })
-    elif opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
+
+        return processing_name, job_parameters
+
+    if (
+        opt_params.use_research_function is None and
+        all(i > 0 for i in opt_params.image_size) or
+        opt_params.with_debug_data
+    ):
         processing_name = "convert_circuit_layers"
-        job_parameters.update(dict(
-            image_shape_x=opt_params.image_size[0],
-            image_shape_y=opt_params.image_size[1]
-        ))
-    elif opt_params.use_research_function is not None:
+        job_parameters.update({
+            "image_shape_x":opt_params.image_size[0],
+            "image_shape_y":opt_params.image_size[1]
+        })
+
+    if opt_params.use_research_function is not None:
         processing_name = opt_params.use_research_function
-        if processing_name == "swap_pivot_initialize":
-            job_parameters.update(dict(
-                options={
-                    "aux": opt_params.extra_kwargs.get("aux", False)
-                }
-            ))
 
     return processing_name, job_parameters
 
