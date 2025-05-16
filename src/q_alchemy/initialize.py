@@ -24,7 +24,6 @@ from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates
 
-from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 
@@ -306,11 +305,14 @@ def q_alchemy_as_qasm(
     # work-data approach:
     # currently, all states <= 16 qubits are going inline.
     num_qubits = np.log2(data_matrix.shape[1])
-    if not is_power_of_two(data_matrix):
+    if num_qubits == 0 or not num_qubits.is_integer():
         raise ValueError(
             f"The state vector is not a power of two. "
             f"The length of the state vector is {data_matrix.shape[1]}."
         )
+
+    num_qubits = int(num_qubits)
+
     if num_qubits > USE_INLINE_STATE_NUM_QUBITS or opt_params.use_research_function is not None:
         statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
     else:
