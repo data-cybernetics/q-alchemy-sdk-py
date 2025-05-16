@@ -1,3 +1,4 @@
+import time
 import base64
 import json
 import hashlib
@@ -7,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from time import sleep
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 from threading import Thread, Lock
 from tqdm import tqdm
@@ -28,7 +29,7 @@ from pinexq_client.job_management.model import WorkDataQueryParameters, WorkData
 from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
-
+# 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16
 
 
@@ -191,37 +192,87 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
 
     return processing_name, job_parameters
 
+class TimeAwareCache:
+    """
+    A simple time-based (TTL) in-memory cache.
 
-def find_processing_step(client, processing_name):
-    from pinexq_client.job_management.model import ProcessingStepQueryParameters
-    from pinexq_client.job_management.model import ProcessingStepFilterParameter
-    from pinexq_client.job_management.model import FunctionNameMatchTypes
+    Stores key-value pairs with associated timestamps. Items expire
+    after a specified time-to-live (TTL), ensuring they are automatically
+    invalidated and removed on access if outdated.
+    """
 
-    query_param = ProcessingStepQueryParameters(
-        Filter=ProcessingStepFilterParameter(
-            FunctionName=processing_name,
-            FunctionNameMatchType=FunctionNameMatchTypes.match_exact,
-            TitleContains=None,
-            Version=None,
-            DescriptionContains=None,
-            TagsByAnd=None,
-            TagsByOr=None,
-            IsPublic=True,
-            IsConfigured=None,
-            ShowHidden=False
-        ),
-        Pagination=None,
-        SortBy=None,
-        IncludeRemainingTags=None,
-    )
-    processing_step_root = enter_jma(client).processing_step_root_link.navigate()
-    query_result = processing_step_root.query_action.execute(query_param)
-    if len(query_result.processing_steps) < 1:
+    def __init__(self, ttl_seconds: int = 300):
+        """
+        Initialize the cache with a given TTL.
+
+        Args: ttl_seconds (int): Time-to-live for each cache entry in seconds.
+        """
+        self._store = {}  # Internal storage for (timestamp, value) tuples
+        self.ttl = ttl_seconds
+
+    def get(self, key: str) -> Optional[object]:
+        """
+        Retrieve a value from the cache if it hasn't expired.
+
+        Args: key (str): The key to look up.
+
+        Returns: The cached value if present and valid; otherwise, None.
+        """
+        item = self._store.get(key)
+        if item:
+            timestamp, value = item
+            if time.time() - timestamp < self.ttl:
+                return value
+
+            # Entry has expired; remove it
+            del self._store[key]
+
+        return None
+
+    def set(self, key: str, value: object):
+        """
+        Store a value in the cache with the current timestamp.
+
+        Args: key (str): The key under which to store the value.
+              value (object): The value to cache.
+        """
+        self._store[key] = (time.time(), value)
+
+step_cache = TimeAwareCache(ttl_seconds=300)
+
+def from_name(
+    client: httpx.Client,
+    step_name: str,
+    version: str = None
+) -> ProcessingStep:
+    """Create a ProcessingStep object from an existing name.
+
+    Args:
+        client: Create a ProcessingStep object from an existing name.
+        step_name: Name of the registered processing step.
+        version: Version of the ProcessingStep to be created
+
+    Returns:
+        The newly created processing step as `ProcessingStep` object
+    """
+
+    # Attempt to find the processing step
+    query_result = ProcessingStep._query_processing_steps(client, step_name, version)
+
+    # Check if at least one result is found
+    if len(query_result.processing_steps) == 0:
+        # Attempt to suggest alternative steps if exact match not found
+        suggested_steps = ProcessingStep._processing_steps_by_name(client, step_name)
         raise NameError(
-            f"There is a misconfiguration. Please contact customer support. "
-            f"We are very sorry! Reason: no step known for function name: {processing_name}"
+            f"No processing step with the name {step_name} and version {version} registered. "
+            f"Suggestions: {suggested_steps}"
         )
+
     sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
+    processing_step_hco = query_result.processing_steps[0]
+
+    return ProcessingStep.from_hco(processing_step_hco)
+
 def find_processing_step(client, processing_name):
     step_key = str(client.base_url) + '/' + processing_name
     step = step_cache.get(step_key)
