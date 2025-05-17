@@ -174,9 +174,7 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
            }
         })
 
-        return processing_name, job_parameters
-
-    if (
+    elif (
         opt_params.use_research_function is None and
         all(i > 0 for i in opt_params.image_size) or
         opt_params.with_debug_data
@@ -187,7 +185,7 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
             "image_shape_y":opt_params.image_size[1]
         })
 
-    if opt_params.use_research_function is not None:
+    elif opt_params.use_research_function is not None:
         processing_name = opt_params.use_research_function
 
     return processing_name, job_parameters
