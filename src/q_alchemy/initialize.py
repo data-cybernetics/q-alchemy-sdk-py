@@ -1,4 +1,6 @@
+import time
 import base64
+import json
 import hashlib
 import inspect
 import io
@@ -6,7 +8,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from time import sleep
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 from threading import Thread, Lock
 from tqdm import tqdm
@@ -22,12 +24,12 @@ from pinexq_client.core.hco.upload_action_hco import UploadParameters
 from pinexq_client.job_management import enter_jma, Job, ProcessingStep
 from pinexq_client.job_management.hcos import WorkDataLink
 from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
-    SetTagsWorkDataParameters, JobStates
+    SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
 from q_alchemy.utils import is_power_of_two
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
-
+# 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16
 
 
@@ -166,78 +168,155 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
     if isinstance(statevector_data, str):
         processing_name = "convert_circuit_layers_inline_qasm_only"
         job_parameters.update({
-            "state_vector": dict(
-               state_vector_base64=statevector_data,
-               state_vector_type="parquet"
-           )
+            "state_vector": {
+               "state_vector_base64":statevector_data,
+               "state_vector_type":"parquet"
+           }
         })
-    elif opt_params.use_research_function is None and all(i > 0 for i in opt_params.image_size) or opt_params.with_debug_data:
+
+    elif (
+        opt_params.use_research_function is None and
+        all(i > 0 for i in opt_params.image_size) or
+        opt_params.with_debug_data
+    ):
         processing_name = "convert_circuit_layers"
-        job_parameters.update(dict(
-            image_shape_x=opt_params.image_size[0],
-            image_shape_y=opt_params.image_size[1]
-        ))
+        job_parameters.update({
+            "image_shape_x":opt_params.image_size[0],
+            "image_shape_y":opt_params.image_size[1]
+        })
+
     elif opt_params.use_research_function is not None:
         processing_name = opt_params.use_research_function
-        if processing_name == "swap_pivot_initialize":
-            job_parameters.update(dict(
-                options={
-                    "aux": opt_params.extra_kwargs.get("aux", False)
-                }
-            ))
 
     return processing_name, job_parameters
 
+class TimeAwareCache:
+    """
+    A simple time-based (TTL) in-memory cache.
+
+    Stores key-value pairs with associated timestamps. Items expire
+    after a specified time-to-live (TTL), ensuring they are automatically
+    invalidated and removed on access if outdated.
+    """
+
+    def __init__(self, ttl_seconds: int = 300):
+        """
+        Initialize the cache with a given TTL.
+
+        Args: ttl_seconds (int): Time-to-live for each cache entry in seconds.
+        """
+        self._store = {}  # Internal storage for (timestamp, value) tuples
+        self.ttl = ttl_seconds
+
+    def get(self, key: str) -> Optional[object]:
+        """
+        Retrieve a value from the cache if it hasn't expired.
+
+        Args: key (str): The key to look up.
+
+        Returns: The cached value if present and valid; otherwise, None.
+        """
+        item = self._store.get(key)
+        if item:
+            timestamp, value = item
+            if time.time() - timestamp < self.ttl:
+                return value
+
+            # Entry has expired; remove it
+            del self._store[key]
+
+        return None
+
+    def set(self, key: str, value: object):
+        """
+        Store a value in the cache with the current timestamp.
+
+        Args: key (str): The key under which to store the value.
+              value (object): The value to cache.
+        """
+        self._store[key] = (time.time(), value)
+
+step_cache = TimeAwareCache(ttl_seconds=300)
+
+def from_name(
+    client: httpx.Client,
+    step_name: str,
+    version: str = None
+) -> ProcessingStep:
+    """Create a ProcessingStep object from an existing name.
+
+    Args:
+        client: Create a ProcessingStep object from an existing name.
+        step_name: Name of the registered processing step.
+        version: Version of the ProcessingStep to be created
+
+    Returns:
+        The newly created processing step as `ProcessingStep` object
+    """
+
+    # Attempt to find the processing step
+    query_result = ProcessingStep._query_processing_steps(client, step_name, version)
+
+    # Check if at least one result is found
+    if len(query_result.processing_steps) == 0:
+        # Attempt to suggest alternative steps if exact match not found
+        suggested_steps = ProcessingStep._processing_steps_by_name(client, step_name)
+        raise NameError(
+            f"No processing step with the name {step_name} and version {version} registered. "
+            f"Suggestions: {suggested_steps}"
+        )
+
+    sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
+    processing_step_hco = query_result.processing_steps[0]
+
+    return ProcessingStep.from_hco(processing_step_hco)
 
 def find_processing_step(client, processing_name):
-    from pinexq_client.job_management.model import ProcessingStepQueryParameters
-    from pinexq_client.job_management.model import ProcessingStepFilterParameter
-    from pinexq_client.job_management.model import FunctionNameMatchTypes
+    step_key = str(client.base_url) + '/' + processing_name
+    step = step_cache.get(step_key)
 
-    query_param = ProcessingStepQueryParameters(
-        Filter=ProcessingStepFilterParameter(
-            FunctionName=processing_name,
-            FunctionNameMatchType=FunctionNameMatchTypes.match_exact,
-            TitleContains=None,
-            Version=None,
-            DescriptionContains=None,
-            TagsByAnd=None,
-            TagsByOr=None,
-            IsPublic=True,
-            IsConfigured=None,
-            ShowHidden=False
-        ),
-        Pagination=None,
-        SortBy=None,
-        IncludeRemainingTags=None,
-    )
-    processing_step_root = enter_jma(client).processing_step_root_link.navigate()
-    query_result = processing_step_root.query_action.execute(query_param)
-    if len(query_result.processing_steps) < 1:
-        raise NameError(
-            f"There is a misconfiguration. Please contact customer support. "
-            f"We are very sorry! Reason: no step known for function name: {processing_name}"
-        )
-    sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
-    step = ProcessingStep.from_hco(query_result.processing_steps[0])
+    if step is None:
+        step = from_name(client=client, step_name=processing_name, version=None)
+        step_cache.set(step_key, step)
 
     return step
 
-
-def configure_job(client: httpx.Client, opt_params: OptParams, statevector_data: WorkDataLink | str) -> Job:
+def configure_job(
+    client: httpx.Client,
+    opt_params: OptParams,
+    statevector_data: WorkDataLink | str
+) -> Job:
     processing_name, job_parameters = create_processing_input(opt_params, statevector_data)
     step = find_processing_step(client, processing_name)
-    job = (
-        Job(client)
-        .create(name=f'Execute Transformation ({datetime.now()})')
-        .select_processing(processing_step_instance=step)
-        .configure_parameters(**job_parameters)
-        .allow_output_data_deletion()
-    )
-    if isinstance(statevector_data, WorkDataLink):
-        job = job.assign_input_dataslot(0, work_data_link=statevector_data)
-    return job
 
+    if isinstance(statevector_data, WorkDataLink):
+        job_parameters = RapidJobSetupParameters(
+            Name=f'Execute Transformation ({datetime.now()})',
+            parameters=json.dumps(job_parameters),
+            ProcessingStepUrl=str(step.self_link().get_url()),
+            Tags=["SDK", "WorkDataLink"],
+            AllowOutputDataDeletion=True,
+            Start=True,
+            InputDataSlots=[
+                InputDataSlotParameter(
+                    Index=0,
+                    WorkDataUrls=[str(statevector_data.get_url())]
+                )
+            ]
+        )
+    else:
+        job_parameters = RapidJobSetupParameters(
+            Name=f'Execute Transformation ({datetime.now()})',
+            parameters=json.dumps(job_parameters),
+            ProcessingStepUrl=str(step.self_link().get_url()),
+            Tags=["SDK", "InLine"],
+            AllowOutputDataDeletion=True,
+            Start=True
+        )
+
+    job = Job(client=client).create_and_configure_rapidly(parameters=job_parameters)
+
+    return job
 
 def extract_result(job: Job):
     result_summary: dict = job.refresh().get_result()
@@ -303,25 +382,26 @@ def q_alchemy_as_qasm(
         if opt_params.job_completion_timeout_sec is not None
         else 24 * 60 * 60 * 1000
     )
-    job = (
-       configure_job(
-           client=client,
-           opt_params=opt_params,
-           statevector_data=statevector_data
-       )
-       .start()
-       .wait_for_state(
-           state=JobStates.completed,
-           timeout_ms=job_timeout
-       )
+
+    job = configure_job(
+        client=client,
+        opt_params=opt_params,
+        statevector_data=statevector_data
     )
+
+    job.wait_for_state(
+        state=JobStates.completed,
+        polling_interval_ms=250,
+        timeout_ms=job_timeout
+    )
+
     result_summary, qasm = extract_result(job)
     clean_up_job(job, opt_params, num_qubits)
 
     if return_summary:
         return qasm, result_summary
-    else:
-        return qasm
+
+    return qasm
 
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
