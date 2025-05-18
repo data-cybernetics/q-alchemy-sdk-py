@@ -43,12 +43,12 @@ dev = [
 
 [project.optional-dependencies]
 dev = ["pytest", "jupyter", "matplotlib", "pandas", "scikit-learn"]
-qiskit = ["qiskit>=1.4.2,<2.0"]
-pennylane = ["pennylane>=0.40.0", "openqasm3[parser]","pennylane-qiskit>=0.40.1"]
+qiskit = ["qiskit>=1.2.0,<2.0"]
+pennylane = ["pennylane>=0.41.1", "openqasm3[parser]","pennylane-qiskit>=0.41.0"]
 examples = [
-    "qiskit>=1.4.2,<2.0",
-    "pennylane>=0.40.0",
-    "pennylane-qiskit>=0.40.1",
+    "qiskit>=1.2.0,<2.0",
+    "pennylane>=0.41.1",
+    "pennylane-qiskit>=0.41.0",
     "openqasm3[parser]",
     "qutip",
     "pylatexenc",
