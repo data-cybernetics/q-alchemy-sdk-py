@@ -1,3 +1,4 @@
+import os
 import unittest
 
 import numpy as np
@@ -5,7 +6,9 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
 from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class TestQiskitIntegration(unittest.TestCase):
 
@@ -28,7 +31,7 @@ class TestQiskitIntegration(unittest.TestCase):
         instr = QAlchemyInitialize(
             params=state_vector,
             opt_params=OptParams(
-                api_key="<your api key>"
+                api_key=os.environ["Q_ALCHEMY_API_KEY"]
             )
         )
         circuit_qiskit = instr.definition

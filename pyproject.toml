@@ -53,7 +53,8 @@ examples = [
     "qutip",
     "pylatexenc",
     "qiskit_experiments",
-    "qiskit_aer"
+    "qiskit_aer",
+    "python-dotenv>=1.1.1",
 ]
 
 [project.license]

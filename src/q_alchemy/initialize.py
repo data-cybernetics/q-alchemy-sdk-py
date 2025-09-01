@@ -314,7 +314,16 @@ def configure_job(
             Start=True
         )
 
-    job = Job(client=client).create_and_configure_rapidly(parameters=job_parameters)
+    # create_and_... does not unpack job_parameters!
+    job = Job(client=client).create_and_configure_rapidly(
+        name=job_parameters.name,
+        tags=job_parameters.tags,
+        processing_step_url=step.self_link(), #needs the ProcessingStepLink itself
+        start=job_parameters.start,
+        parameters=job_parameters.parameters,
+        allow_output_data_slots=job_parameters.allow_output_data_deletion, #misleading keyword name, also does not match
+        input_data_slots=job_parameters.input_data_slots,
+    )
 
     return job
 
