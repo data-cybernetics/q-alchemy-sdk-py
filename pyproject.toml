@@ -33,24 +33,14 @@ readme = "README.md"
 
 [dependency-groups]
 dev = [
-    "jupyter",
-    "matplotlib",
-    "pandas",
     "pytest",
-    "python-dotenv",
-    "scikit-learn",
-    "tqdm>=4.67.1",
+    "python-dotenv"
 ]
 
 [tool.pdm.dev-dependencies]
 dev = [
     "pytest",
-    "pytest-dotenv",
-    "jupyter",
-    "matplotlib",
-    "pandas",
-    "scikit-learn",
-    "tqdm"
+    "pytest-dotenv"
 ]
 
 [project.optional-dependencies]
@@ -65,6 +55,11 @@ examples = [
     "pylatexenc",
     "qiskit_experiments",
     "qiskit_aer",
+    "jupyter",
+    "matplotlib",
+    "pandas",
+    "scikit-learn",
+    "tqdm"
 ]
 
 [project.license]
