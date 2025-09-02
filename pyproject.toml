@@ -31,9 +31,21 @@ dependencies = [
 requires-python = "<4,>=3.11"
 readme = "README.md"
 
+[dependency-groups]
+dev = [
+    "jupyter",
+    "matplotlib",
+    "pandas",
+    "pytest",
+    "python-dotenv",
+    "scikit-learn",
+    "tqdm>=4.67.1",
+]
+
 [tool.pdm.dev-dependencies]
 dev = [
     "pytest",
+    "pytest-dotenv",
     "jupyter",
     "matplotlib",
     "pandas",
@@ -42,7 +54,6 @@ dev = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "jupyter", "matplotlib", "pandas", "scikit-learn"]
 qiskit = ["qiskit>=1.2.0,<2.0"]
 pennylane = ["pennylane>=0.41.1", "openqasm3[parser]","pennylane-qiskit>=0.41.0"]
 examples = [
@@ -54,8 +65,8 @@ examples = [
     "pylatexenc",
     "qiskit_experiments",
     "qiskit_aer",
-    "python-dotenv>=1.1.1",
 ]
 
 [project.license]
 text = "Apache"
+
