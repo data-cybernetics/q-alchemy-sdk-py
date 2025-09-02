@@ -324,7 +324,6 @@ def configure_job(
         allow_output_data_slots=job_parameters.allow_output_data_deletion, #misleading keyword name, also does not match
         input_data_slots=job_parameters.input_data_slots,
     )
-    #job = Job(client=client).create_and_configure_rapidly(parameters=job_parameters)
     return job
 
 def extract_result(job: Job):
