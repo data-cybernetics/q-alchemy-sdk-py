@@ -1,3 +1,4 @@
+
 [tool.pdm]
 distribution = true
 
@@ -15,7 +16,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.2.21"
+version = "0.2.22"
 description = ""
 authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
@@ -34,13 +35,12 @@ readme = "README.md"
 [dependency-groups]
 dev = [
     "pytest",
-    "python-dotenv"
-]
-
-[tool.pdm.dev-dependencies]
-dev = [
+    "python-dotenv",
     "pytest",
-    "pytest-dotenv"
+    "pytest-dotenv",
+    "notebook>=7.4.5",
+    "pip>=25.2",
+    "scipy-stubs>=1.16.1.1",
 ]
 
 [project.optional-dependencies]
