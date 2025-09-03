@@ -1,4 +1,5 @@
 import unittest
+from dotenv import load_dotenv
 
 import numpy as np
 import pennylane as qml
@@ -7,6 +8,7 @@ from qiskit.quantum_info import Statevector
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams
 
+load_dotenv()
 
 class TestPennyLaneIntegration(unittest.TestCase):
 
@@ -34,14 +36,14 @@ class TestPennyLaneIntegration(unittest.TestCase):
                 state,
                 wires=range(qc.num_qubits),
                 opt_params=OptParams(
-                    api_key="<your api key>"
+                    #api_key="<your api key>"
                 )
             )
             return qml.state()
 
         state_pennylane = circuit_pennylane(state_qiskit)
 
-        self.assertLessEqual(np.linalg.norm(state_qiskit - state_pennylane), 1e-13)
+        #self.assertLessEqual(np.linalg.norm(state_qiskit - state_pennylane), 1e-13) #phase
         self.assertLessEqual(1 - abs(np.vdot(state_qiskit, state_pennylane))**2, 1e-13)
 
 
@@ -59,14 +61,14 @@ class TestPennyLaneIntegration(unittest.TestCase):
                 state,
                 wires=range(n_qubits),
                 opt_params=OptParams(
-                    api_key="<your api key>"
+                    #api_key="<your api key>"
                 )
             )
             return qml.state()
 
         state_pennylane = circuit_pennylane(state_vector)
 
-        self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-13)
+        #self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-13) #phase
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
 
     def test_rnd_complex(self):
@@ -83,14 +85,14 @@ class TestPennyLaneIntegration(unittest.TestCase):
                 state,
                 wires=range(n_qubits),
                 opt_params=OptParams(
-                    api_key="<your api key>"
+                    #api_key="<your api key>"
                 )
             )
             return qml.state()
 
         state_pennylane = circuit_pennylane(state_vector)
 
-        self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-13)
+        #self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-13) #phase
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
 
 
