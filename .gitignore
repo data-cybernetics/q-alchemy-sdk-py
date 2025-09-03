@@ -6,3 +6,4 @@ dist/
 .pdm-build/
 .venv/
 .ipynb_checkpoints/
+/.env

@@ -9,7 +9,7 @@ from sklearn.datasets import fetch_openml
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow, recover_sparse_coo_from_arrow
 
 
-class TestPennyLaneIntegration(unittest.TestCase):
+class TestDataUpload(unittest.TestCase):
 
     def setUp(self):
         # This method will be called before each test

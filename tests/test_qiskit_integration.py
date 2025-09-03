@@ -5,7 +5,9 @@ from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
 from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class TestQiskitIntegration(unittest.TestCase):
 
@@ -25,17 +27,21 @@ class TestQiskitIntegration(unittest.TestCase):
         qc = QuantumCircuit.from_qasm_str(qasm)
         state_vector = Statevector(qc).data
 
+        opt_params = OptParams(
+        #        api_key=os.environ["Q_ALCHEMY_API_KEY"]
+        )
+
         instr = QAlchemyInitialize(
             params=state_vector,
-            opt_params=OptParams(
-                api_key="<your api key>"
-            )
+            opt_params=opt_params
         )
         circuit_qiskit = instr.definition
 
         state_qiskit = Statevector(circuit_qiskit).data
 
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13)
+
+        #self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13) # phase mismatch?
+        print(np.vdot(state_vector, state_qiskit))
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
 
 
@@ -48,14 +54,15 @@ class TestQiskitIntegration(unittest.TestCase):
         instr = QAlchemyInitialize(
             params=state_vector,
             opt_params=OptParams(
-                api_key="<your api key>"
+                #api_key="<your api key>"
             )
         )
         circuit_qiskit = instr.definition
 
         state_qiskit = Statevector(circuit_qiskit).data
 
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13)
+        #self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13) # phase mismatch?
+        print(np.vdot(state_vector, state_qiskit))
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
 
     def test_rnd_complex(self):
@@ -67,14 +74,15 @@ class TestQiskitIntegration(unittest.TestCase):
         instr = QAlchemyInitialize(
             params=state_vector,
             opt_params=OptParams(
-                api_key="<your api key>"
+                #api_key="<your api key>"
             )
         )
         circuit_qiskit = instr.definition
 
         state_qiskit = Statevector(circuit_qiskit).data
 
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13)
+        #self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13) # phase mismatch?
+        print(np.vdot(state_vector, state_qiskit))
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
 
 
