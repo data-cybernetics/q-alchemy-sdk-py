@@ -46,8 +46,6 @@ class OptParams:
     unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int | None = field(default=300)
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
-    image_size: Tuple[int, int] = field(default=(-1, -1))
-    with_debug_data: bool = field(default=False)
     assign_data_hash: bool = field(default=True)
     use_research_function: str | None = field(default=None)
     extra_kwargs: dict = field(default_factory=dict)
@@ -103,8 +101,7 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
 
     sequence_wd_tags = [
         f"Hash={param_hash}",
-        "Source=Qiskit-Integration",
-        f"ImageSize={opt_params.image_size}"
+        "Source=Qiskit-Integration"
     ]
     sequence_wd_tags += opt_params.job_tags
     wd_root = enter_jma(client).work_data_root_link.navigate()
@@ -160,31 +157,19 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
 
 
 def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str) -> tuple[str, dict[str, float | list[str]]]:
-    processing_name = "convert_circuit_layers_qasm_only"
+    processing_name = "build_initialization_circuit"
     job_parameters: Dict[str, str | float | int | bool | dict] = {
         "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
         "basis_gates": opt_params.basis_gates,
     }
     if isinstance(statevector_data, str):
-        processing_name = "convert_circuit_layers_inline_qasm_only"
+        processing_name = "build_initialization_circuit_inline"
         job_parameters.update({
             "state_vector": {
                "state_vector_base64":statevector_data,
                "state_vector_type":"parquet"
            }
         })
-
-    elif (
-        opt_params.use_research_function is None and
-        all(i > 0 for i in opt_params.image_size) or
-        opt_params.with_debug_data
-    ):
-        processing_name = "convert_circuit_layers"
-        job_parameters.update({
-            "image_shape_x":opt_params.image_size[0],
-            "image_shape_y":opt_params.image_size[1]
-        })
-
     elif opt_params.use_research_function is not None:
         processing_name = opt_params.use_research_function
 
@@ -327,19 +312,31 @@ def configure_job(
     return job
 
 def extract_result(job: Job):
-    result_summary: dict = job.refresh().get_result()
-    if result_summary["status"].startswith("OK"):
-        qasm_wd = [
-            wd for s in job.get_output_data_slots()
-            for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
-        ][0]
-        if qasm_wd.size_in_bytes > 0:
-            qasm: str = qasm_wd.download_link.download().decode("utf-8")
+    # the inline job returns [str, dict], while the dataslot job returns dict only...
+    res = job.refresh().get_result()
+    if isinstance(res, list):
+        qasm = res[0]
+        result_summary = res[1]
+        if result_summary["status"].startswith("OK"):
+            return result_summary, qasm
         else:
             raise IOError("Q-Alchemy API call failed for unknown reasons.")
+    elif isinstance(res, dict):
+        result_summary = res
+        if result_summary["status"].startswith("OK"):
+            qasm_wd = [
+                wd for s in job.get_output_data_slots()
+                for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
+            ][0]
+            if qasm_wd.size_in_bytes > 0:
+                qasm: str = qasm_wd.download_link.download().decode("utf-8")
+            else:
+                raise IOError("Q-Alchemy API call failed for unknown reasons.")
+        else:
+            raise IOError(f"Q-Alchemy API call failed. Reason: {result_summary['status']}.")
+        return result_summary, qasm
     else:
-        raise IOError(f"Q-Alchemy API call failed. Reason: {result_summary['status']}.")
-    return result_summary, qasm
+        raise IOError("Unknown return value.")
 
 
 def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
