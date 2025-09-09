@@ -1,3 +1,4 @@
+import math
 import unittest
 
 import numpy as np
@@ -25,7 +26,7 @@ class TestQiskitIntegration(unittest.TestCase):
             qasm = f.read()
 
         qc = QuantumCircuit.from_qasm_str(qasm)
-        state_vector = Statevector(qc).data
+        state_vector = Statevector(qc)
 
         opt_params = OptParams(
         #        api_key=os.environ["Q_ALCHEMY_API_KEY"]
@@ -35,14 +36,11 @@ class TestQiskitIntegration(unittest.TestCase):
             params=state_vector,
             opt_params=opt_params
         )
-        circuit_qiskit = instr.definition
 
-        state_qiskit = Statevector(circuit_qiskit).data
+        state_qiskit = Statevector(instr)
 
-
-        #self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13) # phase mismatch?
-        print(np.vdot(state_vector, state_qiskit))
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
 
 
     def test_rnd_real(self):
@@ -61,9 +59,8 @@ class TestQiskitIntegration(unittest.TestCase):
 
         state_qiskit = Statevector(circuit_qiskit).data
 
-        #self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13) # phase mismatch?
-        print(np.vdot(state_vector, state_qiskit))
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
 
     def test_rnd_complex(self):
 
@@ -81,9 +78,8 @@ class TestQiskitIntegration(unittest.TestCase):
 
         state_qiskit = Statevector(circuit_qiskit).data
 
-        #self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-13) # phase mismatch?
-        print(np.vdot(state_vector, state_qiskit))
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
 
 
 if __name__ == '__main__':

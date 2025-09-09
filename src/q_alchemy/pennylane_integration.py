@@ -221,8 +221,9 @@ class QAlchemyStatePreparation(Operation):
                 "QAlchemyStatePreparation."
             )
 
-        qasm = q_alchemy_as_qasm(state_vector, opt_params)
+        qasm, summary = q_alchemy_as_qasm(state_vector, opt_params, return_summary=True)
         loaded_circuit = qml.from_qasm(qasm)
         # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
         qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
-        return qs.operations
+        # Add explicit globalphase to the start.
+        return [qml.GlobalPhase(-summary["global_phase"])] + qs.operations
