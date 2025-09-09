@@ -43,8 +43,8 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
         state_pennylane = circuit_pennylane(state_qiskit)
 
-        #self.assertLessEqual(np.linalg.norm(state_qiskit - state_pennylane), 1e-13) #phase
         self.assertLessEqual(1 - abs(np.vdot(state_qiskit, state_pennylane))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_qiskit - state_pennylane), 1e-12) #phase
 
 
     def test_rnd_real(self):
@@ -68,8 +68,8 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
         state_pennylane = circuit_pennylane(state_vector)
 
-        #self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-13) #phase
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
     def test_rnd_complex(self):
 
@@ -92,8 +92,8 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
         state_pennylane = circuit_pennylane(state_vector)
 
-        #self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-13) #phase
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
 
 if __name__ == '__main__':

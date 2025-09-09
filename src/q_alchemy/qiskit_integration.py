@@ -76,6 +76,7 @@ class QAlchemyInitialize(Instruction):
             self.param_hash = datetime.datetime.utcnow().timestamp()
 
     def _define(self):
-        qasm = q_alchemy_as_qasm(self.params, self.opt_params, self.client)
+        qasm, summary = q_alchemy_as_qasm(self.params, self.opt_params, self.client, return_summary=True)
         qc = QuantumCircuit.from_qasm_str(qasm)
+        qc.global_phase = summary["global_phase"]
         self.definition = qc
