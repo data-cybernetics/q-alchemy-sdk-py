@@ -67,19 +67,22 @@ class TestQiskitIntegration(unittest.TestCase):
         n_qubits = 4
         state_vector = np.random.rand(2**n_qubits) + np.random.rand(2**n_qubits) * 1j
         state_vector = state_vector / np.linalg.norm(state_vector)
+        subtest_params = [True, False]
+        for use_qasm3 in subtest_params:
+            with self.subTest(use_qasm3=use_qasm3):
+                instr = QAlchemyInitialize(
+                    params=state_vector,
+                    opt_params=OptParams(
+                        use_qasm3=use_qasm3,
+                        #api_key="<your api key>"
+                    )
+                )
+                circuit_qiskit = instr.definition
 
-        instr = QAlchemyInitialize(
-            params=state_vector,
-            opt_params=OptParams(
-                #api_key="<your api key>"
-            )
-        )
-        circuit_qiskit = instr.definition
+                state_qiskit = Statevector(circuit_qiskit).data
 
-        state_qiskit = Statevector(circuit_qiskit).data
-
-        self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
+                self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
+                self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
 
     def test_large_complex(self):
 

@@ -95,6 +95,33 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
+    @unittest.expectedFailure #from_qasm3 doesn't support include?
+    def test_qasm3(self):
+
+        n_qubits = 4
+        state_vector = np.random.rand(2**n_qubits) + np.random.rand(2**n_qubits) * 1j
+        state_vector = state_vector / np.linalg.norm(state_vector)
+
+        dev = qml.device('default.qubit')
+
+        @qml.qnode(dev)
+        def circuit_pennylane(state):
+            QAlchemyStatePreparation(
+                state,
+                wires=range(n_qubits),
+                opt_params=OptParams(
+                    use_qasm3=True,
+                    #api_key="<your api key>"
+                )
+            )
+            return qml.state()
+
+        state_pennylane = circuit_pennylane(state_vector)
+
+        self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
+        self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
+
+
 
 if __name__ == '__main__':
     unittest.main()

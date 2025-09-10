@@ -48,6 +48,8 @@ class OptParams:
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     assign_data_hash: bool = field(default=True)
     use_research_function: str | None = field(default=None)
+    use_qasm3: bool = field(default=False)
+    initialization_method: str = field(default="auto")
     extra_kwargs: dict = field(default_factory=dict)
 
     @classmethod
@@ -158,12 +160,17 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
 
 def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str,
                             num_states: int = 1) -> tuple[str, dict[str, float | list[str]]]:
-    #TODO: Do we need to pass any other opt_params?
     processing_name = "build_initialization_circuit"
     job_parameters: Dict[str, str | float | int | bool | dict] = {
         "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
         "basis_gates": opt_params.basis_gates,
+        "options": {
+            "method": opt_params.initialization_method,
+            "use_qasm3": opt_params.use_qasm3,
+            "opt_params": json.dumps(opt_params.extra_kwargs)
+        }
     }
+
     if isinstance(statevector_data, str):
         processing_name = "build_initialization_circuit_inline"
         job_parameters.update({
@@ -283,7 +290,7 @@ def configure_job(
     if isinstance(statevector_data, WorkDataLink):
         job_parameters = RapidJobSetupParameters(
             Name=f'Execute Transformation ({datetime.now()})',
-            Parameters=json.dumps({"options" : {}} | inner_job_parameters), #not optional in batch_...()
+            Parameters=json.dumps(inner_job_parameters),
             ProcessingStepUrl=str(step.self_link().get_url()),
             Tags=["SDK", "WorkDataLink"],
             AllowOutputDataDeletion=True,

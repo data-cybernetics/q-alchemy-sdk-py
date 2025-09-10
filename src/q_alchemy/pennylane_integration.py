@@ -220,10 +220,14 @@ class QAlchemyStatePreparation(Operation):
                 "qml.transforms.broadcast_expand transform to use broadcasting with "
                 "QAlchemyStatePreparation."
             )
-
         qasm, summary = q_alchemy_as_qasm(state_vector, opt_params, return_summary=True)
-        loaded_circuit = qml.from_qasm(qasm)
-        # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
-        qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
-        # Add explicit globalphase to the start.
-        return [qml.GlobalPhase(-summary["global_phase"])] + qs.operations
+        if opt_params.use_qasm3:
+            loaded_circuit = qml.from_qasm3(qasm, {f"q{i}":wire for i, wire in enumerate(wires[::-1])})
+            # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
+            qs = qml.tape.make_qscript(loaded_circuit)() # from_qasm3 does not support 'include'??
+            return qs.operations
+        else:
+            loaded_circuit = qml.from_qasm(qasm)
+            # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
+            qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
+            return [qml.GlobalPhase(-summary["global_phase"])] + qs.operations

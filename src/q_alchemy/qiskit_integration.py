@@ -14,6 +14,7 @@ import hashlib
 from typing import List
 
 import numpy as np
+from qiskit import qasm3
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
@@ -77,6 +78,9 @@ class QAlchemyInitialize(Instruction):
 
     def _define(self):
         qasm, summary = q_alchemy_as_qasm(self.params, self.opt_params, self.client, return_summary=True)
-        qc = QuantumCircuit.from_qasm_str(qasm)
-        qc.global_phase = summary["global_phase"]
+        if self.opt_params.use_qasm3:
+            qc = qasm3.loads(qasm)
+        else:
+            qc = QuantumCircuit.from_qasm_str(qasm)
+            qc.global_phase = summary["global_phase"] #n.b. this is zero if use_qasm3
         self.definition = qc
