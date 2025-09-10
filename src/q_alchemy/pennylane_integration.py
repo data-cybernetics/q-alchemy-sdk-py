@@ -9,6 +9,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from typing import Optional, Union
 
 from scipy.sparse import csr_matrix
@@ -220,6 +221,8 @@ class QAlchemyStatePreparation(Operation):
                 "qml.transforms.broadcast_expand transform to use broadcasting with "
                 "QAlchemyStatePreparation."
             )
+        if opt_params.use_qasm3:
+            warnings.warn("QASM3 not fully supported by pennylane_integration!")
         qasm, summary = q_alchemy_as_qasm(state_vector, opt_params, return_summary=True)
         if opt_params.use_qasm3:
             loaded_circuit = qml.from_qasm3(qasm, {f"q{i}":wire for i, wire in enumerate(wires[::-1])})
