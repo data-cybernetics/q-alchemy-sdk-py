@@ -9,16 +9,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import base64
 import datetime
 import hashlib
+import io
+import zlib
 from typing import List
 
 import numpy as np
+from qiskit import qpy
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
 
 from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams
+
+def decode_base64_qpy(qpy64: str)-> QuantumCircuit:
+    """Convert a base64 string into a QuantumCircuit.
+    The format can store a _list_ of QuantumCircuits but this is unlikely to be used in practice."""
+    qpy64_zip = qpy64.encode("utf-8")
+    qpy_zip = base64.b64decode(qpy64_zip)
+    qpy_bytes = zlib.decompress(qpy_zip)
+
+    with io.BytesIO() as buff:
+        buff.write(qpy_bytes)
+        buff.seek(0)
+        return qpy.load(buff)[0] #qpy can hold multiple circuits, but we only want one.
 
 class QAlchemyInitialize(Instruction):
     """
