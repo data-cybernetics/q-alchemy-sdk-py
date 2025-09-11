@@ -15,7 +15,7 @@ from typing import List
 
 import numpy as np
 from qiskit import qasm3
-from qiskit.circuit import QuantumCircuit
+from qiskit.circuit import QuantumCircuit, Gate
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
 
@@ -86,9 +86,20 @@ class QAlchemyInitialize(Instruction):
             qc.global_phase = summary["global_phase"] #n.b. this is zero if use_qasm3
         self.definition = qc
 
-def parallel_initialize(state_vectors: list[Statevector | List[complex] | np.ndarray],
+def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np.ndarray],
                          labels: list[str] = [],
-                         opt_params: dict | OptParams | None = None):
+                         opt_params: dict | OptParams | None = None) -> list[Gate]:
+    """
+    Submit a batch of state vectors to QAlchemy, and return a list of initialization Gates.
+
+    Args:
+        state_vectors (list[Statevector | List[complex] | np.ndarray]): A list of states.
+        labels (list[str]): A list of gate labels. Defaults to [], in which case gates will be named automatically.
+        opt_params (dict | OptParams | None): Optional parameters; see OptParams for details.
+
+    Returns:
+        list[Gate]: A list of labeled initialization circuits, one for each state.
+    """
     params = np.asarray(state_vectors, dtype=complex).tolist()
     num_states = len(params)
     num_qubits = int(np.ceil(np.log2(len(params[0]))))
@@ -98,7 +109,7 @@ def parallel_initialize(state_vectors: list[Statevector | List[complex] | np.nda
         opt_params = OptParams(**opt_params)
 
     if labels == []:
-        labels = ["QAl"] * num_states
+        labels = [f"QAl{i}" for i in range(num_states)]
     elif len(labels) == 1:
         labels = [labels[0]] * num_states
     elif len(labels) != num_states:

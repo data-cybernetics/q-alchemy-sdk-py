@@ -1,11 +1,14 @@
-import math
 import unittest
 
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
-from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams, parallel_initialize
+from q_alchemy.qiskit_integration import (
+    QAlchemyInitialize,
+    OptParams,
+    qiskit_batch_initialize
+)
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -109,13 +112,10 @@ class TestQiskitIntegration(unittest.TestCase):
         state_vectors = [np.random.rand(2 ** n_qubits) + np.random.rand(2 ** n_qubits) * 1j] * n_states
         state_vectors = [sv / np.linalg.norm(sv) for sv in state_vectors]
 
-        gate_list = parallel_initialize(
-            state_vectors=state_vectors,
-            opt_params=OptParams(
-                # api_key="<your api key>"
-            ),
-            labels=[f"q_al-{i}" for i in range(n_states)]
-        )
+        gate_list = qiskit_batch_initialize(state_vectors=state_vectors, opt_params=OptParams(
+            use_qasm3=True,
+            # api_key="<your api key>"
+        ))
         qcs = [QuantumCircuit(n_qubits) for gate in gate_list]
         for gate, qc in zip(gate_list, qcs):
             qc.append(gate, range(n_qubits))

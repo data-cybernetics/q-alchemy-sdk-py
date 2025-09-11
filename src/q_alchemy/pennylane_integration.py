@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 
 from scipy.sparse import csr_matrix
 
@@ -225,6 +225,10 @@ class QAlchemyStatePreparation(Operation):
             warnings.warn("QASM3 not fully supported by pennylane_integration!")
         qasm, summary = q_alchemy_as_qasm(state_vector, opt_params, return_summary=True)
         if opt_params.use_qasm3:
+            # remove include
+            qasm = "\n".join(
+                [line for line in qasm.split("\n") if not line.startswith('include ')]
+            ) #... but qubit register are not supported yet?
             loaded_circuit = qml.from_qasm3(qasm, {f"q{i}":wire for i, wire in enumerate(wires[::-1])})
             # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
             qs = qml.tape.make_qscript(loaded_circuit)() # from_qasm3 does not support 'include'??
@@ -235,16 +239,45 @@ class QAlchemyStatePreparation(Operation):
             qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
             return [qml.GlobalPhase(-summary["global_phase"])] + qs.operations
 
-def batch_initialization(state_vectors, wires, **hyperparameters):
+def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
+    """
+    Given a list of state vectors, submit them as a batch to QAlchemy, and return a list of quantum functions.
+
+    These quantum functions can be integrated into your circuits easily, e.g.:
+
+    ```python
+    circ_list = batch_initialization(
+            state_vectors=state_vectors,
+            wires=range(n_qubits),
+            hyperparameters=OptParams(),
+    )
+
+    @qml.qnode(dev)
+    def circuit_pennylane(circ):
+        circ()
+        return qml.state()
+
+    states_pennylane = [circuit_pennylane(circ) for circ in circ_list]
+    ```
+
+    Args:
+        state_vectors ():
+        wires ():
+        **hyperparameters ():
+
+    Returns:
+
+    """
     opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
     if opt_params.use_qasm3:
         warnings.warn("QASM3 not fully supported by pennylane_integration!")
     qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(state_vectors, opt_params, return_summary=True)
-    if opt_params.use_qasm3:
+    if opt_params.use_qasm3: # Currently Pennylane cannot `include`!
+        qasm_list = ["\n".join(
+            [line for line in qasm.split("\n") if not line.startswith('include ')]
+        ) for qasm in qasm_list] # ... but also does not support qubit registers?
+        # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
         return [qml.from_qasm3(qasm, {f"q{i}": wire for i, wire in enumerate(wires[::-1])}) for qasm in qasm_list]
-            # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
-            # qs = qml.tape.make_qscript(loaded_circuit)()  # from_qasm3 does not support 'include'??
-            # ops_list.append(qs.operations)
     else: #unfortunately, we can't do the "wires thing" in the parser. We instead have to make some closures. Ugh.
         def circuit_generator(qasm, summary):
             loaded_circuit = qml.from_qasm(qasm)
