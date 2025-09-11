@@ -19,7 +19,8 @@ from qiskit.circuit import QuantumCircuit
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
 
-from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams
+from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams, q_alchemy_as_qasm_parallel_states
+
 
 class QAlchemyInitialize(Instruction):
     """
@@ -84,3 +85,37 @@ class QAlchemyInitialize(Instruction):
             qc = QuantumCircuit.from_qasm_str(qasm)
             qc.global_phase = summary["global_phase"] #n.b. this is zero if use_qasm3
         self.definition = qc
+
+def parallel_initialize(state_vectors: list[Statevector | List[complex] | np.ndarray],
+                         labels: list[str] = [],
+                         opt_params: dict | OptParams | None = None):
+    params = np.asarray(state_vectors, dtype=complex).tolist()
+    num_states = len(params)
+    num_qubits = int(np.ceil(np.log2(len(params[0]))))
+    if opt_params is None:
+        opt_params = OptParams()
+    elif not isinstance(opt_params, OptParams):
+        opt_params = OptParams(**opt_params)
+
+    if labels == []:
+        labels = ["QAl"] * num_states
+    elif len(labels) == 1:
+        labels = [labels[0]] * num_states
+    elif len(labels) != num_states:
+        raise ValueError(f"Number of labels ({len(labels)}) must be equal to 0, 1, or number of states ({num_states})")
+
+    # if opt_params.assign_data_hash:
+    #     param_hash = hashlib.md5(np.asarray(params).tobytes()).hexdigest()
+    # else:
+    #     param_hash = datetime.datetime.utcnow().timestamp()
+
+    qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(
+        state_vector=params, opt_params=opt_params, num_qubits=num_qubits, client=None, return_summary=True)
+    if opt_params.use_qasm3:
+        qcs = [qasm3.loads(qasm) for qasm in qasm_list]
+    else:
+        qcs = [QuantumCircuit.from_qasm_str(qasm) for qasm in qasm_list]
+        for qc, summary in zip(qcs, summary_list):
+            qc.global_phase = summary["global_phase"]
+    gates = [qc.to_gate(label=label) for qc, label in zip(qcs, labels)]
+    return gates

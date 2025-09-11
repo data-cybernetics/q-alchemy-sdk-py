@@ -6,7 +6,8 @@ import pennylane as qml
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
-from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams
+from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams, batch_initialization
+from q_alchemy.qiskit_integration import parallel_initialize
 
 load_dotenv()
 
@@ -122,6 +123,35 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
 
+    def test_batch_complex(self):
+        n_qubits = 8
+        n_states = 4
+        state_vectors = [np.random.rand(2 ** n_qubits) + np.random.rand(2 ** n_qubits) * 1j] * n_states
+        state_vectors = [sv / np.linalg.norm(sv) for sv in state_vectors]
+
+        dev = qml.device('default.qubit')
+
+        ops_list = batch_initialization(
+            state_vectors=state_vectors,
+            wires=range(n_qubits),
+            hyperparameters=OptParams(),
+        )
+
+        @qml.qnode(dev)
+        def circuit_pennylane(ops):
+            for op in ops:
+                qml.apply(op)
+            return qml.state()
+
+        states_pennylane = [circuit_pennylane(ops) for ops in ops_list]
+        for state_vector, state_pennylane in zip(state_vectors, states_pennylane):
+            self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
+            self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12)  # phase
+        fig, ax = qml.draw_mpl(circuit_pennylane)(ops_list[0])
+        fig.show()
+        # for ops in ops_list: #too much RAM
+        #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
+        #     fig.show()
 
 if __name__ == '__main__':
     unittest.main()

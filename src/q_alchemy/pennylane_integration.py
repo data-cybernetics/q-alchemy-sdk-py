@@ -22,7 +22,7 @@ from pennylane.operation import Operation, Operator
 from pennylane.typing import TensorLike
 from pennylane.wires import Wires, WiresLike
 
-from q_alchemy.initialize import q_alchemy_as_qasm, OptParams
+from q_alchemy.initialize import q_alchemy_as_qasm, OptParams, q_alchemy_as_qasm_parallel_states
 
 # Normalization precision required for compatibility with Qiskit and qclib state preparation.
 ATOL = 1e-10
@@ -234,3 +234,25 @@ class QAlchemyStatePreparation(Operation):
             # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
             qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
             return [qml.GlobalPhase(-summary["global_phase"])] + qs.operations
+
+def batch_initialization(state_vectors, wires, **hyperparameters):
+    opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
+    if opt_params.use_qasm3:
+        warnings.warn("QASM3 not fully supported by pennylane_integration!")
+    qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(state_vectors, opt_params, return_summary=True)
+    ops_list = []
+    if opt_params.use_qasm3:
+        for qasm in qasm_list:
+            loaded_circuit = qml.from_qasm3(qasm, {f"q{i}": wire for i, wire in enumerate(wires[::-1])})
+            # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
+            qs = qml.tape.make_qscript(loaded_circuit)()  # from_qasm3 does not support 'include'??
+            ops_list.append(qs.operations)
+    else:
+        for qasm, summary in zip(qasm_list, summary_list):
+            loaded_circuit = qml.from_qasm(qasm)
+            # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
+            qs = qml.tape.make_qscript(loaded_circuit)(wires=wires[::-1])
+            ops_list.append([qml.GlobalPhase(-summary["global_phase"])] + qs.operations)
+    return ops_list
+
+

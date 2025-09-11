@@ -5,7 +5,7 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
 
-from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams
+from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams, parallel_initialize
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -102,6 +102,32 @@ class TestQiskitIntegration(unittest.TestCase):
 
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
         self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
+
+    def test_batch_complex(self):
+        n_qubits = 4
+        n_states = 4
+        state_vectors = [np.random.rand(2 ** n_qubits) + np.random.rand(2 ** n_qubits) * 1j] * n_states
+        state_vectors = [sv / np.linalg.norm(sv) for sv in state_vectors]
+
+        gate_list = parallel_initialize(
+            state_vectors=state_vectors,
+            opt_params=OptParams(
+                # api_key="<your api key>"
+            ),
+            labels=[f"q_al-{i}" for i in range(n_states)]
+        )
+        qcs = [QuantumCircuit(n_qubits) for gate in gate_list]
+        for gate, qc in zip(gate_list, qcs):
+            qc.append(gate, range(n_qubits))
+
+        qiskit_states = [Statevector(circuit).data for circuit in qcs]
+
+        for init_state, qiskit_state in zip(state_vectors, qiskit_states):
+            self.assertLessEqual(1 - abs(np.vdot(init_state, qiskit_state)) ** 2, 1e-13)
+            self.assertLessEqual(np.linalg.norm(init_state - qiskit_state), 1e-12)  # not quite that precise?
+
+        for qc in qcs:
+            print(qc)
 
 
 if __name__ == '__main__':
