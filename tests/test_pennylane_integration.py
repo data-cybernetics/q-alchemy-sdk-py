@@ -131,23 +131,22 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
         dev = qml.device('default.qubit')
 
-        ops_list = batch_initialization(
+        circ_list = batch_initialization(
             state_vectors=state_vectors,
             wires=range(n_qubits),
             hyperparameters=OptParams(),
         )
 
         @qml.qnode(dev)
-        def circuit_pennylane(ops):
-            for op in ops:
-                qml.apply(op)
+        def circuit_pennylane(circ):
+            circ()
             return qml.state()
 
-        states_pennylane = [circuit_pennylane(ops) for ops in ops_list]
+        states_pennylane = [circuit_pennylane(circ) for circ in circ_list]
         for state_vector, state_pennylane in zip(state_vectors, states_pennylane):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12)  # phase
-        fig, ax = qml.draw_mpl(circuit_pennylane)(ops_list[0])
+        fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
         fig.show()
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
