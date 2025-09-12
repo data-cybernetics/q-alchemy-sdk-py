@@ -44,7 +44,7 @@ dev = [
 ]
 
 [project.optional-dependencies]
-qiskit = ["qiskit>=1.2.0,<2.0"]
+qiskit = ["qiskit[qasm3-import]>=1.2.0,<2.0"]
 pennylane = ["pennylane>=0.41.1", "openqasm3[parser]","pennylane-qiskit>=0.41.0"]
 examples = [
     "qiskit>=1.2.0,<2.0",

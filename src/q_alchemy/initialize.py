@@ -7,6 +7,7 @@ import io
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
+from enum import StrEnum
 from time import sleep
 from typing import List, Tuple, Dict, Optional
 
@@ -32,6 +33,12 @@ from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16
 
+class InitializationMethods(StrEnum):
+    AUTO = "auto"
+    HIERARCHICAL_TUCKER = "hierarchical_tucker"
+    ITERATIVE_TUCKER = "iterative_tucker"
+    SWAP_PIVOT = "swap_pivot"
+    BAA_LOW_RANK = "baa_low_rank"
 
 @dataclass
 class OptParams:
@@ -48,6 +55,8 @@ class OptParams:
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     assign_data_hash: bool = field(default=True)
     use_research_function: str | None = field(default=None)
+    use_qasm3: bool = field(default=False)
+    initialization_method: InitializationMethods = field(default=InitializationMethods.AUTO)
     extra_kwargs: dict = field(default_factory=dict)
 
     @classmethod
@@ -156,12 +165,19 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
     return opt_params
 
 
-def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str) -> tuple[str, dict[str, float | list[str]]]:
+def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str,
+                            num_states: int = 1) -> tuple[str, dict[str, float | list[str]]]:
     processing_name = "build_initialization_circuit"
     job_parameters: Dict[str, str | float | int | bool | dict] = {
         "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
         "basis_gates": opt_params.basis_gates,
+        "options": {
+            "method": opt_params.initialization_method,
+            "use_qasm3": opt_params.use_qasm3,
+            "opt_params": json.dumps(opt_params.extra_kwargs)
+        }
     }
+
     if isinstance(statevector_data, str):
         processing_name = "build_initialization_circuit_inline"
         job_parameters.update({
@@ -170,6 +186,8 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
                "state_vector_type":"parquet"
            }
         })
+    elif num_states > 1:
+        processing_name = "build_initialization_circuits"
     elif opt_params.use_research_function is not None:
         processing_name = opt_params.use_research_function
 
@@ -269,15 +287,17 @@ def find_processing_step(client, processing_name):
 def configure_job(
     client: httpx.Client,
     opt_params: OptParams,
-    statevector_data: WorkDataLink | str
+    statevector_data: WorkDataLink | str,
+    num_states: int = 1
 ) -> Job:
-    processing_name, job_parameters = create_processing_input(opt_params, statevector_data)
+    processing_name, inner_job_parameters = create_processing_input(opt_params, statevector_data, num_states)
     step = find_processing_step(client, processing_name)
 
+    # job_parameters
     if isinstance(statevector_data, WorkDataLink):
         job_parameters = RapidJobSetupParameters(
             Name=f'Execute Transformation ({datetime.now()})',
-            parameters=json.dumps(job_parameters),
+            Parameters=json.dumps(inner_job_parameters),
             ProcessingStepUrl=str(step.self_link().get_url()),
             Tags=["SDK", "WorkDataLink"],
             AllowOutputDataDeletion=True,
@@ -292,7 +312,7 @@ def configure_job(
     else:
         job_parameters = RapidJobSetupParameters(
             Name=f'Execute Transformation ({datetime.now()})',
-            parameters=json.dumps(job_parameters),
+            Parameters=json.dumps(inner_job_parameters),
             ProcessingStepUrl=str(step.self_link().get_url()),
             Tags=["SDK", "InLine"],
             AllowOutputDataDeletion=True,
@@ -313,30 +333,50 @@ def configure_job(
 
 def extract_result(job: Job):
     # the inline job returns [str, dict], while the dataslot job returns dict only...
+    # and the batch job returns None!
     res = job.refresh().get_result()
-    if isinstance(res, list):
-        qasm = res[0]
-        result_summary = res[1]
-        if result_summary["status"].startswith("OK"):
-            return result_summary, qasm
-        else:
-            raise IOError("Q-Alchemy API call failed for unknown reasons.")
-    elif isinstance(res, dict):
-        result_summary = res
-        if result_summary["status"].startswith("OK"):
-            qasm_wd = [
-                wd for s in job.get_output_data_slots()
-                for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
-            ][0]
-            if qasm_wd.size_in_bytes > 0:
-                qasm: str = qasm_wd.download_link.download().decode("utf-8")
+    match res: # should we figure out the cases in some other way?
+        case None:
+            result_wd = [
+                    wd for s in job.get_output_data_slots()
+                    for wd in s.assigned_workdatas if wd.name == "summaries.json"
+                ][0]
+            if result_wd.size_in_bytes > 0:
+                result_str: str = result_wd.download_link.download().decode("utf-8")
+                result_list = json.loads(result_str)
             else:
                 raise IOError("Q-Alchemy API call failed for unknown reasons.")
-        else:
-            raise IOError(f"Q-Alchemy API call failed. Reason: {result_summary['status']}.")
-        return result_summary, qasm
-    else:
-        raise IOError("Unknown return value.")
+            qasm_wd = [
+                    wd for s in job.get_output_data_slots()
+                    for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm" #should probably be .json. oops.
+                ][0]
+            if qasm_wd.size_in_bytes > 0:
+                qasm_str: str = qasm_wd.download_link.download().decode("utf-8")
+                qasm_list = json.loads(qasm_str)
+            else:
+                raise IOError("Q-Alchemy API call failed for unknown reasons.")
+            return result_list, qasm_list
+        case [qasm, result_summary]:
+            if result_summary["status"].startswith("OK"):
+                return result_summary, qasm
+            else:
+                raise IOError("Q-Alchemy API call failed for unknown reasons.")
+        case dict():
+            result_summary = res
+            if result_summary["status"].startswith("OK"):
+                qasm_wd = [
+                    wd for s in job.get_output_data_slots()
+                    for wd in s.assigned_workdatas if wd.name == "qasm_circuit.qasm"
+                ][0]
+                if qasm_wd.size_in_bytes > 0:
+                    qasm: str = qasm_wd.download_link.download().decode("utf-8")
+                else:
+                    raise IOError("Q-Alchemy API call failed for unknown reasons.")
+            else:
+                raise IOError(f"Q-Alchemy API call failed. Reason: {result_summary['status']}.")
+            return result_summary, qasm
+        case _:
+            raise IOError("Unknown return value.")
 
 
 def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
@@ -410,6 +450,7 @@ def q_alchemy_as_qasm(
 
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
+    """Run QAlchemy with different sets of opt_params in parallel."""
     threads = []
     result = []
     for opt in opt_params:
@@ -435,36 +476,61 @@ def q_alchemy_as_qasm_parallel_states(
         client: httpx.Client | None = None,
         return_summary=False,
         **kwargs
-) -> List[str | Tuple[str, dict]]:
+) -> list[str] | tuple[list[str], list[dict]]:
+    """Run QAlchemy on a set of states.
+
+    Note that the circuit's global phase is included both in the return summary and in the QASM;
+    in the latter, if the circuit is a QASM2, the gphase is included as a comment.
+    """
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
     client = client if client is not None else create_client(opt_params)
 
-    result = []
-    result_lock = Lock()
-    threads = []
+    # cast/reshape state_vector into an (m x 2**n) coo_matrix, where m is the number of states
+    # TODO: Should we also support a 2D coo_matrix or array?
+    # if isinstance(state_vector, list):
+    num_states = len(state_vector)
+    data_matrix_rows = []
+    for state in state_vector: # convert each entry into a "row" (1 x 2**n)
+        if isinstance(state, sparse.coo_array):
+            data_matrix_row: sparse.coo_matrix = sparse.coo_matrix(state.reshape(1, -1)).reshape(1, -1)
+        else:
+            data_matrix_row: sparse.coo_matrix = sparse.coo_matrix(state).reshape(1, -1)
+        data_matrix_rows.append(data_matrix_row)
+    data_matrix = sparse.vstack(data_matrix_rows)
+    data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix) # should be (m x 2**n)
 
-    def run_single(vec, opt_params, client):
-        try:
-            qasm_or_pair = q_alchemy_as_qasm(
-                vec,
-                opt_params=opt_params,
-                client=client,
-                return_summary=return_summary,
-                **kwargs
-            )
-            with result_lock:
-                result.append(qasm_or_pair)
-        except Exception as e:
-            print(f"Error processing vector: {e}")
+    num_qubits = np.log2(data_matrix.shape[1])
+    if not is_power_of_two(data_matrix):
+        raise ValueError(
+            f"The state vector is not a power of two. "
+            f"The length of the state vector is {data_matrix.shape[1]}."
+        )
+    statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
 
-    for vec in state_vector:
-        t = Thread(target=run_single, args=(vec, opt_params, client,))
-        t.start()
-        threads.append(t)
-        sleep(0.2)  # Slight delay to avoid spamming requests
+    job_timeout = (
+        opt_params.job_completion_timeout_sec * 1000
+        if opt_params.job_completion_timeout_sec is not None
+        else 24 * 60 * 60 * 1000
+    )
 
-    for t in tqdm(threads, desc="Running Jobs", unit="jobs"):
-        t.join()
+    job = configure_job(
+        client=client,
+        opt_params=opt_params,
+        statevector_data=statevector_data,
+        num_states=num_states
+    )
 
-    return result
+    job.wait_for_state(
+        state=JobStates.completed,
+        polling_interval_ms=250,
+        timeout_ms=job_timeout
+    )
+
+    result_summary_list, qasm_list = extract_result(job)
+    clean_up_job(job, opt_params, num_qubits)
+
+    if return_summary:
+        return qasm_list, result_summary_list
+
+    return qasm_list
