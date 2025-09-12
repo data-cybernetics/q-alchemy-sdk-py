@@ -7,6 +7,7 @@ import io
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
+from enum import StrEnum
 from time import sleep
 from typing import List, Tuple, Dict, Optional
 
@@ -32,6 +33,12 @@ from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16
 
+class InitializationMethods(StrEnum):
+    AUTO = "auto"
+    HIERARCHICAL_TUCKER = "hierarchical_tucker"
+    ITERATIVE_TUCKER = "iterative_tucker"
+    SWAP_PIVOT = "swap_pivot"
+    BAA_LOW_RANK = "baa_low_rank"
 
 @dataclass
 class OptParams:
@@ -49,7 +56,7 @@ class OptParams:
     assign_data_hash: bool = field(default=True)
     use_research_function: str | None = field(default=None)
     use_qasm3: bool = field(default=False)
-    initialization_method: str = field(default="auto")
+    initialization_method: InitializationMethods = field(default=InitializationMethods.AUTO)
     extra_kwargs: dict = field(default_factory=dict)
 
     @classmethod
