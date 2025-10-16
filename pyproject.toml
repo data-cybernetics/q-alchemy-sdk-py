@@ -45,12 +45,12 @@ dev = [
 ]
 
 [project.optional-dependencies]
-qiskit = ["qiskit[qasm3-import]>=1.2.0,<2.0"]
-pennylane = ["pennylane>=0.41.1", "openqasm3[parser]","pennylane-qiskit>=0.41.0"]
+qiskit = ["qiskit[qasm3-import]>=1.2.0"]
+pennylane = ["pennylane>=0.42.0", "openqasm3[parser]","pennylane-qiskit>=0.42.0"]
 examples = [
-    "qiskit>=1.2.0,<2.0",
-    "pennylane>=0.41.1",
-    "pennylane-qiskit>=0.41.0",
+    "qiskit>=1.2.0",
+    "pennylane>=0.42.0",
+    "pennylane-qiskit>=0.42.0",
     "openqasm3[parser]",
     "qutip",
     "pylatexenc",
