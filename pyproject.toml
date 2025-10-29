@@ -45,13 +45,18 @@ dev = [
 ]
 
 [project.optional-dependencies]
-qiskit = ["qiskit[qasm3-import]>=1.2.0"]
-pennylane = ["pennylane>=0.42.0", "openqasm3[parser]","pennylane-qiskit>=0.42.0"]
-examples = [
-    "qiskit>=1.2.0",
+qiskit = [
+    "qiskit[qasm3-import]>=2.1.0",
+]
+pennylane = [
     "pennylane>=0.42.0",
-    "pennylane-qiskit>=0.42.0",
+    "pennylane-qiskit>=0.43.0",
     "openqasm3[parser]",
+]
+examples = [
+    "qiskit>=2.1.0",
+    "pennylane>=0.42.0",
+    "pennylane-qiskit>=0.43",
     "qutip",
     "pylatexenc",
     "qiskit_experiments",
@@ -59,7 +64,7 @@ examples = [
     "jupyter",
     "matplotlib",
     "pandas",
-    "scikit-learn"
+    "scikit-learn",
 ]
 
 [project.license]
