@@ -65,6 +65,8 @@ examples = [
     "matplotlib",
     "pandas",
     "scikit-learn",
+    "pyscf",
+    "jax"
 ]
 
 [project.license]
