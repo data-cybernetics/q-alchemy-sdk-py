@@ -2,20 +2,31 @@
 # It is not intended for manual editing.
 
 [metadata]
-groups = ["default", "dev", "examples"]
+groups = ["default", "dev", "examples", "pennylane", "qiskit"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:42e065cee407068306abbb2d97715c0fc0bb8b3e629be74ddb57486a36275d22"
+content_hash = "sha256:35922ca4ae0299308d4efc064c89612e79dae125738f13b611f7a9180045e24b"
 
 [[metadata.targets]]
 requires_python = "~=3.11"
+
+[[package]]
+name = "absl-py"
+version = "2.3.1"
+requires_python = ">=3.8"
+summary = "Abseil Python Common Libraries, see https://github.com/abseil/abseil-py."
+groups = ["examples"]
+files = [
+    {file = "absl_py-2.3.1-py3-none-any.whl", hash = "sha256:eeecf07f0c2a93ace0772c92e596ace6d3d3996c042b2128459aaae2a76de11d"},
+    {file = "absl_py-2.3.1.tar.gz", hash = "sha256:a97820526f7fbfd2ec1bce83f3f25e3a14840dac0d8e02a0b71cd75db3f77fc9"},
+]
 
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
 requires_python = ">=3.8"
 summary = "Reusable constraint types to use with typing.Annotated"
-groups = ["default", "examples"]
+groups = ["default", "examples", "pennylane"]
 dependencies = [
     "typing-extensions>=4.0.0; python_version < \"3.9\"",
 ]
@@ -28,7 +39,7 @@ files = [
 name = "antlr4-python3-runtime"
 version = "4.13.2"
 summary = "ANTLR 4.13.2 runtime for Python 3"
-groups = ["dev"]
+groups = ["dev", "pennylane", "qiskit"]
 dependencies = [
     "typing; python_version < \"3.5\"",
 ]
@@ -58,7 +69,7 @@ files = [
 name = "appdirs"
 version = "1.4.4"
 summary = "A small Python module for determining appropriate platform-specific dirs, e.g. a \"user data dir\"."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "appdirs-1.4.4-py2.py3-none-any.whl", hash = "sha256:a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128"},
     {file = "appdirs-1.4.4.tar.gz", hash = "sha256:7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41"},
@@ -166,7 +177,7 @@ files = [
 name = "astunparse"
 version = "1.6.3"
 summary = "An AST unparser for Python"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "six<2.0,>=1.6.1",
     "wheel<1.0,>=0.23.0",
@@ -206,7 +217,7 @@ name = "autograd"
 version = "1.8.0"
 requires_python = ">=3.9"
 summary = "Efficiently computes derivatives of NumPy code."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "numpy<3",
 ]
@@ -220,7 +231,7 @@ name = "autoray"
 version = "0.8.0"
 requires_python = ">=3.9"
 summary = "Abstract your array operations."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "autoray-0.8.0-py3-none-any.whl", hash = "sha256:fda5e20b072d41818ccdf26c251dfde4c49595e7c323b141dc2640e52f5889c9"},
     {file = "autoray-0.8.0.tar.gz", hash = "sha256:5d0d71da03cb02d5bc590a1af64e0ba58589352d628843a0ecbcfe90040dc520"},
@@ -290,7 +301,7 @@ name = "cachetools"
 version = "6.2.2"
 requires_python = ">=3.9"
 summary = "Extensible memoizing collections and decorators"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "cachetools-6.2.2-py3-none-any.whl", hash = "sha256:6c09c98183bf58560c97b2abfcedcbaf6a896a490f534b031b661d3723b45ace"},
     {file = "cachetools-6.2.2.tar.gz", hash = "sha256:8e6d266b25e539df852251cfd6f990b4bc3a141db73b939058d809ebd2590fc6"},
@@ -301,7 +312,7 @@ name = "certifi"
 version = "2025.11.12"
 requires_python = ">=3.7"
 summary = "Python package for providing Mozilla's CA Bundle."
-groups = ["default", "dev", "examples"]
+groups = ["default", "dev", "examples", "pennylane"]
 files = [
     {file = "certifi-2025.11.12-py3-none-any.whl", hash = "sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b"},
     {file = "certifi-2025.11.12.tar.gz", hash = "sha256:d8ab5478f2ecd78af242878415affce761ca6bc54a22a27e026d7c25357c3316"},
@@ -312,7 +323,7 @@ name = "cffi"
 version = "2.0.0"
 requires_python = ">=3.9"
 summary = "Foreign Function Interface for Python calling C code."
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 dependencies = [
     "pycparser; implementation_name != \"PyPy\"",
 ]
@@ -384,7 +395,7 @@ name = "charset-normalizer"
 version = "3.4.4"
 requires_python = ">=3.7"
 summary = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 files = [
     {file = "charset_normalizer-3.4.4-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:6e1fcf0720908f200cd21aa4e6750a48ff6ce4afe7ff5a79a90d5ed8a08296f8"},
     {file = "charset_normalizer-3.4.4-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5f819d5fe9234f9f82d75bdfa9aef3a3d72c4d24a6e57aeaebba32a704553aa0"},
@@ -452,6 +463,26 @@ files = [
     {file = "charset_normalizer-3.4.4-cp314-cp314-win_arm64.whl", hash = "sha256:de00632ca48df9daf77a2c65a484531649261ec9f25489917f09e455cb09ddb2"},
     {file = "charset_normalizer-3.4.4-py3-none-any.whl", hash = "sha256:7a32c560861a02ff789ad905a2fe94e3f840803362c84fecf1851cb4cf3dc37f"},
     {file = "charset_normalizer-3.4.4.tar.gz", hash = "sha256:94537985111c35f28720e43603b8e7b43a6ecfb2ce1d3058bbe955b73404e21a"},
+]
+
+[[package]]
+name = "chex"
+version = "0.1.90"
+requires_python = ">=3.9"
+summary = "Chex: Testing made fun, in JAX!"
+groups = ["examples"]
+dependencies = [
+    "absl-py>=0.9.0",
+    "jax>=0.4.27",
+    "jaxlib>=0.4.27",
+    "numpy>=1.24.1",
+    "setuptools; python_version >= \"3.12\"",
+    "toolz>=0.9.0",
+    "typing-extensions>=4.2.0",
+]
+files = [
+    {file = "chex-0.1.90-py3-none-any.whl", hash = "sha256:fce3de82588f72d4796e545e574a433aa29229cbdcf792555e41bead24b704ae"},
+    {file = "chex-0.1.90.tar.gz", hash = "sha256:d3c375aeb6154b08f1cccd2bee4ed83659ee2198a6acf1160d2fe2e4a6c87b5c"},
 ]
 
 [[package]]
@@ -566,7 +597,7 @@ name = "cryptography"
 version = "46.0.3"
 requires_python = "!=3.9.0,!=3.9.1,>=3.8"
 summary = "cryptography is a package which provides cryptographic recipes and primitives to Python developers."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "cffi>=1.14; python_full_version == \"3.8.*\" and platform_python_implementation != \"PyPy\"",
     "cffi>=2.0.0; python_full_version >= \"3.9\" and platform_python_implementation != \"PyPy\"",
@@ -692,7 +723,7 @@ name = "diastatic-malt"
 version = "2.15.2"
 requires_python = ">=3.9"
 summary = "A library for Python operator overloading"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "astunparse",
     "gast",
@@ -708,7 +739,7 @@ name = "dill"
 version = "0.4.0"
 requires_python = ">=3.8"
 summary = "serialize all of Python"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane", "qiskit"]
 files = [
     {file = "dill-0.4.0-py3-none-any.whl", hash = "sha256:44f54bf6412c2c8464c14e8243eb163690a9800dbe2c367330883b19c7561049"},
     {file = "dill-0.4.0.tar.gz", hash = "sha256:0633f1d2df477324f53a895b02c901fb961bdbf65a17122586ea7019292cbcf0"},
@@ -805,7 +836,7 @@ name = "gast"
 version = "0.6.0"
 requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
 summary = "Python AST that abstracts the underlying Python version"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "gast-0.6.0-py3-none-any.whl", hash = "sha256:52b182313f7330389f72b069ba00f174cfe2a06411099547288839c6cbafbd54"},
     {file = "gast-0.6.0.tar.gz", hash = "sha256:88fc5300d32c7ac6ca7b515310862f71e6fdf2c029bbec7c66c0f5dd47b6b1fb"},
@@ -915,7 +946,7 @@ name = "ibm-cloud-sdk-core"
 version = "3.24.2"
 requires_python = ">=3.9"
 summary = "Core library used by SDKs for IBM Cloud Services"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "PyJWT<3.0.0,>=2.10.1",
     "python-dateutil<3.0.0,>=2.9.0",
@@ -932,7 +963,7 @@ name = "ibm-platform-services"
 version = "0.71.0"
 requires_python = ">=3.9"
 summary = "Python client library for IBM Cloud Platform Services"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "ibm-cloud-sdk-core<4.0.0,>=3.24.2",
 ]
@@ -946,7 +977,7 @@ name = "idna"
 version = "3.11"
 requires_python = ">=3.8"
 summary = "Internationalized Domain Names in Applications (IDNA)"
-groups = ["default", "dev", "examples"]
+groups = ["default", "dev", "examples", "pennylane"]
 files = [
     {file = "idna-3.11-py3-none-any.whl", hash = "sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea"},
     {file = "idna-3.11.tar.gz", hash = "sha256:795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902"},
@@ -1057,6 +1088,52 @@ dependencies = [
 files = [
     {file = "isoduration-20.11.0-py3-none-any.whl", hash = "sha256:b2904c2a4228c3d44f409c8ae8e2370eb21a26f7ac2ec5446df141dde3452042"},
     {file = "isoduration-20.11.0.tar.gz", hash = "sha256:ac2f9015137935279eac671f94f89eb00584f940f5dc49462a0c4ee692ba1bd9"},
+]
+
+[[package]]
+name = "jax"
+version = "0.6.2"
+requires_python = ">=3.10"
+summary = "Differentiate, compile, and transform Numpy code."
+groups = ["examples"]
+dependencies = [
+    "jaxlib<=0.6.2,>=0.6.2",
+    "ml-dtypes>=0.5.0",
+    "numpy>=1.26",
+    "opt-einsum",
+    "scipy>=1.12",
+]
+files = [
+    {file = "jax-0.6.2-py3-none-any.whl", hash = "sha256:bb24a82dc60ccf704dcaf6dbd07d04957f68a6c686db19630dd75260d1fb788c"},
+    {file = "jax-0.6.2.tar.gz", hash = "sha256:a437d29038cbc8300334119692744704ca7941490867b9665406b7f90665cd96"},
+]
+
+[[package]]
+name = "jaxlib"
+version = "0.6.2"
+requires_python = ">=3.10"
+summary = "XLA library for JAX"
+groups = ["examples"]
+dependencies = [
+    "ml-dtypes>=0.5.0",
+    "numpy>=1.26",
+    "scipy>=1.12",
+]
+files = [
+    {file = "jaxlib-0.6.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:a208ff61c58128d306bb4e5ad0858bd2b0960f2c1c10ad42c548f74a60c0020e"},
+    {file = "jaxlib-0.6.2-cp311-cp311-manylinux2014_aarch64.whl", hash = "sha256:11eae7e05bc5a79875da36324afb9eddd4baeaef2a0386caf6d4f3720b9aef28"},
+    {file = "jaxlib-0.6.2-cp311-cp311-manylinux2014_x86_64.whl", hash = "sha256:335d7e3515ce78b52a410136f46aa4a7ea14d0e7d640f34e1e137409554ad0ac"},
+    {file = "jaxlib-0.6.2-cp311-cp311-win_amd64.whl", hash = "sha256:c6815509997d6b05e5c9daa7994b9ad473ce3e8c8a17bdbbcacc3c744f76f7a0"},
+    {file = "jaxlib-0.6.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:34d8a684a8be949dd87dd4acc97101b4106a0dc9ad151ec891da072319a57b99"},
+    {file = "jaxlib-0.6.2-cp312-cp312-manylinux2014_aarch64.whl", hash = "sha256:87ec2dc9c3ed9ab936eec8535160c5fbd2c849948559f1c5daa75f63fabe5942"},
+    {file = "jaxlib-0.6.2-cp312-cp312-manylinux2014_x86_64.whl", hash = "sha256:f1dd09b481a93c1d4c750013f467f74194493ba7bd29fcd4d1cec16e3a214f65"},
+    {file = "jaxlib-0.6.2-cp312-cp312-win_amd64.whl", hash = "sha256:921dbd4db214eba19a29ba9f2450d880e08b2b2c7b968f28cc89da3e62366af4"},
+    {file = "jaxlib-0.6.2-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:bff67b188133ce1f0111c7b163ac321fd646b59ed221ea489063e2e0f85cb967"},
+    {file = "jaxlib-0.6.2-cp313-cp313-manylinux2014_aarch64.whl", hash = "sha256:70498837caf538bd458ff6858c8bfd404db82015aba8f663670197fa9900ff02"},
+    {file = "jaxlib-0.6.2-cp313-cp313-manylinux2014_x86_64.whl", hash = "sha256:f94163f14c8fd3ba93ae14b631abacf14cb031bba0b59138869984b4d10375f8"},
+    {file = "jaxlib-0.6.2-cp313-cp313-win_amd64.whl", hash = "sha256:b977604cd36c74b174d25ed685017379468138eb747d865f75e466cb273c801d"},
+    {file = "jaxlib-0.6.2-cp313-cp313t-manylinux2014_aarch64.whl", hash = "sha256:39cf9555f85ae1ce2e2c1a59fc71f2eca4f9867a7cb934fef881ba56b11371d1"},
+    {file = "jaxlib-0.6.2-cp313-cp313t-manylinux2014_x86_64.whl", hash = "sha256:3abd536e44b05fb1657507e3ff1fc3691f99613bae3921ecab9e82f27255f784"},
 ]
 
 [[package]]
@@ -1694,10 +1771,57 @@ files = [
 ]
 
 [[package]]
+name = "ml-dtypes"
+version = "0.5.4"
+requires_python = ">=3.9"
+summary = "ml_dtypes is a stand-alone implementation of several NumPy dtype extensions used in machine learning."
+groups = ["examples"]
+dependencies = [
+    "numpy>=1.21",
+    "numpy>=1.21.2; python_version >= \"3.10\"",
+    "numpy>=1.23.3; python_version >= \"3.11\"",
+    "numpy>=1.26.0; python_version >= \"3.12\"",
+    "numpy>=2.1.0; python_version >= \"3.13\"",
+]
+files = [
+    {file = "ml_dtypes-0.5.4-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:6c7ecb74c4bd71db68a6bea1edf8da8c34f3d9fe218f038814fd1d310ac76c90"},
+    {file = "ml_dtypes-0.5.4-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:bc11d7e8c44a65115d05e2ab9989d1e045125d7be8e05a071a48bc76eb6d6040"},
+    {file = "ml_dtypes-0.5.4-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:19b9a53598f21e453ea2fbda8aa783c20faff8e1eeb0d7ab899309a0053f1483"},
+    {file = "ml_dtypes-0.5.4-cp311-cp311-win_amd64.whl", hash = "sha256:7c23c54a00ae43edf48d44066a7ec31e05fdc2eee0be2b8b50dd1903a1db94bb"},
+    {file = "ml_dtypes-0.5.4-cp311-cp311-win_arm64.whl", hash = "sha256:557a31a390b7e9439056644cb80ed0735a6e3e3bb09d67fd5687e4b04238d1de"},
+    {file = "ml_dtypes-0.5.4-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:a174837a64f5b16cab6f368171a1a03a27936b31699d167684073ff1c4237dac"},
+    {file = "ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a7f7c643e8b1320fd958bf098aa7ecf70623a42ec5154e3be3be673f4c34d900"},
+    {file = "ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9ad459e99793fa6e13bd5b7e6792c8f9190b4e5a1b45c63aba14a4d0a7f1d5ff"},
+    {file = "ml_dtypes-0.5.4-cp312-cp312-win_amd64.whl", hash = "sha256:c1a953995cccb9e25a4ae19e34316671e4e2edaebe4cf538229b1fc7109087b7"},
+    {file = "ml_dtypes-0.5.4-cp312-cp312-win_arm64.whl", hash = "sha256:9bad06436568442575beb2d03389aa7456c690a5b05892c471215bfd8cf39460"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:8c760d85a2f82e2bed75867079188c9d18dae2ee77c25a54d60e9cc79be1bc48"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:ce756d3a10d0c4067172804c9cc276ba9cc0ff47af9078ad439b075d1abdc29b"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:533ce891ba774eabf607172254f2e7260ba5f57bdd64030c9a4fcfbd99815d0d"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313-win_amd64.whl", hash = "sha256:f21c9219ef48ca5ee78402d5cc831bd58ea27ce89beda894428bc67a52da5328"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313-win_arm64.whl", hash = "sha256:35f29491a3e478407f7047b8a4834e4640a77d2737e0b294d049746507af5175"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:304ad47faa395415b9ccbcc06a0350800bc50eda70f0e45326796e27c62f18b6"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6a0df4223b514d799b8a1629c65ddc351b3efa833ccf7f8ea0cf654a61d1e35d"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:531eff30e4d368cb6255bc2328d070e35836aa4f282a0fb5f3a0cd7260257298"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313t-win_amd64.whl", hash = "sha256:cb73dccfc991691c444acc8c0012bee8f2470da826a92e3a20bb333b1a7894e6"},
+    {file = "ml_dtypes-0.5.4-cp313-cp313t-win_arm64.whl", hash = "sha256:3bbbe120b915090d9dd1375e4684dd17a20a2491ef25d640a908281da85e73f1"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314-macosx_10_13_universal2.whl", hash = "sha256:2b857d3af6ac0d39db1de7c706e69c7f9791627209c3d6dedbfca8c7e5faec22"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:805cef3a38f4eafae3a5bf9ebdcdb741d0bcfd9e1bd90eb54abd24f928cd2465"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:14a4fd3228af936461db66faccef6e4f41c1d82fcc30e9f8d58a08916b1d811f"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314-win_amd64.whl", hash = "sha256:8c6a2dcebd6f3903e05d51960a8058d6e131fe69f952a5397e5dbabc841b6d56"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314-win_arm64.whl", hash = "sha256:5a0f68ca8fd8d16583dfa7793973feb86f2fbb56ce3966daf9c9f748f52a2049"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314t-macosx_10_13_universal2.whl", hash = "sha256:bfc534409c5d4b0bf945af29e5d0ab075eae9eecbb549ff8a29280db822f34f9"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2314892cdc3fcf05e373d76d72aaa15fda9fb98625effa73c1d646f331fcecb7"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0d2ffd05a2575b1519dc928c0b93c06339eb67173ff53acb00724502cda231cf"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314t-win_amd64.whl", hash = "sha256:4381fe2f2452a2d7589689693d3162e876b3ddb0a832cde7a414f8e1adf7eab1"},
+    {file = "ml_dtypes-0.5.4-cp314-cp314t-win_arm64.whl", hash = "sha256:11942cbf2cf92157db91e5022633c0d9474d4dfd813a909383bd23ce828a4b7d"},
+    {file = "ml_dtypes-0.5.4.tar.gz", hash = "sha256:8ab06a50fb9bf9666dd0fe5dfb4676fa2b0ac0f31ecff72a6c3af8e22c063453"},
+]
+
+[[package]]
 name = "mpmath"
 version = "1.3.0"
 summary = "Python library for arbitrary-precision floating-point arithmetic"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "mpmath-1.3.0-py3-none-any.whl", hash = "sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c"},
     {file = "mpmath-1.3.0.tar.gz", hash = "sha256:7a28eb2a9774d00c7bc92411c19a89209d5da7c4c9a9e227be8330a23a25b91f"},
@@ -1781,7 +1905,7 @@ name = "networkx"
 version = "3.5"
 requires_python = ">=3.11"
 summary = "Python package for creating and manipulating graphs and networks"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "networkx-3.5-py3-none-any.whl", hash = "sha256:0030d386a9a06dee3565298b4a734b68589749a544acbb6c412dc9e2489ec6ec"},
     {file = "networkx-3.5.tar.gz", hash = "sha256:d4c6f9cf81f52d69230866796b82afbccdec3db7ae4fbd1b65ea750feed50037"},
@@ -1824,7 +1948,7 @@ name = "numpy"
 version = "2.3.5"
 requires_python = ">=3.11"
 summary = "Fundamental package for array computing in Python"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane", "qiskit"]
 files = [
     {file = "numpy-2.3.5-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:de5672f4a7b200c15a4127042170a694d4df43c992948f5e1af57f0174beed10"},
     {file = "numpy-2.3.5-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:acfd89508504a19ed06ef963ad544ec6664518c863436306153e13e94605c218"},
@@ -1920,7 +2044,7 @@ files = [
 name = "openqasm3"
 version = "1.0.1"
 summary = "Reference OpenQASM AST in Python"
-groups = ["dev"]
+groups = ["dev", "pennylane", "qiskit"]
 files = [
     {file = "openqasm3-1.0.1-py3-none-any.whl", hash = "sha256:0d3a1ebe3465e3ea619bcaa369858bba8944cbb0c49604b24f94662d3ec41d41"},
     {file = "openqasm3-1.0.1.tar.gz", hash = "sha256:c589dc05d4ced50ca24167d14e0f2c916e717499ba0442e0ff2a3030ef312d0a"},
@@ -1931,7 +2055,7 @@ name = "openqasm3"
 version = "1.0.1"
 extras = ["parser"]
 summary = "Reference OpenQASM AST in Python"
-groups = ["dev"]
+groups = ["dev", "pennylane", "qiskit"]
 dependencies = [
     "antlr4-python3-runtime<4.14,>=4.7",
     "importlib-metadata; python_version < \"3.10\"",
@@ -1940,6 +2064,35 @@ dependencies = [
 files = [
     {file = "openqasm3-1.0.1-py3-none-any.whl", hash = "sha256:0d3a1ebe3465e3ea619bcaa369858bba8944cbb0c49604b24f94662d3ec41d41"},
     {file = "openqasm3-1.0.1.tar.gz", hash = "sha256:c589dc05d4ced50ca24167d14e0f2c916e717499ba0442e0ff2a3030ef312d0a"},
+]
+
+[[package]]
+name = "opt-einsum"
+version = "3.4.0"
+requires_python = ">=3.8"
+summary = "Path optimization of einsum functions."
+groups = ["examples"]
+files = [
+    {file = "opt_einsum-3.4.0-py3-none-any.whl", hash = "sha256:69bb92469f86a1565195ece4ac0323943e83477171b91d24c35afe028a90d7cd"},
+    {file = "opt_einsum-3.4.0.tar.gz", hash = "sha256:96ca72f1b886d148241348783498194c577fa30a8faac108586b14f1ba4473ac"},
+]
+
+[[package]]
+name = "optax"
+version = "0.2.6"
+requires_python = ">=3.10"
+summary = "A gradient processing and optimization library in JAX."
+groups = ["examples"]
+dependencies = [
+    "absl-py>=0.7.1",
+    "chex>=0.1.87",
+    "jax>=0.5.3",
+    "jaxlib>=0.5.3",
+    "numpy>=1.18.0",
+]
+files = [
+    {file = "optax-0.2.6-py3-none-any.whl", hash = "sha256:f875251a5ab20f179d4be57478354e8e21963373b10f9c3b762b94dcb8c36d91"},
+    {file = "optax-0.2.6.tar.gz", hash = "sha256:ba8d1e12678eba2657484d6feeca4fb281b8066bdfd5efbfc0f41b87663109c0"},
 ]
 
 [[package]]
@@ -1993,7 +2146,7 @@ name = "packaging"
 version = "25.0"
 requires_python = ">=3.8"
 summary = "Core utilities for Python packages"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 files = [
     {file = "packaging-25.0-py3-none-any.whl", hash = "sha256:29572ef2b1f17581046b3a2227d5c611fb25ec70ca1ba8554b24b0e69331a484"},
     {file = "packaging-25.0.tar.gz", hash = "sha256:d443872c98d677bf60f6a1f2f8c1cb748e8fe762d2bf9d3148b5599295b0fc4f"},
@@ -2084,7 +2237,7 @@ name = "pennylane"
 version = "0.43.1"
 requires_python = ">=3.11"
 summary = "PennyLane is a cross-platform Python library for quantum computing, quantum machine learning, and quantum chemistry. Train a quantum computer the same way as a neural network."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "appdirs",
     "autograd",
@@ -2110,7 +2263,7 @@ name = "pennylane-lightning"
 version = "0.43.0"
 requires_python = ">=3.11"
 summary = "PennyLane-Lightning plugin"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "pennylane>=0.41",
     "scipy-openblas32>=0.3.26",
@@ -2139,7 +2292,7 @@ files = [
 name = "pennylane-qiskit"
 version = "0.43.0"
 summary = "PennyLane plugin for Qiskit"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "networkx>=2.2",
     "pennylane>=0.43",
@@ -2333,7 +2486,7 @@ name = "psutil"
 version = "7.1.3"
 requires_python = ">=3.6"
 summary = "Cross-platform lib for process and system monitoring."
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 files = [
     {file = "psutil-7.1.3-cp313-cp313t-macosx_10_13_x86_64.whl", hash = "sha256:0005da714eee687b4b8decd3d6cc7c6db36215c9e74e5ad2264b90c3df7d92dc"},
     {file = "psutil-7.1.3-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:19644c85dcb987e35eeeaefdc3915d059dac7bd1167cdcdbf27e0ce2df0c08c0"},
@@ -2434,7 +2587,7 @@ name = "pycparser"
 version = "2.23"
 requires_python = ">=3.8"
 summary = "C parser in Python"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 marker = "implementation_name != \"PyPy\""
 files = [
     {file = "pycparser-2.23-py3-none-any.whl", hash = "sha256:e5c6e8d3fbad53479cab09ac03729e0a9faf2bee3db8208a550daf5af81a5934"},
@@ -2446,7 +2599,7 @@ name = "pydantic"
 version = "2.12.4"
 requires_python = ">=3.9"
 summary = "Data validation using Python type hints"
-groups = ["default", "examples"]
+groups = ["default", "examples", "pennylane"]
 dependencies = [
     "annotated-types>=0.6.0",
     "pydantic-core==2.41.5",
@@ -2463,7 +2616,7 @@ name = "pydantic-core"
 version = "2.41.5"
 requires_python = ">=3.9"
 summary = "Core functionality for Pydantic validation and serialization"
-groups = ["default", "examples"]
+groups = ["default", "examples", "pennylane"]
 dependencies = [
     "typing-extensions>=4.14.1",
 ]
@@ -2565,7 +2718,7 @@ name = "pyjwt"
 version = "2.10.1"
 requires_python = ">=3.9"
 summary = "JSON Web Token implementation in Python"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "PyJWT-2.10.1-py3-none-any.whl", hash = "sha256:dcdd193e30abefd5debf142f9adfcdd2b58004e644f25406ffaebd50bd98dacb"},
     {file = "pyjwt-2.10.1.tar.gz", hash = "sha256:3cc5772eb20009233caf06e9d8a0577824723b44e6648ee0a2aedb6cf9381953"},
@@ -2615,7 +2768,7 @@ name = "pyspnego"
 version = "0.12.0"
 requires_python = ">=3.9"
 summary = "Windows Negotiate Authentication Client and Server"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "cryptography",
     "sspilib>=0.3.0; sys_platform == \"win32\"",
@@ -2664,7 +2817,7 @@ name = "python-dateutil"
 version = "2.9.0.post0"
 requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
 summary = "Extensions to the standard Python datetime module"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 dependencies = [
     "six>=1.5",
 ]
@@ -2847,7 +3000,7 @@ name = "qiskit"
 version = "2.1.2"
 requires_python = ">=3.9"
 summary = "An open-source SDK for working with quantum computers at the level of extended quantum circuits, operators, and primitives."
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane", "qiskit"]
 dependencies = [
     "dill>=0.3",
     "numpy<3,>=1.17",
@@ -2872,7 +3025,7 @@ name = "qiskit-aer"
 version = "0.17.2"
 requires_python = ">=3.7"
 summary = "Aer - High performance simulators for Qiskit"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "numpy>=1.16.3",
     "psutil>=5",
@@ -2959,7 +3112,7 @@ name = "qiskit-ibm-runtime"
 version = "0.41.1"
 requires_python = ">=3.9"
 summary = "IBM Quantum client for Qiskit Runtime."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "ibm-platform-services>=0.22.6",
     "numpy>=1.13",
@@ -2980,7 +3133,7 @@ files = [
 name = "qiskit-qasm3-import"
 version = "0.6.0"
 summary = "Importer for parsing OpenQASM 3 strings into Qiskit circuits"
-groups = ["dev"]
+groups = ["dev", "qiskit"]
 dependencies = [
     "openqasm3[parser]<2.0,>=0.4",
     "qiskit>=0.37.0",
@@ -2996,7 +3149,7 @@ version = "2.1.2"
 extras = ["qasm3-import"]
 requires_python = ">=3.9"
 summary = "An open-source SDK for working with quantum computers at the level of extended quantum circuits, operators, and primitives."
-groups = ["dev"]
+groups = ["dev", "qiskit"]
 dependencies = [
     "qiskit-qasm3-import>=0.1.0",
     "qiskit==2.1.2",
@@ -3064,7 +3217,7 @@ name = "requests"
 version = "2.32.5"
 requires_python = ">=3.9"
 summary = "Python HTTP for Humans."
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 dependencies = [
     "certifi>=2017.4.17",
     "charset-normalizer<4,>=2",
@@ -3081,7 +3234,7 @@ name = "requests-ntlm"
 version = "1.3.0"
 requires_python = ">=3.8"
 summary = "This package allows for HTTP NTLM authentication using the requests library."
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "cryptography>=1.3",
     "pyspnego>=0.4.0",
@@ -3246,7 +3399,7 @@ name = "rustworkx"
 version = "0.17.1"
 requires_python = ">=3.9"
 summary = "A High-Performance Graph Library for Python"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane", "qiskit"]
 dependencies = [
     "numpy<3,>=1.16.0",
 ]
@@ -3311,7 +3464,7 @@ name = "scipy"
 version = "1.16.3"
 requires_python = ">=3.11"
 summary = "Fundamental algorithms for scientific computing in Python"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane", "qiskit"]
 dependencies = [
     "numpy<2.6,>=1.25.2",
 ]
@@ -3384,7 +3537,7 @@ name = "scipy-openblas32"
 version = "0.3.30.0.8"
 requires_python = ">=3.7"
 summary = "Provides OpenBLAS for python packaging"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "scipy_openblas32-0.3.30.0.8-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:d4496f8cab08c063f6fd32f27b46623a2d8acd1ebafa2ff88dd5b1847998d618"},
     {file = "scipy_openblas32-0.3.30.0.8-py3-none-macosx_11_0_arm64.whl", hash = "sha256:c52e267aa3191c053db367e8d202542ebbea476bd4c00fd7c67a2f54ee2e85c0"},
@@ -3439,7 +3592,7 @@ name = "six"
 version = "1.17.0"
 requires_python = "!=3.0.*,!=3.1.*,!=3.2.*,>=2.7"
 summary = "Python 2 and 3 compatibility utilities"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 files = [
     {file = "six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274"},
     {file = "six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81"},
@@ -3472,7 +3625,7 @@ name = "sspilib"
 version = "0.4.0"
 requires_python = ">=3.9"
 summary = "SSPI API bindings for Python"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 marker = "sys_platform == \"win32\""
 files = [
     {file = "sspilib-0.4.0-cp311-cp311-macosx_10_12_x86_64.whl", hash = "sha256:ee02ffb9a57d7720beadcedda740e12244be01567e2b33d3e34de0be22c9811a"},
@@ -3522,7 +3675,7 @@ name = "stevedore"
 version = "5.6.0"
 requires_python = ">=3.10"
 summary = "Manage dynamic plugins for Python applications"
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane", "qiskit"]
 files = [
     {file = "stevedore-5.6.0-py3-none-any.whl", hash = "sha256:4a36dccefd7aeea0c70135526cecb7766c4c84c473b1af68db23d541b6dc1820"},
     {file = "stevedore-5.6.0.tar.gz", hash = "sha256:f22d15c6ead40c5bbfa9ca54aa7e7b4a07d59b36ae03ed12ced1a54cf0b51945"},
@@ -3533,7 +3686,7 @@ name = "sympy"
 version = "1.14.0"
 requires_python = ">=3.9"
 summary = "Computer algebra system (CAS) in Python"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 dependencies = [
     "mpmath<1.4,>=1.1.0",
 ]
@@ -3558,7 +3711,7 @@ name = "termcolor"
 version = "3.2.0"
 requires_python = ">=3.10"
 summary = "ANSI color formatting for output in terminal"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "termcolor-3.2.0-py3-none-any.whl", hash = "sha256:a10343879eba4da819353c55cb8049b0933890c2ebf9ad5d3ecd2bb32ea96ea6"},
     {file = "termcolor-3.2.0.tar.gz", hash = "sha256:610e6456feec42c4bcd28934a8c87a06c3fa28b01561d46aa09a9881b8622c58"},
@@ -3610,10 +3763,21 @@ name = "tomlkit"
 version = "0.13.3"
 requires_python = ">=3.8"
 summary = "Style preserving TOML library"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "tomlkit-0.13.3-py3-none-any.whl", hash = "sha256:c89c649d79ee40629a9fda55f8ace8c6a1b42deb912b2a8fd8d942ddadb606b0"},
     {file = "tomlkit-0.13.3.tar.gz", hash = "sha256:430cf247ee57df2b94ee3fbe588e71d362a941ebb545dec29b53961d61add2a1"},
+]
+
+[[package]]
+name = "toolz"
+version = "1.1.0"
+requires_python = ">=3.9"
+summary = "List processing tools and functional utilities"
+groups = ["examples"]
+files = [
+    {file = "toolz-1.1.0-py3-none-any.whl", hash = "sha256:15ccc861ac51c53696de0a5d6d4607f99c210739caf987b5d2054f3efed429d8"},
+    {file = "toolz-1.1.0.tar.gz", hash = "sha256:27a5c770d068c110d9ed9323f24f1543e83b2f300a687b7891c1a6d56b697b5b"},
 ]
 
 [[package]]
@@ -3667,7 +3831,7 @@ name = "typing-extensions"
 version = "4.15.0"
 requires_python = ">=3.9"
 summary = "Backported and Experimental Type Hints for Python 3.9+"
-groups = ["default", "dev", "examples"]
+groups = ["default", "dev", "examples", "pennylane", "qiskit"]
 files = [
     {file = "typing_extensions-4.15.0-py3-none-any.whl", hash = "sha256:f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548"},
     {file = "typing_extensions-4.15.0.tar.gz", hash = "sha256:0cea48d173cc12fa28ecabc3b837ea3cf6f38c6d1136f85cbaaf598984861466"},
@@ -3678,7 +3842,7 @@ name = "typing-inspection"
 version = "0.4.2"
 requires_python = ">=3.9"
 summary = "Runtime typing introspection tools"
-groups = ["default", "examples"]
+groups = ["default", "examples", "pennylane"]
 dependencies = [
     "typing-extensions>=4.12.0",
 ]
@@ -3725,7 +3889,7 @@ name = "urllib3"
 version = "2.5.0"
 requires_python = ">=3.9"
 summary = "HTTP library with thread-safe connection pooling, file post, and more."
-groups = ["dev", "examples"]
+groups = ["dev", "examples", "pennylane"]
 files = [
     {file = "urllib3-2.5.0-py3-none-any.whl", hash = "sha256:e6b01673c0fa6a13e374b50871808eb3bf7046c4b125b216f6bf1cc604cff0dc"},
     {file = "urllib3-2.5.0.tar.gz", hash = "sha256:3fc47733c7e419d4bc3f6b3dc2b4f890bb743906a30d56ba4a5bfa4bbff92760"},
@@ -3779,7 +3943,7 @@ name = "wheel"
 version = "0.45.1"
 requires_python = ">=3.8"
 summary = "A built-package format for Python"
-groups = ["examples"]
+groups = ["examples", "pennylane"]
 files = [
     {file = "wheel-0.45.1-py3-none-any.whl", hash = "sha256:708e7481cc80179af0e556bbf0cc00b8444c7321e2700b8d8580231d13017248"},
     {file = "wheel-0.45.1.tar.gz", hash = "sha256:661e1abd9198507b1409a20c02106d9670b2576e916d58f520316666abca6729"},
