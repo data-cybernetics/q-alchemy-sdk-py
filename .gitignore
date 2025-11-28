@@ -7,3 +7,4 @@ dist/
 .venv/
 .ipynb_checkpoints/
 /.env
+/.env-dev
