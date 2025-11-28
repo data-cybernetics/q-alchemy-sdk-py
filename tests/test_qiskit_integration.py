@@ -12,7 +12,7 @@ from q_alchemy.qiskit_integration import (
 )
 from dotenv import load_dotenv
 
-load_dotenv(".env-dev")
+load_dotenv("../.env-dev")
 
 class TestQiskitIntegration(unittest.TestCase):
 
