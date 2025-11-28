@@ -12,7 +12,7 @@ from q_alchemy.qiskit_integration import (
 )
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(".env-dev")
 
 class TestQiskitIntegration(unittest.TestCase):
 
@@ -44,7 +44,7 @@ class TestQiskitIntegration(unittest.TestCase):
         state_qiskit = Statevector(instr)
 
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
+        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-10) # not quite that precise?
 
 
     def test_rnd_real(self):

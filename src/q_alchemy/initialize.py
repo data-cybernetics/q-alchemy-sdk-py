@@ -423,9 +423,9 @@ def q_alchemy_as_qasm(
         statevector_data = encode_statevector(data_matrix_pyarrow)
 
     job_timeout = (
-        opt_params.job_completion_timeout_sec * 1000
+        opt_params.job_completion_timeout_sec
         if opt_params.job_completion_timeout_sec is not None
-        else 24 * 60 * 60 * 1000
+        else 24 * 60 * 60
     )
 
     job = configure_job(
@@ -436,8 +436,8 @@ def q_alchemy_as_qasm(
 
     job.wait_for_state(
         state=JobStates.completed,
-        polling_interval_ms=250,
-        timeout_ms=job_timeout
+        polling_interval_s=0.25,
+        timeout_s=job_timeout
     )
 
     result_summary, qasm = extract_result(job)
@@ -523,8 +523,8 @@ def q_alchemy_as_qasm_parallel_states(
 
     job.wait_for_state(
         state=JobStates.completed,
-        polling_interval_ms=250,
-        timeout_ms=job_timeout
+        polling_interval_s=0.25,
+        timeout_s=job_timeout
     )
 
     result_summary_list, qasm_list = extract_result(job)
