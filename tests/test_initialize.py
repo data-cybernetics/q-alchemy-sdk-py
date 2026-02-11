@@ -8,7 +8,7 @@ from q_alchemy.initialize import OptParams, q_alchemy_as_qasm_parallel_states, I
 
 from dotenv import load_dotenv
 
-assert load_dotenv("../.env")
+assert load_dotenv("../.env-dev")
 
 class InitializeTestCase(unittest.TestCase):
     def test_batch(self):

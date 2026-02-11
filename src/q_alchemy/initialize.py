@@ -20,11 +20,11 @@ from scipy import sparse
 import pyarrow as pa
 import pyarrow.parquet as pq
 from httpx import HTTPTransport
-from pinexq_client.core import MediaTypes
-from pinexq_client.core.hco.upload_action_hco import UploadParameters
-from pinexq_client.job_management import enter_jma, Job, ProcessingStep
-from pinexq_client.job_management.hcos import WorkDataLink
-from pinexq_client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
+from pinexq.client.core import MediaTypes
+from pinexq.client.core.hco.upload_action_hco import UploadParameters
+from pinexq.client.job_management import enter_jma, Job, ProcessingStep
+from pinexq.client.job_management.hcos import WorkDataLink
+from pinexq.client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
 from q_alchemy.utils import is_power_of_two
@@ -326,7 +326,7 @@ def configure_job(
         processing_step_url=step.self_link(), #needs the ProcessingStepLink itself
         start=job_parameters.start,
         parameters=job_parameters.parameters,
-        allow_output_data_slots=job_parameters.allow_output_data_deletion, #misleading keyword name, also does not match
+        allow_output_data_deletion=job_parameters.allow_output_data_deletion, #misleading keyword name, also does not match
         input_data_slots=job_parameters.input_data_slots,
     )
     return job
@@ -423,9 +423,9 @@ def q_alchemy_as_qasm(
         statevector_data = encode_statevector(data_matrix_pyarrow)
 
     job_timeout = (
-        opt_params.job_completion_timeout_sec * 1000
+        opt_params.job_completion_timeout_sec
         if opt_params.job_completion_timeout_sec is not None
-        else 24 * 60 * 60 * 1000
+        else 24 * 60 * 60
     )
 
     job = configure_job(
@@ -436,8 +436,8 @@ def q_alchemy_as_qasm(
 
     job.wait_for_state(
         state=JobStates.completed,
-        polling_interval_ms=250,
-        timeout_ms=job_timeout
+        polling_interval_s=0.250,
+        timeout_s=job_timeout
     )
 
     result_summary, qasm = extract_result(job)
@@ -509,9 +509,9 @@ def q_alchemy_as_qasm_parallel_states(
     statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
 
     job_timeout = (
-        opt_params.job_completion_timeout_sec * 1000
+        opt_params.job_completion_timeout_sec
         if opt_params.job_completion_timeout_sec is not None
-        else 24 * 60 * 60 * 1000
+        else 24 * 60 * 60
     )
 
     job = configure_job(
@@ -523,8 +523,8 @@ def q_alchemy_as_qasm_parallel_states(
 
     job.wait_for_state(
         state=JobStates.completed,
-        polling_interval_ms=250,
-        timeout_ms=job_timeout
+        polling_interval_s=0.25,
+        timeout_s=job_timeout
     )
 
     result_summary_list, qasm_list = extract_result(job)
