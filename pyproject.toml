@@ -41,7 +41,8 @@ dev = [
     "notebook>=7.4.5",
     "pip>=25.2",
     "scipy-stubs>=1.16.1.1",
-    "qiskit[qasm3-import]"
+    "qiskit[qasm3-import]",
+    "qiskit-aer>=0.17.2",
 ]
 
 [project.optional-dependencies]
