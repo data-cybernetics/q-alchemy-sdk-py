@@ -39,9 +39,15 @@ jobs:
 
       - name: Smoke test (wheel)
         run: uv run --isolated --no-project --with dist/*.whl tests/test_qiskit_integration.py
+        env:
+          Q_ALCHEMY_HOST: jobs.api.q-alchemy.com
+          Q_ALCHEMY_API_KEY: ${{ secrets.QALCHEMY_API_KEY }}
 
       - name: Smoke test (source distribution)
         run: uv run --isolated --no-project --with dist/*.tar.gz tests/test_qiskit_integration.py
+        env:
+          Q_ALCHEMY_HOST: jobs.api.q-alchemy.com
+          Q_ALCHEMY_API_KEY: ${{ secrets.QALCHEMY_API_KEY }}
 
       - name: Publish
         if: github.event.workflow_dispatch && inputs.publish
