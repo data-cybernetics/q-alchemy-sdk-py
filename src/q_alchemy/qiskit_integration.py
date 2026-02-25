@@ -59,16 +59,14 @@ class QAlchemyInitialize(Instruction):
                 Default is ``unitary_scheme='qsd'``.
         """
         if isinstance(params, (coo_matrix, coo_array)):
-            # stupid workaround: qiskit tries to access the elements of params, which won't work for COO.
-            # luckily COO and CSR can be quickly transformed into each other.
-            params = params.tocsr()
             num_qubits = int(np.ceil(np.log2(params.shape[1])))
         elif isinstance(params, (Statevector, List, np.ndarray)):
             params = np.asarray(params, dtype=complex).tolist()
             num_qubits = int(np.ceil(np.log2(len(params))))
         else:
             raise TypeError("params type not recognized")
-
+        # Qiskit expects params to be a list of params.
+        params = [params]
         if opt_params is None:
             self.opt_params = OptParams()
         elif isinstance(opt_params, OptParams):
@@ -88,12 +86,8 @@ class QAlchemyInitialize(Instruction):
             self.param_hash = datetime.datetime.utcnow().timestamp()
 
     def _define(self):
-        # need to unbox the CSR again, because Qiskit. Also, tocsc() still causes a CSR here for some reason
-        if isinstance(self.params[0], (csr_array, csr_matrix)):
-            params = self.params[0].tocoo()
-        else:
-            params = self.params
-        qasm, summary = q_alchemy_as_qasm(params, self.opt_params, self.client, return_summary=True)
+        # need to unbox params again.
+        qasm, summary = q_alchemy_as_qasm(self.params[0], self.opt_params, self.client, return_summary=True)
         if self.opt_params.use_qasm3:
             qc = qasm3.loads(qasm)
         else:
