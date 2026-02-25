@@ -59,7 +59,7 @@ class QAlchemyInitialize(Instruction):
                 Default is ``unitary_scheme='qsd'``.
         """
         if isinstance(params, (coo_matrix, coo_array)):
-            num_qubits = int(np.ceil(np.log2(params.shape[1])))
+            num_qubits = int(np.ceil(np.log2(params.shape[0]*params.shape[1])))
         elif isinstance(params, (Statevector, List, np.ndarray)):
             params = np.asarray(params, dtype=complex).tolist()
             num_qubits = int(np.ceil(np.log2(len(params))))
