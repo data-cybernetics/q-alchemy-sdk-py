@@ -1,8 +1,10 @@
+import math
 import unittest
 
 import numpy as np
 from qiskit import QuantumCircuit
 from qiskit.quantum_info import Statevector
+from scipy.sparse import coo_array, coo_matrix
 
 from q_alchemy.initialize import InitializationMethods
 from q_alchemy.qiskit_integration import (
@@ -12,7 +14,7 @@ from q_alchemy.qiskit_integration import (
 )
 from dotenv import load_dotenv
 
-load_dotenv("../.env-dev")
+load_dotenv("../.env")
 
 class TestQiskitIntegration(unittest.TestCase):
 
@@ -137,6 +139,46 @@ class TestQiskitIntegration(unittest.TestCase):
                 for qc in qcs:
                     print(qc)
 
+    def test_coo_matrix(self):
+        n_qubits = 8
+        coo_data = np.array([1/math.sqrt(3) for i in range(3)])
+        coo_rows = np.array([0, 0, 0])
+        coo_cols = np.array([0, 1, 11])
+        state_vector = coo_matrix((coo_data,(coo_rows, coo_cols)), shape=(1, 2**n_qubits))
+        # print(coo_matrix(state_vector))
+        instr = QAlchemyInitialize(
+            params=state_vector,
+            opt_params=OptParams(
+                max_fidelity_loss=0.01
+                #api_key="<your api key>"
+            )
+        )
+        circuit_qiskit = instr.definition
+
+        state_qiskit = Statevector(circuit_qiskit).data # 16 is too large!
+
+        self.assertLessEqual(1 - abs(np.vdot(state_vector.toarray(), state_qiskit))**2, 0.05)
+        self.assertLessEqual(np.linalg.norm(state_vector.toarray() - state_qiskit), 0.05) # not quite that precise?
+
+    def test_coo_array(self):
+        n_qubits = 8
+        coo_data = np.array([1/math.sqrt(3) for i in range(3)])
+        coo_rows = np.array([0, 0, 0])
+        coo_cols = np.array([0, 1, 11])
+        state_vector = coo_array((coo_data,(coo_rows, coo_cols)), shape=(1, 2**n_qubits))
+        instr = QAlchemyInitialize(
+            params=state_vector,
+            opt_params=OptParams(
+                max_fidelity_loss=0.01
+                #api_key="<your api key>"
+            )
+        )
+        circuit_qiskit = instr.definition
+
+        state_qiskit = Statevector(circuit_qiskit).data # 16 is too large!
+
+        self.assertLessEqual(1 - abs(np.vdot(state_vector.toarray(), state_qiskit))**2, 0.05)
+        self.assertLessEqual(np.linalg.norm(state_vector.toarray() - state_qiskit), 0.05) # not quite that precise?
 
 if __name__ == '__main__':
     unittest.main()

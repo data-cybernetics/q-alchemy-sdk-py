@@ -18,6 +18,7 @@ from qiskit import qasm3
 from qiskit.circuit import QuantumCircuit, Gate
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
+from scipy.sparse import coo_array, coo_matrix, csr_array, csr_matrix
 
 from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams, q_alchemy_as_qasm_parallel_states
 
@@ -30,7 +31,7 @@ class QAlchemyInitialize(Instruction):
     """
 
     def __init__(self,
-                 params: Statevector | List[complex] | np.ndarray,
+                 params: Statevector | List[complex] | np.ndarray | coo_array | coo_matrix,
                  label=None,
                  opt_params: dict | OptParams | None = None):
         """
@@ -57,8 +58,17 @@ class QAlchemyInitialize(Instruction):
                 Shannon decomposition).
                 Default is ``unitary_scheme='qsd'``.
         """
-        params = np.asarray(params, dtype=complex).tolist()
-        num_qubits = int(np.ceil(np.log2(len(params))))
+        if isinstance(params, (coo_matrix, coo_array)):
+            # stupid workaround: qiskit tries to access the elements of params, which won't work for COO.
+            # luckily COO and CSR can be quickly transformed into each other.
+            params = params.tocsr()
+            num_qubits = int(np.ceil(np.log2(params.shape[1])))
+        elif isinstance(params, (Statevector, List, np.ndarray)):
+            params = np.asarray(params, dtype=complex).tolist()
+            num_qubits = int(np.ceil(np.log2(len(params))))
+        else:
+            raise TypeError("params type not recognized")
+
         if opt_params is None:
             self.opt_params = OptParams()
         elif isinstance(opt_params, OptParams):
@@ -78,7 +88,12 @@ class QAlchemyInitialize(Instruction):
             self.param_hash = datetime.datetime.utcnow().timestamp()
 
     def _define(self):
-        qasm, summary = q_alchemy_as_qasm(self.params, self.opt_params, self.client, return_summary=True)
+        # need to unbox the CSR again, because Qiskit. Also, tocsc() still causes a CSR here for some reason
+        if isinstance(self.params[0], (csr_array, csr_matrix)):
+            params = self.params[0].tocoo()
+        else:
+            params = self.params
+        qasm, summary = q_alchemy_as_qasm(params, self.opt_params, self.client, return_summary=True)
         if self.opt_params.use_qasm3:
             qc = qasm3.loads(qasm)
         else:
