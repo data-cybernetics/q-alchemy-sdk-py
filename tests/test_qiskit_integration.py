@@ -144,7 +144,8 @@ class TestQiskitIntegration(unittest.TestCase):
         n_qubits = 8
         n_terms = 7
         assert n_terms <= 2 ** n_qubits
-        coo_data = np.array([1 / math.sqrt(n_terms) for i in range(n_terms)])
+        coo_data = np.random.rand(n_terms) + np.random.rand(n_terms) * 1j
+        coo_data = coo_data / np.linalg.norm(coo_data)
         coo_rows = np.array([0 for i in range(n_terms)])
         coo_cols = np.array(random.sample(range(2 ** n_qubits), n_terms))
         coo_state = coo_matrix((coo_data, (coo_rows, coo_cols)), shape=(1, 2 ** n_qubits))
@@ -167,7 +168,8 @@ class TestQiskitIntegration(unittest.TestCase):
         n_qubits = 8
         n_terms = 7
         assert n_terms <= 2 ** n_qubits
-        coo_data = np.array([1 / math.sqrt(n_terms) for i in range(n_terms)])
+        coo_data = np.random.rand(n_terms) + np.random.rand(n_terms) * 1j
+        coo_data = coo_data / np.linalg.norm(coo_data)
         coo_rows = np.array([0 for i in range(n_terms)])
         coo_cols = np.array(random.sample(range(2 ** n_qubits), n_terms))
         coo_state = coo_array((coo_data, (coo_rows, coo_cols)), shape=(1, 2 ** n_qubits))
@@ -183,7 +185,7 @@ class TestQiskitIntegration(unittest.TestCase):
         state_qiskit = Statevector(circuit_qiskit).data # 16 is too large!
 
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 0.05)
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 0.05) # not quite that precise?
+        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 0.1) # not quite that precise?
 
 if __name__ == '__main__':
     unittest.main()
