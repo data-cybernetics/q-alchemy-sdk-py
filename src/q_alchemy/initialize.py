@@ -390,7 +390,7 @@ def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
 
 
 def q_alchemy_as_qasm(
-        state_vector: List[complex] | np.ndarray | sparse.coo_array | sparse.coo_matrix,
+        state_vector: List[complex] | np.ndarray | sparse.sparray,
         opt_params: dict | OptParams | None = None,
         client: httpx.Client | None = None,
         return_summary=False,
@@ -401,10 +401,7 @@ def q_alchemy_as_qasm(
     client = client if client is not None else create_client(opt_params)
 
     # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
-    if isinstance(state_vector, sparse.coo_array):
-        data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector.reshape(1, -1)).reshape(1, -1)
-    else:
-        data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
+    data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
 
     # Now we decide if we use inline state-vectors
@@ -449,7 +446,8 @@ def q_alchemy_as_qasm(
     return qasm
 
 
-def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
+def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse.sparray,
+                                opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
     """Run QAlchemy with different sets of opt_params in parallel."""
     threads = []
     result = []
@@ -471,7 +469,7 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray, opt_par
 
 
 def q_alchemy_as_qasm_parallel_states(
-        state_vector: List[List[complex] | np.ndarray | sparse.coo_array | sparse.coo_matrix],
+        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
         opt_params: dict | OptParams,
         client: httpx.Client | None = None,
         return_summary=False,
@@ -487,17 +485,16 @@ def q_alchemy_as_qasm_parallel_states(
     client = client if client is not None else create_client(opt_params)
 
     # cast/reshape state_vector into an (m x 2**n) coo_matrix, where m is the number of states
-    # TODO: Should we also support a 2D coo_matrix or array?
-    # if isinstance(state_vector, list):
-    num_states = len(state_vector)
-    data_matrix_rows = []
-    for state in state_vector: # convert each entry into a "row" (1 x 2**n)
-        if isinstance(state, sparse.coo_array):
-            data_matrix_row: sparse.coo_matrix = sparse.coo_matrix(state.reshape(1, -1)).reshape(1, -1)
-        else:
+    if sparse.issparse(state_vector): # state_vector is a sparse matrix/array, and thus 2d.
+        num_states = state_vector.shape[0]
+        data_matrix = state_vector.tocoo()
+    else:
+        num_states = len(state_vector)
+        data_matrix_rows = []
+        for state in state_vector: # convert each entry into a "row" (1 x 2**n)
             data_matrix_row: sparse.coo_matrix = sparse.coo_matrix(state).reshape(1, -1)
-        data_matrix_rows.append(data_matrix_row)
-    data_matrix = sparse.vstack(data_matrix_rows)
+            data_matrix_rows.append(data_matrix_row)
+        data_matrix = sparse.vstack(data_matrix_rows)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix) # should be (m x 2**n)
 
     num_qubits = np.log2(data_matrix.shape[1])
