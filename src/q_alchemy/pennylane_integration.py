@@ -10,10 +10,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Optional, Union, Callable
+from typing import Optional, Union
 
 from scipy.sparse import csr_matrix, issparse
-from scipy.sparse.linalg import norm as sparse_norm
 import autoray as ar
 
 import pennylane as qml
@@ -30,6 +29,7 @@ from q_alchemy.initialize import q_alchemy_as_qasm, OptParams, q_alchemy_as_qasm
 ATOL = 1e-10
 RTOL = 1e-9
 
+# override qml.math.shape for scipy provider (the default version calls np.toarray())
 ar.register_function('scipy', 'shape', lambda x: x.shape)
 
 class AmplitudeEmbedding(StatePrep):
@@ -279,7 +279,7 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
         **hyperparameters ():
 
     Returns:
-
+        list: List of quantum functions preparing requested states.
     """
     opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
     if opt_params.use_qasm3:

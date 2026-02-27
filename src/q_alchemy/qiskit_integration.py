@@ -18,7 +18,7 @@ from qiskit import qasm3
 from qiskit.circuit import QuantumCircuit, Gate
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
-from scipy.sparse import coo_array, coo_matrix, csr_array, csr_matrix, issparse, sparray
+from scipy.sparse import issparse, sparray
 
 from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams, q_alchemy_as_qasm_parallel_states
 
@@ -31,7 +31,7 @@ class QAlchemyInitialize(Instruction):
     """
 
     def __init__(self,
-                 params: Statevector | List[complex] | np.ndarray | coo_array | coo_matrix,
+                 params: Statevector | List[complex] | np.ndarray | sparray,
                  label=None,
                  opt_params: dict | OptParams | None = None):
         """
@@ -58,7 +58,7 @@ class QAlchemyInitialize(Instruction):
                 Shannon decomposition).
                 Default is ``unitary_scheme='qsd'``.
         """
-        if isinstance(params, (coo_matrix, coo_array)):
+        if issparse(params):
             num_qubits = int(np.ceil(np.log2(params.shape[0]*params.shape[1])))
         elif isinstance(params, (Statevector, List, np.ndarray)):
             params = np.asarray(params, dtype=complex).tolist()
