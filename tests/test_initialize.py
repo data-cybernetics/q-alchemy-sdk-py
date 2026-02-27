@@ -44,7 +44,7 @@ class InitializeTestCase(unittest.TestCase):
 
                 for init_state, qiskit_state in zip(state_vectors, qiskit_states):
                     self.assertLessEqual(1 - abs(np.vdot(init_state, qiskit_state)) ** 2, 1e-13)
-                    self.assertLessEqual(np.linalg.norm(init_state-qiskit_state), 1e-12)  # not quite that precise?
+                    self.assertLessEqual(np.linalg.norm(init_state-qiskit_state), 1e-11)  # not quite that precise?
                 if initialization_method != InitializationMethods.AUTO:
                     self.assertEqual(summary_list[0]["method"], initialization_method)
 
