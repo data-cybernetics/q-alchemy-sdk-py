@@ -10,9 +10,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Optional, Union, Callable
+from typing import Optional, Union
 
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, issparse
+import autoray as ar
 
 import pennylane as qml
 import numpy as np
@@ -27,6 +28,9 @@ from q_alchemy.initialize import q_alchemy_as_qasm, OptParams, q_alchemy_as_qasm
 # Normalization precision required for compatibility with Qiskit and qclib state preparation.
 ATOL = 1e-10
 RTOL = 1e-9
+
+# override qml.math.shape for scipy provider (the default version calls np.toarray())
+ar.register_function('scipy', 'shape', lambda x: x.shape)
 
 class AmplitudeEmbedding(StatePrep):
     # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -187,7 +191,11 @@ class QAlchemyStatePreparation(Operation):
         for i, state in enumerate(state_batch):
             shape = qml.math.shape(state)
 
-            if len(shape) != 1:
+            if issparse(state) and shape[0] == 1:
+                # This will happen if we received a sparse matrix; sparse matrices are always 2d.
+                # qml convention is to use a (1,2**n) state, so...
+                shape = (shape[1],)
+            elif len(shape) != 1:
                 raise ValueError(
                     f"State vectors must be one-dimensional; vector {i} has shape {shape}."
                 )
@@ -199,7 +207,7 @@ class QAlchemyStatePreparation(Operation):
                 )
 
             if not qml.math.is_abstract(state):
-                norm = qml.math.sum(qml.math.abs(state) ** 2)
+                norm = qml.math.norm(state) # frobenius, i.e. sqrt(sum(|a|**2)) 
                 if not qml.math.allclose(norm, 1.0, atol=ATOL, rtol=RTOL):
                     raise ValueError(
                         f"State vectors have to be of norm 1.0, vector {i} has norm {norm}"
@@ -215,7 +223,8 @@ class QAlchemyStatePreparation(Operation):
     @staticmethod
     def compute_decomposition(state_vector, wires, **hyperparameters):  # pylint: disable=arguments-differ
         opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
-        if len(qml.math.shape(state_vector)) > 1:
+        shape = qml.math.shape(state_vector)
+        if len(shape) != 1 and not (issparse(state_vector) and shape[0] == 1):
             raise ValueError(
                 "Broadcasting with QAlchemyStatePreparation is not supported. Please use the "
                 "qml.transforms.broadcast_expand transform to use broadcasting with "
@@ -223,6 +232,9 @@ class QAlchemyStatePreparation(Operation):
             )
         if opt_params.use_qasm3:
             warnings.warn("QASM3 not fully supported by pennylane_integration!")
+        if issparse(state_vector):
+            # put it back into expected COO format
+            state_vector.tocoo()
         qasm, summary = q_alchemy_as_qasm(state_vector, opt_params, return_summary=True)
         if opt_params.use_qasm3:
             # remove include
@@ -241,7 +253,8 @@ class QAlchemyStatePreparation(Operation):
 
 def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
     """
-    Given a list of state vectors, submit them as a batch to QAlchemy, and return a list of quantum functions.
+    Given a list of state vectors (or a single sparse array), 
+    submit them as a batch to QAlchemy, and return a list of quantum functions.
 
     These quantum functions can be integrated into your circuits easily, e.g.:
 
@@ -266,7 +279,7 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
         **hyperparameters ():
 
     Returns:
-
+        list: List of quantum functions preparing requested states.
     """
     opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
     if opt_params.use_qasm3:
