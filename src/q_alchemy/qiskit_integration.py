@@ -18,7 +18,7 @@ from qiskit import qasm3
 from qiskit.circuit import QuantumCircuit, Gate
 from qiskit.circuit.instruction import Instruction
 from qiskit.quantum_info.states.statevector import Statevector
-from scipy.sparse import coo_array, coo_matrix, csr_array, csr_matrix
+from scipy.sparse import coo_array, coo_matrix, csr_array, csr_matrix, issparse, sparray
 
 from q_alchemy.initialize import q_alchemy_as_qasm, create_client, OptParams, q_alchemy_as_qasm_parallel_states
 
@@ -95,7 +95,7 @@ class QAlchemyInitialize(Instruction):
             qc.global_phase = summary["global_phase"] #n.b. this is zero if use_qasm3
         self.definition = qc
 
-def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np.ndarray],
+def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np.ndarray | sparray] | sparray,
                          labels: list[str] = [],
                          opt_params: dict | OptParams | None = None) -> list[Gate]:
     """
@@ -109,9 +109,21 @@ def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np
     Returns:
         list[Gate]: A list of labeled initialization circuits, one for each state.
     """
-    params = np.asarray(state_vectors, dtype=complex).tolist()
-    num_states = len(params)
-    num_qubits = int(np.ceil(np.log2(len(params[0]))))
+    if isinstance(state_vectors, List):
+        # avoid expanding sparse matrices!
+        params = [(sv if issparse(sv) else np.asarray(sv, dtype=complex)) for sv in state_vectors]
+        num_states = len(params)
+        if issparse(params[0]):
+            num_qubits = int(np.ceil(np.log2(params[0].size))) # size = shape[0] * shape[1]
+        else:
+            num_qubits = int(np.ceil(np.log2(len(params[0]))))
+    elif issparse(state_vectors):
+        params = state_vectors
+        num_states = params.shape[0]
+        num_qubits = int(np.ceil(np.log2(params.shape[1])))
+    else:
+        raise TypeError(f"state_vectors has unexpected type: {type(state_vectors)}")
+        
     if opt_params is None:
         opt_params = OptParams()
     elif not isinstance(opt_params, OptParams):
