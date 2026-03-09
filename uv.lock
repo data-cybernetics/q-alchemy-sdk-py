@@ -2580,6 +2580,7 @@ dev = [
     { name = "pytest-dotenv" },
     { name = "python-dotenv" },
     { name = "qiskit", extra = ["qasm3-import"] },
+    { name = "qiskit-addon-utils" },
     { name = "scipy-stubs" },
 ]
 
@@ -2617,6 +2618,7 @@ dev = [
     { name = "pytest-dotenv" },
     { name = "python-dotenv" },
     { name = "qiskit", extras = ["qasm3-import"] },
+    { name = "qiskit-addon-utils", specifier = ">=0.3.1" },
     { name = "scipy-stubs", specifier = ">=1.16.1.1" },
 ]
 
@@ -2646,6 +2648,20 @@ wheels = [
 [package.optional-dependencies]
 qasm3-import = [
     { name = "qiskit-qasm3-import" },
+]
+
+[[package]]
+name = "qiskit-addon-utils"
+version = "0.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "qiskit" },
+    { name = "rustworkx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c3/0d/b4f74def452527442fab4eb43691fa4646019b0978b45a0582337ffcbf0e/qiskit_addon_utils-0.3.1.tar.gz", hash = "sha256:61f3bec5c644c4274c4c6d83ddf1be37802623c3f3ae4e88c43522a77ee80d04", size = 1997622, upload-time = "2026-03-04T22:52:04.648Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/12/8d/c2f6173f2db3ba841edc6b2973d18bf686cad074efca1cb3ebeb4866685d/qiskit_addon_utils-0.3.1-py3-none-any.whl", hash = "sha256:ade5dd2b2d8a73a29f59cdd969b0f4c73d0151131beb56aafb442b2021b357d0", size = 58511, upload-time = "2026-03-04T22:52:02.872Z" },
 ]
 
 [[package]]
