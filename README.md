@@ -40,17 +40,17 @@ We use [uv](https://docs.astral.sh/uv/) and have tested this all with Python 3.1
 it after cloning is simply
 
 ```bash
-uv sync
+uv sync --locked
 ```
 
 Again, for qiskit- or PennyLane-integrations, please add the groups
 ```bash
-uv sync --extra qiskit --extra pennylane
+uv sync --locked --extra qiskit --extra pennylane
 ```
 
 And for running our examples,
 ```bash
-uv sync --extra examples
+uv sync --locked --extra examples
 ```
 
 ## Usage
