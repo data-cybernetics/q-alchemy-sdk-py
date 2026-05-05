@@ -36,7 +36,7 @@ If you would like to run our examples, please use
 pip install q-alchemy-sdk-py[examples]
 ```
 
-We use [uv] (https://docs.astral.sh/uv/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
+We use [uv](https://docs.astral.sh/uv/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
 it after cloning is simply
 
 ```bash
@@ -48,7 +48,7 @@ Again, for qiskit- or PennyLane-integrations, please add the groups
 uv sync --extra qiskit --extra pennylane
 ```
 
-And for running our examples.
+And for running our examples,
 ```bash
 uv sync --extra examples
 ```
