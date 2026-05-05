@@ -66,6 +66,7 @@ examples = [
     "matplotlib",
     "pandas",
     "scikit-learn",
+    "torch>=2.11.0",
 ]
 
 [project.license]

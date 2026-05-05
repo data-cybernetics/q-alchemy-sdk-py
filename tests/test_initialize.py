@@ -10,7 +10,7 @@ from q_alchemy.initialize import OptParams, q_alchemy_as_qasm_parallel_states, I
 
 from dotenv import load_dotenv
 
-load_dotenv("../.env-dev") # the 'assert' was causing the import to fail during test discovery.
+load_dotenv("../.env") # the 'assert' was causing the import to fail during test discovery.
 
 class InitializeTestCase(unittest.TestCase):
     def test_batch(self):
