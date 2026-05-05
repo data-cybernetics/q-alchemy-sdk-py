@@ -11,7 +11,7 @@ from scipy.sparse import coo_matrix, coo_array, csr_matrix, vstack
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams, pennylane_batch_initialize
 
-load_dotenv("../.env-dev")
+load_dotenv("../.env")
 
 class TestPennyLaneIntegration(unittest.TestCase):
 

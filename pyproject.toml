@@ -16,7 +16,7 @@ build-backend = "pdm.backend"
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.2.26"
+version = "0.2.27"
 description = ""
 authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
@@ -29,8 +29,14 @@ dependencies = [
     "tqdm",
     "pyarrow>=19.0.1",
 ]
-requires-python = "<4,>=3.11"
+requires-python = "<3.15,>=3.11"
 readme = "README.md"
+
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.uv.exclude-newer-package]
+pinexq-client = false # we need this even for transitive dependencies
 
 [dependency-groups]
 dev = [
@@ -41,7 +47,9 @@ dev = [
     "notebook>=7.4.5",
     "pip>=25.2",
     "scipy-stubs>=1.16.1.1",
-    "qiskit[qasm3-import]"
+    "qiskit[qasm3-import]",
+    "qiskit-addon-utils>=0.3.1",
+    "matplotlib>=3.10.8",
 ]
 
 [project.optional-dependencies]
@@ -65,6 +73,9 @@ examples = [
     "matplotlib",
     "pandas",
     "scikit-learn",
+    "torch>=2.11.0",
+    "python-dotenv>=1.2.1",
+    "qiskit-ibm-runtime>=0.45.1",
 ]
 
 [project.license]
