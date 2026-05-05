@@ -49,6 +49,7 @@ dev = [
     "scipy-stubs>=1.16.1.1",
     "qiskit[qasm3-import]",
     "qiskit-addon-utils>=0.3.1",
+    "matplotlib>=3.10.8",
 ]
 
 [project.optional-dependencies]
