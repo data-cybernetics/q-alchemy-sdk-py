@@ -32,6 +32,12 @@ dependencies = [
 requires-python = "<4,>=3.11"
 readme = "README.md"
 
+[tool.uv]
+exclude-newer = "7 days"
+
+[tool.uv.exclude-newer-package]
+pinexq-client = false # we need this even for transitive dependencies
+
 [dependency-groups]
 dev = [
     "pytest",
