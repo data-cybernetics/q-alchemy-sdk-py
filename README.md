@@ -36,18 +36,22 @@ If you would like to run our examples, please use
 pip install q-alchemy-sdk-py[examples]
 ```
 
-We use [python-pdm](https://pdm-project.org/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
+We use [uv] (https://docs.astral.sh/uv/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
 it after cloning is simply
 
 ```bash
-pdm install
+uv sync
 ```
 
 Again, for qiskit- or PennyLane-integrations, please add the groups
 ```bash
-pdm install -G qiskit -G pennylane
+uv sync --extra qiskit --extra pennylane
 ```
-Or whatever combination you need.
+
+And for running our examples.
+```bash
+uv sync --extra examples
+```
 
 ## Usage
 
