@@ -31,6 +31,11 @@ And if you want the PennyLane-integration, please use
 pip install q-alchemy-sdk-py[pennylane]
 ```
 
+If you would like to run our examples, please use
+```bash
+pip install q-alchemy-sdk-py[examples]
+```
+
 We use [python-pdm](https://pdm-project.org/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
 it after cloning is simply
 
@@ -42,8 +47,7 @@ Again, for qiskit- or PennyLane-integrations, please add the groups
 ```bash
 pdm install -G qiskit -G pennylane
 ```
-Or whatever combination you need. Currently, the PennyLane-integration is dependent on the qiskit-integration... what a 
-fallacy! We will -- of course -- fix this soon!
+Or whatever combination you need.
 
 ## Usage
 
@@ -56,6 +60,7 @@ you can test it!
 
 ```python
 import numpy as np
+import os
 from sklearn.datasets import fetch_openml
 
 from q_alchemy.initialize import q_alchemy_as_qasm
@@ -69,7 +74,8 @@ filler.fill(0)
 zero = np.hstack([zero, filler])
 zero = zero / np.linalg.norm(zero)
 
-qasm, summary = q_alchemy_as_qasm(zero, max_fidelity_loss=0.2, api_key="<your api key>", return_summary=True)
+qasm, summary = q_alchemy_as_qasm(zero, max_fidelity_loss=0.2, 
+    api_key=os.environ["Q_ALCHEMY_API_KEY"], return_summary=True)
 print(summary)
 ```
 
@@ -78,6 +84,7 @@ print(summary)
 ```python
 import numpy as np
 from sklearn.datasets import fetch_openml
+import os
 
 from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams
 
@@ -95,7 +102,7 @@ instr = QAlchemyInitialize(
     opt_params=OptParams(
         max_fidelity_loss=0.1,
         basis_gates=["id", "rx", "ry", "rz", "cx"],
-        api_key="<your api key>"
+        api_key=os.environ["Q_ALCHEMY_API_KEY"]
     )
 )
 instr.definition.draw(fold=-1)
@@ -107,6 +114,7 @@ instr.definition.draw(fold=-1)
 import numpy as np
 import pennylane as qml
 from sklearn.datasets import fetch_openml
+import os
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams
 
@@ -129,7 +137,7 @@ def circuit(state=None):
         opt_params=OptParams(
             max_fidelity_loss=0.1,
             basis_gates=["id", "rx", "ry", "rz", "cx"],
-            api_key="<your api key>"
+            api_key=os.environ["Q_ALCHEMY_API_KEY"]
         )
     )
     return qml.state()
@@ -143,11 +151,12 @@ PennyLane provides native support for *broadcasting*, which allows quantum nodes
 
 > ⚠️ **Note:** For simulators or backends that support native state initialization using the `StatePrep` gate—such as `default.qubit`, and `lightning.qubit`—the state vector is injected directly without any decomposition into quantum gates. In this case, Q-Alchemy is not used. This behavior is ideal for rapid prototyping and testing. Switching to a hardware backend (or one without native state prep) will automatically invoke Q-Alchemy for state preparation.
 
-#### Broadcasting Example with `qiskit.aer`
+#### Broadcasting Example
 
 ```python
 import numpy as np
 import pennylane as qml
+import os
 import torch
 
 from q_alchemy.pennylane_integration import AmplitudeEmbedding, OptParams
@@ -167,7 +176,7 @@ def circuit(x):
         wires=[0],
         opt_params=OptParams(
             max_fidelity_loss=0.0,
-            api_key="<your api key>"
+            api_key=os.environ["Q_ALCHEMY_API_KEY"]
         )
     )
     return qml.expval(qml.PauliZ(0))
