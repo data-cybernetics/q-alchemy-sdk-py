@@ -4,7 +4,6 @@ distribution = true
 
 [tool.pdm.build]
 includes = [
-    "src/hypermedia_client",
     "src/q_alchemy",
 ]
 
