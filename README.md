@@ -192,6 +192,36 @@ print(qml.draw(circuit, level="device", max_length=100)(X_tensor))
 
 This example demonstrates how batched data can be processed using broadcasting with `AmplitudeEmbedding`, and how Q-Alchemy is triggered on simulators like `qiskit.aer`. When moving to real hardware or gate-based backends that lack `StatePrep` gate, Q-Alchemy will transparently handle the state preparation.
 
+### Verifying preparation circuits with the sparse simulator
+
+Q-Alchemy also hosts a **sparse state-vector simulator** so you can verify that a
+preparation circuit really produces your target state. The typical loop is
+**prepare → simulate → verify**:
+
+```python
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector, state_fidelity
+from q_alchemy import q_alchemy_as_qasm, SparseSimulator
+
+qasm = q_alchemy_as_qasm(target, max_fidelity_loss=0.0)   # prepare
+prep = QuantumCircuit.from_qasm_str(qasm)
+
+sim = SparseSimulator()                                    # verify
+sv = sim.sparse_statevector(prep)
+print("fidelity:", state_fidelity(Statevector(sv.to_dense()), Statevector(target)))
+```
+
+`SparseSimulator` also exposes `.counts(...)` and `.tomography(...)`, and it
+auto-selects your resource tier from your plan (Standard/Medium for everyone,
+XLarge for enterprise).
+
+> ⚠️ **The free plan is strongly limited** — state preparation is capped (currently
+> ~12 qubits, batches up to 100) and runs on the Medium simulator tier. Enterprise
+> plans get larger circuits and the XLarge tier. See the limits table in the guide.
+
+📖 **Full guide:** [docs/initialize-and-verify.md](docs/initialize-and-verify.md) ·
+🧪 **Runnable notebook:** [examples/simulator_vs_initializer.ipynb](examples/simulator_vs_initializer.ipynb)
+
 ### Developer UI
 
 You can play around with this as you please and check out the [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
