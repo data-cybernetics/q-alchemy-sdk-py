@@ -64,7 +64,11 @@ from q_alchemy.initialize import create_client, find_processing_step
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
+Tier = Literal["auto", "standard", "enterprise"]
 Circuit = Any  # qiskit.QuantumCircuit (imported lazily) or an OpenQASM 2 string
+
+# Grant (from the caller's UserGrants) that unlocks the XLarge enterprise tier.
+ENTERPRISE_GRANT = "plan:enterprise"
 
 # Return-WorkData alias produced by each capability (matches the ProCon).
 _OUTPUT_ALIAS: dict[str, str] = {
@@ -94,6 +98,10 @@ class SimulatorParams:
     job_completion_timeout_sec: int | None = field(default=300)
     job_tags: list[str] = field(default_factory=list)
     remove_data: bool = field(default=True)
+    #: Resource tier. "auto" picks the enterprise (XLarge) functions when the
+    #: caller's plan allows it, else the standard (Medium) ones; force a tier
+    #: with "standard" / "enterprise".
+    tier: Tier = field(default="auto")
     #: Circuits with at most this many qubits default to the inline QASM form.
     inline_max_qubits: int = field(default=24)
     #: Raw QASM strings at most this long default to the inline form.
@@ -302,6 +310,51 @@ class SparseSimulator:
         # create_client only reads api_key/added_headers/schema/host/timeout, all
         # of which SimulatorParams provides.
         self.client = client if client is not None else create_client(self.params)
+        self._grants: list[str] | None = None  # cached UserGrants
+        self._tier: str | None = None          # cached resolved tier
+
+    # -- plan / tier --------------------------------------------------------- #
+    def user_grants(self) -> list[str]:
+        """The caller's grants, read once from the hypermedia API and cached.
+
+        Navigates the entry point to ``Info`` and returns the embedded
+        ``CurrentUser.UserGrants`` (e.g. ``["plan:enterprise", ...]``). Returns
+        ``[]`` if the API doesn't expose it, so detection degrades to standard.
+        """
+        if self._grants is None:
+            self._grants = self._fetch_user_grants()
+        return self._grants
+
+    def is_enterprise(self) -> bool:
+        """Whether the caller's plan unlocks the enterprise (XLarge) tier."""
+        return ENTERPRISE_GRANT in self.user_grants()
+
+    @property
+    def tier(self) -> str:
+        """Resolved tier: ``params.tier`` honored, ``"auto"`` decided by plan."""
+        if self._tier is None:
+            requested = (self.params.tier or "auto").lower()
+            if requested == "auto":
+                requested = "enterprise" if self.is_enterprise() else "standard"
+            self._tier = requested
+        return self._tier
+
+    def _fetch_user_grants(self) -> list[str]:
+        try:
+            entry = self.client.get("/api/EntryPoint").json()
+            info_href = next(
+                (l["href"] for l in entry.get("links", []) if "Info" in (l.get("rel") or [])),
+                None,
+            )
+            if not info_href:
+                return []
+            info = self.client.get(info_href).json()
+            for entity in info.get("entities", []):
+                if "CurrentUser" in (entity.get("rel") or []):
+                    return list((entity.get("properties") or {}).get("UserGrants", []))
+        except Exception:
+            return []
+        return []
 
     # -- public capabilities ------------------------------------------------- #
     def counts(
@@ -370,6 +423,9 @@ class SparseSimulator:
     def _run(self, capability: Capability, circuit: Circuit, input_form: InputForm, parameters: dict) -> dict:
         suffix, extra_parameters, upload = self._prepare_input(circuit, input_form)
         function_name = f"{capability}_{suffix}"
+        if self.tier == "enterprise":
+            # XLarge functions; the server's grant check enforces eligibility.
+            function_name += "_enterprise"
         step = find_processing_step(self.client, function_name)
 
         input_data_slots = None
