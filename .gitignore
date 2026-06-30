@@ -8,7 +8,3 @@ dist/
 .ipynb_checkpoints/
 /.env
 /.env-dev
-
-# Never commit local credentials (any directory)
-.env
-examples/.env
