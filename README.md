@@ -15,7 +15,7 @@ has similar characteristics.
 
 ## Installation
 
-We have decided not to go through pypi, but you can install this through pip or poetry nonetheless
+The SDK is published on PyPI, so you can install it with pip (or poetry, uv, ...):
 
 ```bash
 pip install q-alchemy-sdk-py
