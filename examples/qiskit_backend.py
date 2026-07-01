@@ -4,8 +4,13 @@ Run it with an API key available (e.g. Q_ALCHEMY_API_KEY in ../.env):
 
     python examples/qiskit_backend.py
 
-Dependencies: q-alchemy-sdk-py[qiskit]; the PennyLane section additionally needs
-pennylane + the PennyLane-Qiskit plugin (q-alchemy-sdk-py[pennylane]).
+Dependencies: the `examples` extra installs everything needed to run this
+(Qiskit + the PennyLane-Qiskit plugin)::
+
+    pip install "q-alchemy-sdk-py[examples]"
+
+The Qiskit section alone only needs `[qiskit]`; the PennyLane section needs
+pennylane + the PennyLane-Qiskit plugin (`[pennylane]` or `[examples]`).
 """
 
 import os
@@ -48,7 +53,7 @@ def pennylane_demo() -> None:
     try:
         import pennylane as qml
     except ImportError:
-        print("\n== PennyLane == (skipped: install q-alchemy-sdk-py[pennylane])")
+        print('\n== PennyLane == (skipped: install "q-alchemy-sdk-py[examples]" or "[pennylane]")')
         return
 
     print("\n== PennyLane via the PennyLane-Qiskit plugin ==")
