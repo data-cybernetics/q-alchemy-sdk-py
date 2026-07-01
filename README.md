@@ -222,6 +222,50 @@ XLarge for enterprise).
 📖 **Full guide:** [docs/initialize-and-verify.md](docs/initialize-and-verify.md) ·
 🧪 **Runnable notebook:** [examples/simulator_vs_initializer.ipynb](examples/simulator_vs_initializer.ipynb)
 
+### Using the simulator as a Qiskit backend
+
+The hosted simulator is also exposed through Qiskit's standard `BackendV2`
+interface — the same way IBM backends are used — so it drops straight into the
+Qiskit ecosystem (transpiler, `Sampler`, etc.):
+
+```python
+from qiskit import QuantumCircuit, transpile
+from q_alchemy import QAlchemyBackend
+
+backend = QAlchemyBackend()                         # reads Q_ALCHEMY_API_KEY from env
+
+qc = QuantumCircuit(2, 2)
+qc.h(0); qc.cx(0, 1); qc.measure([0, 1], [0, 1])
+
+job = backend.run(transpile(qc, backend), shots=4096)
+print(job.result().get_counts())                    # {'00': ~2048, '11': ~2048}
+```
+
+`backend.run(...)` accepts Aer-style options (`shots`, `seed_simulator`,
+`save_sparse_statevector`, `save_statevector`, `sparse_index_format`, ...), and
+there's an IBM-style `QAlchemyProvider().get_backend()` for discovery. The
+resource tier (Medium vs the enterprise XLarge) is selected automatically from
+your plan — see [the guide](docs/initialize-and-verify.md).
+
+#### From PennyLane
+
+Because it's a standard Qiskit backend, you can use it as a PennyLane device via
+the [PennyLane–Qiskit plugin](https://github.com/PennyLaneAI/pennylane-qiskit)
+(whose original version was written by this SDK's author, Carsten Blank):
+
+```python
+import pennylane as qml
+from q_alchemy import QAlchemyBackend
+
+dev = qml.device("qiskit.remote", wires=2, backend=QAlchemyBackend(), shots=4096)
+
+@qml.qnode(dev)
+def circuit():
+    qml.Hadamard(0)
+    qml.CNOT([0, 1])
+    return qml.counts()
+```
+
 ### Developer UI
 
 You can play around with this as you please and check out the [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)

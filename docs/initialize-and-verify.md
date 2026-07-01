@@ -123,6 +123,14 @@ SparseSimulator(tier="enterprise")  # force XLarge (rejected unless your plan al
 
 ---
 
+## Use it as a Qiskit backend
+
+Besides the `SparseSimulator` client, the simulator is exposed as a Qiskit
+`BackendV2` (`QAlchemyBackend`), so it works like any IBM-style backend and,
+through the PennyLane–Qiskit plugin, as a PennyLane device. See the
+["Using the simulator as a Qiskit backend"](../README.md#using-the-simulator-as-a-qiskit-backend)
+section of the README.
+
 ## See also
 
 - [`examples/simulator_vs_initializer.ipynb`](../examples/simulator_vs_initializer.ipynb)
