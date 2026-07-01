@@ -66,6 +66,40 @@ class TestCountsFormatting(unittest.TestCase):
         self.assertEqual(result.get_counts(), {"00": 5, "11": 7})
 
 
+class TestInteropNormalization(unittest.TestCase):
+    """Fixes that let arbitrary tools (e.g. PennyLane-Qiskit) use the backend."""
+
+    def test_counts_to_memory_expands_to_shots(self):
+        from q_alchemy.qalchemy_backend import _counts_to_memory
+        memory = _counts_to_memory({"0x0": 2, "0x3": 1})
+        self.assertEqual(len(memory), 3)
+        self.assertEqual(sorted(memory), ["0x0", "0x0", "0x3"])
+
+    def test_canonicalize_registers(self):
+        from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
+        from q_alchemy.simulator import _canonicalize_registers
+
+        qc = QuantumCircuit(QuantumRegister(2, "q0"), ClassicalRegister(2, "c0"))
+        qc.h(0); qc.cx(0, 1); qc.measure([0, 1], [0, 1])
+        canon = _canonicalize_registers(qc)
+        self.assertEqual([r.name for r in canon.qregs], ["q"])
+        self.assertEqual([r.name for r in canon.cregs], ["c"])
+        self.assertEqual(dict(canon.count_ops()), dict(qc.count_ops()))
+
+    def test_canonical_circuit_passes_through_unchanged(self):
+        from qiskit import QuantumCircuit
+        from q_alchemy.simulator import _canonicalize_registers
+        qc = QuantumCircuit(2)
+        qc.h(0)
+        self.assertIs(_canonicalize_registers(qc), qc)
+
+    def test_backend_is_deepcopyable(self):
+        # PennyLane-Qiskit deep-copies the backend; must not choke on the client.
+        import copy
+        be = _offline_backend()
+        self.assertIs(copy.deepcopy(be), be)
+
+
 class TestProvider(unittest.TestCase):
     def test_provider_backends_offline(self):
         provider = QAlchemyProvider(params=SparseSimulator(client=object()))

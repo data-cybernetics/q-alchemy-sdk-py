@@ -272,6 +272,32 @@ class TomographyResult:
 # --------------------------------------------------------------------------- #
 # Circuit serialization helpers
 # --------------------------------------------------------------------------- #
+def _canonicalize_registers(circuit: Circuit) -> Circuit:
+    """Rebuild the circuit with single ``q``/``c`` registers.
+
+    The simulator's QASM runtime only recognizes a quantum register named ``q``
+    (and classical ``c``). Tools that name registers differently — e.g. the
+    PennyLane-Qiskit plugin emits ``q0``/``c0`` — otherwise fail server-side.
+    Operations and measurement targets are preserved by global index.
+    """
+    from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister
+
+    if len(circuit.qregs) == 1 and circuit.qregs[0].name == "q" and (
+        not circuit.cregs or (len(circuit.cregs) == 1 and circuit.cregs[0].name == "c")
+    ):
+        return circuit  # already canonical
+
+    n, m = circuit.num_qubits, circuit.num_clbits
+    registers = []
+    if n:
+        registers.append(QuantumRegister(n, "q"))
+    if m:
+        registers.append(ClassicalRegister(m, "c"))
+    normalized = QuantumCircuit(*registers, name=circuit.name)
+    normalized.compose(circuit, qubits=range(n), clbits=range(m), inplace=True)
+    return normalized
+
+
 def _to_qasm2(circuit: Circuit) -> str:
     from qiskit import qasm2
 
@@ -470,6 +496,10 @@ class SparseSimulator:
     ) -> tuple[str, dict, tuple[str, bytes, str] | None]:
         """Resolve (function suffix, extra JSON parameters, optional upload)."""
         is_str = isinstance(circuit, str)
+        if not is_str:
+            # Normalize register names so any Qiskit circuit runs on the
+            # simulator's QASM runtime (which requires a `q`/`c` register).
+            circuit = _canonicalize_registers(circuit)
         auto = input_form == "auto"
         if auto:
             if is_str:

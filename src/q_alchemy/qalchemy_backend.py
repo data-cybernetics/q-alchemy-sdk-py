@@ -81,6 +81,19 @@ def _has_measurements(circuit: QuantumCircuit) -> bool:
     return any(instruction.operation.name == "measure" for instruction in circuit.data)
 
 
+def _counts_to_memory(hex_counts: dict[str, int]) -> list[str]:
+    """Expand aggregated counts into a per-shot memory list (hex outcomes).
+
+    The hosted simulator returns aggregated counts, not per-shot memory, so this
+    is a synthetic expansion — correct for tallying (counts/expectations), which
+    is what consumers like the PennyLane-Qiskit plugin (memory=True) do.
+    """
+    memory: list[str] = []
+    for outcome, count in hex_counts.items():
+        memory.extend([outcome] * int(count))
+    return memory
+
+
 class QAlchemyJob(JobV1):
     """Synchronous job that executes on first ``result()`` and caches it."""
 
@@ -135,6 +148,18 @@ class QAlchemyBackend(BackendV2):
             self._simulator = params
         else:
             self._simulator = SparseSimulator(params, **sim_kwargs)
+
+    def __deepcopy__(self, memo):
+        """Return self when tooling deep-copies the backend.
+
+        The backend holds an ``httpx.Client`` (via the simulator client), which
+        owns a thread lock and can't be deep-copied. The backend is effectively
+        immutable except for run options managed by ``BackendV2``, so sharing the
+        instance is safe — and lets it be used as a PennyLane device (the
+        PennyLane-Qiskit plugin deep-copies the backend).
+        """
+        memo[id(self)] = self
+        return self
 
     @property
     def simulator(self) -> SparseSimulator:
@@ -221,7 +246,10 @@ class QAlchemyBackend(BackendV2):
                 seed_simulator=run_options.seed_simulator,
                 optimization_level=int(run_options.optimization_level),
             ).counts
-            data["counts"] = _counts_to_hex(counts)
+            hex_counts = _counts_to_hex(counts)
+            data["counts"] = hex_counts
+            if bool(getattr(run_options, "memory", False)):
+                data["memory"] = _counts_to_memory(hex_counts)
 
         # Statevector exports share one remote call (state capabilities strip
         # any terminal measurements server-side).
