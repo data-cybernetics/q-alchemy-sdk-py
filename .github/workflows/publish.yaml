@@ -1,0 +1,64 @@
+name: Publish to PyPI
+
+# Publishes q-alchemy-sdk-py to PyPI via Trusted Publishing (OIDC) — no API
+# tokens or secrets involved. One-time setup required on pypi.org:
+#   project "q-alchemy-sdk-py" -> Manage -> Publishing -> Add a new publisher:
+#     owner: data-cybernetics, repository: q-alchemy-sdk-py,
+#     workflow: publish.yaml, environment: pypi
+# and on GitHub: Settings -> Environments -> create "pypi" (optionally with
+# required reviewers as a release gate).
+#
+# Release process:
+#   1. bump [project].version in pyproject.toml, merge to main
+#   2. create a GitHub Release with tag v<version> (e.g. v0.2.28)
+#   3. this workflow builds, verifies tag == package version, and publishes
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # manual fallback: builds and publishes the current main
+
+jobs:
+  build:
+    name: Build distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Check tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          PKG_VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          TAG="${{ github.event.release.tag_name }}"
+          if [ "v${PKG_VERSION}" != "${TAG}" ] && [ "${PKG_VERSION}" != "${TAG}" ]; then
+            echo "::error::Release tag '${TAG}' does not match pyproject version '${PKG_VERSION}'"
+            exit 1
+          fi
+      - name: Smoke-check the wheel
+        run: |
+          python3 -m venv /tmp/smoke && /tmp/smoke/bin/pip -q install dist/*.whl
+          /tmp/smoke/bin/python -c "import q_alchemy; from q_alchemy.initialize import OptParams; print('import OK,', OptParams().host)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: pypi
+      url: https://pypi.org/p/q-alchemy-sdk-py
+    permissions:
+      id-token: write  # required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
