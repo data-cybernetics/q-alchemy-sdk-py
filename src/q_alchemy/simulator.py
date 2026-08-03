@@ -99,8 +99,9 @@ class SimulatorParams:
     job_tags: list[str] = field(default_factory=list)
     remove_data: bool = field(default=True)
     #: Resource tier. "auto" picks the enterprise (XLarge) functions when the
-    #: caller's plan allows it, else the standard (Medium) ones; force a tier
-    #: with "standard" / "enterprise".
+    #: caller's plan allows it, else the standard (Medium) ones. "standard" is
+    #: always available — an enterprise caller may opt down to Medium — while
+    #: "enterprise" is rejected up front without the plan.
     tier: Tier = field(default="auto")
     #: Circuits with at most this many qubits default to the inline QASM form.
     inline_max_qubits: int = field(default=24)
@@ -357,11 +358,37 @@ class SparseSimulator:
 
     @property
     def tier(self) -> str:
-        """Resolved tier: ``params.tier`` honored, ``"auto"`` decided by plan."""
+        """Resolved tier, decided here — before any step lookup or job.
+
+        ``"auto"`` follows the caller's plan. Either tier may also be forced,
+        and the two directions are not symmetric:
+
+        * ``"standard"`` is always allowed. An enterprise caller opting down to
+          the Medium functions is a normal thing to want — smaller circuits do
+          not need XLarge, and the standard tier is the cheaper path.
+        * ``"enterprise"`` requires the plan. Without it the ProCon's grant
+          check would refuse the job anyway, so refusing here turns a wasted
+          round trip and an opaque server-side failure into an immediate,
+          explanatory error.
+        """
         if self._tier is None:
             requested = (self.params.tier or "auto").lower()
+            if requested not in ("auto", "standard", "enterprise"):
+                raise ValueError(
+                    f"Unknown tier {self.params.tier!r}. Use 'auto' (follow your "
+                    f"plan), 'standard' (Medium), or 'enterprise' (XLarge). "
+                    f"An unrecognized value used to fall through to the standard "
+                    f"tier silently."
+                )
             if requested == "auto":
                 requested = "enterprise" if self.is_enterprise() else "standard"
+            elif requested == "enterprise" and not self.is_enterprise():
+                raise PermissionError(
+                    "tier='enterprise' needs the Q-Alchemy enterprise plan; this "
+                    f"key's grants are {self.user_grants()}. Use tier='standard' "
+                    "(or the default tier='auto'), or contact support@q-alchemy.com "
+                    "to upgrade."
+                )
             self._tier = requested
         return self._tier
 

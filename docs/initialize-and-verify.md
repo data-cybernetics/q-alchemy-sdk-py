@@ -117,9 +117,22 @@ sim = SparseSimulator()         # tier="auto" (default)
 sim.tier                        # -> "standard" or "enterprise"
 sim.is_enterprise()             # -> bool, from your account grants
 
-SparseSimulator(tier="standard")    # force the Medium tier
-SparseSimulator(tier="enterprise")  # force XLarge (rejected unless your plan allows it)
+SparseSimulator(tier="standard")    # force the Medium tier — always allowed
+SparseSimulator(tier="enterprise")  # force XLarge — needs the enterprise plan
 ```
+
+The two directions are deliberately not symmetric:
+
+- **Down is always allowed.** An enterprise caller can select the standard
+  functions whenever XLarge is not worth it — small circuits, cheaper runs,
+  or reproducing what a free-tier user sees.
+- **Up requires the plan.** `tier="enterprise"` without `plan:enterprise` raises
+  a `PermissionError` at lookup, before any job is created. The ProCon's grant
+  check would refuse it in any case; failing client-side turns a wasted round
+  trip and an opaque server-side error into an immediate, explanatory one.
+
+An unrecognized tier raises `ValueError` rather than quietly falling back to
+standard.
 
 ---
 
