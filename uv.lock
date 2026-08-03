@@ -11,7 +11,7 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-04-28T16:10:13.9075644Z"
+exclude-newer = "0001-01-01T00:00:00Z" # This has no effect and is included for backwards compatibility when using relative exclude-newer values.
 exclude-newer-span = "P7D"
 
 [options.exclude-newer-package]
@@ -2822,7 +2822,7 @@ wheels = [
 
 [[package]]
 name = "q-alchemy-sdk-py"
-version = "0.2.27"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
