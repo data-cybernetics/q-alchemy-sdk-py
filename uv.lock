@@ -2822,7 +2822,7 @@ wheels = [
 
 [[package]]
 name = "q-alchemy-sdk-py"
-version = "0.2.27"
+version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

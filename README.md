@@ -15,7 +15,7 @@ has similar characteristics.
 
 ## Installation
 
-We have decided not to go through pypi, but you can install this through pip or poetry nonetheless
+The SDK is published on PyPI, so you can install it with pip (or poetry, uv, ...):
 
 ```bash
 pip install q-alchemy-sdk-py
@@ -191,6 +191,149 @@ print(qml.draw(circuit, level="device", max_length=100)(X_tensor))
 ```
 
 This example demonstrates how batched data can be processed using broadcasting with `AmplitudeEmbedding`, and how Q-Alchemy is triggered on simulators like `qiskit.aer`. When moving to real hardware or gate-based backends that lack `StatePrep` gate, Q-Alchemy will transparently handle the state preparation.
+
+### Verifying preparation circuits with the sparse simulator
+
+Q-Alchemy also hosts a **sparse state-vector simulator** so you can verify that a
+preparation circuit really produces your target state. The typical loop is
+**prepare → simulate → verify**:
+
+```python
+from qiskit import QuantumCircuit
+from qiskit.quantum_info import Statevector, state_fidelity
+from q_alchemy import q_alchemy_as_qasm, SparseSimulator
+
+qasm = q_alchemy_as_qasm(target, max_fidelity_loss=0.0)   # prepare
+prep = QuantumCircuit.from_qasm_str(qasm)
+
+sim = SparseSimulator()                                    # verify
+sv = sim.sparse_statevector(prep)
+print("fidelity:", state_fidelity(Statevector(sv.to_dense()), Statevector(target)))
+```
+
+`SparseSimulator` also exposes `.counts(...)` and `.tomography(...)`, and it
+auto-selects your resource tier from your plan (Standard/Medium for everyone,
+XLarge for enterprise).
+
+> ⚠️ **The free plan is strongly limited** — state preparation is capped (currently
+> ~12 qubits, batches up to 100) and runs on the Medium simulator tier. Enterprise
+> plans get larger circuits and the XLarge tier. See the limits table in the guide.
+
+📖 **Full guide:** [docs/initialize-and-verify.md](docs/initialize-and-verify.md) ·
+🧪 **Runnable notebook:** [examples/simulator_vs_initializer.ipynb](examples/simulator_vs_initializer.ipynb)
+
+### Using the simulator as a Qiskit backend
+
+The hosted simulator is also exposed through Qiskit's standard `BackendV2`
+interface — the same way IBM backends are used — so it drops straight into the
+Qiskit ecosystem (transpiler, `Sampler`, etc.):
+
+```python
+from qiskit import QuantumCircuit, transpile
+from q_alchemy import QAlchemyBackend
+
+backend = QAlchemyBackend()                         # reads Q_ALCHEMY_API_KEY from env
+
+qc = QuantumCircuit(2, 2)
+qc.h(0); qc.cx(0, 1); qc.measure([0, 1], [0, 1])
+
+job = backend.run(transpile(qc, backend), shots=4096)
+print(job.result().get_counts())                    # {'00': ~2048, '11': ~2048}
+```
+
+`backend.run(...)` accepts Aer-style options (`shots`, `seed_simulator`,
+`save_sparse_statevector`, `save_statevector`, `sparse_index_format`, ...), and
+there's an IBM-style `QAlchemyProvider().get_backend()` for discovery. The
+resource tier (Medium vs the enterprise XLarge) is selected automatically from
+your plan — see [the guide](docs/initialize-and-verify.md).
+
+#### `save_statevector` vs `save_sparse_statevector`
+
+Both ask for the state the circuit prepares, and both are served by the same
+remote call — the difference is what you get back, and how big it is.
+
+`save_statevector` is the option you already know from Aer. It hands you the
+familiar dense `2**n` vector, so `Statevector`, `state_fidelity` and friends all
+work unchanged:
+
+```python
+qc = QuantumCircuit(2)
+qc.h(0); qc.cx(0, 1)                                # no measurement: this is a state export
+
+result = backend.run(qc, save_statevector=True).result()
+print(result.data(0)["statevector"])
+# [0.70710678+0.j 0.        +0.j 0.        +0.j 0.70710678+0.j]   -> length 2**n
+```
+
+`save_sparse_statevector` is Q-Alchemy's own, and it is the one that scales. It
+returns **only the amplitudes the circuit actually populates**, so nothing of
+size `2**n` is ever built:
+
+```python
+result = backend.run(qc, save_sparse_statevector=True).result()
+print(result.data(0)["sparse_statevector"])
+# {'format': 'sparse_statevector_v1', 'num_qubits': 2, 'nnz': 2,
+#  'index_format': 'hex', 'index_convention': 'little_endian',
+#  'indices': ['0x0', '0x3'],
+#  'amplitudes': [[0.7071067811865476, 0.0], [0.7071067811865476, 0.0]]}
+```
+
+Note the amplitudes are `[real, imag]` pairs: this entry is the simulator's own
+JSON payload, passed through untouched. If you would rather have parsed
+`complex` values — plus `to_coo()`, `to_arrow()` and `amplitudes_dict()` — go
+through the client instead of the backend, which returns a typed
+`SparseStatevectorResult`:
+
+```python
+from q_alchemy import SparseSimulator
+
+sv = SparseSimulator().sparse_statevector(qc)
+print(sv.amplitudes)          # [(0.7071067811865476+0j), (0.7071067811865476+0j)]
+print(sv.amplitudes_dict())   # {'0x0': (0.707...+0j), '0x3': (0.707...+0j)}
+```
+
+`indices` and `amplitudes` line up element by element, and `nnz` is how many
+were stored — two here, not four. That gap is the whole point, and it widens
+fast: a 40-qubit state-preparation circuit populating a thousand basis states
+returns a thousand amplitudes, while the dense form would need `2**40` complex
+numbers, or roughly 17 TB. **A dense export is impossible in that regime; a
+sparse one is a few hundred kilobytes.** Standard Qiskit backends offer no
+equivalent.
+
+Ask for both together and you pay for one simulation:
+
+```python
+result = backend.run(qc, save_statevector=True, save_sparse_statevector=True).result()
+dense = result.data(0)["statevector"]               # 2**n numpy array
+sparse = result.data(0)["sparse_statevector"]       # nnz entries
+```
+
+Use the dense form for small circuits you want to compare against Qiskit
+directly; use the sparse form whenever `2**n` would not fit — which is exactly
+the regime this simulator exists for. Reach for `sparse_index_format`
+(`hex`/`bitstring`) and `sparse_index_convention`
+(`little_endian`/`big_endian`) to control how the indices are written, and see
+[the guide](docs/initialize-and-verify.md) for feeding a sparse result straight
+back into the loader via `to_coo()`.
+
+#### From PennyLane
+
+Because it's a standard Qiskit backend, you can use it as a PennyLane device via
+the [PennyLane–Qiskit plugin](https://github.com/PennyLaneAI/pennylane-qiskit)
+(whose original version was written by this SDK's author, Carsten Blank):
+
+```python
+import pennylane as qml
+from q_alchemy import QAlchemyBackend
+
+dev = qml.device("qiskit.remote", wires=2, backend=QAlchemyBackend(), shots=4096)
+
+@qml.qnode(dev)
+def circuit():
+    qml.Hadamard(0)
+    qml.CNOT([0, 1])
+    return qml.counts()
+```
 
 ### Developer UI
 
