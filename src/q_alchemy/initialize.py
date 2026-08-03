@@ -262,23 +262,15 @@ def from_name(
 
     # Check if at least one result is found
     if len(query_result.processing_steps) == 0:
-        # Attempt to suggest alternative steps if exact match not found.
-        # NB: pinexq-client dropped ProcessingStep._processing_steps_by_name;
-        # calling it here raised AttributeError *instead of* the NameError
-        # below, so "step not registered" surfaced as an unrelated crash. The
-        # suggestion list is a nicety — never let it replace the real error.
-        try:
-            suggestions = [
-                s.function_name
-                for s in ProcessingStep._query_processing_steps(
-                    client, step_name, None, allow_prerelease=True
-                ).processing_steps
-            ]
-        except Exception:  # noqa: BLE001 - suggestions must not mask the cause
-            suggestions = []
+        # NOTE: no suggestion lookup here — the private helper this used to
+        # call (ProcessingStep._processing_steps_by_name) no longer exists in
+        # pinexq-client >= 9.7, which turned this error path into a confusing
+        # AttributeError that masked the actual problem.
+        version_part = f" (version {version})" if version else ""
         raise NameError(
-            f"No processing step with the name {step_name} and version {version} registered. "
-            f"Suggestions: {suggestions}"
+            f"No processing step named '{step_name}'{version_part} is registered "
+            f"or visible to this account on {client.base_url}. If the step was "
+            f"deployed recently, it may not have been set public yet."
         )
 
     sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)

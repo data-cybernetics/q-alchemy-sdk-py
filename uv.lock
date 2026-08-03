@@ -2826,9 +2826,11 @@ version = "0.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "numpy" },
     { name = "pinexq-client" },
     { name = "pyarrow" },
     { name = "pydantic" },
+    { name = "scipy" },
     { name = "tenacity" },
     { name = "tqdm" },
 ]
@@ -2877,6 +2879,7 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.25.0,<1.0.0" },
     { name = "jupyter", marker = "extra == 'examples'" },
     { name = "matplotlib", marker = "extra == 'examples'" },
+    { name = "numpy", specifier = ">=1.26" },
     { name = "openqasm3", extras = ["parser"], marker = "extra == 'pennylane'" },
     { name = "pandas", marker = "extra == 'examples'" },
     { name = "pennylane", marker = "extra == 'examples'", specifier = ">=0.42.0" },
@@ -2895,6 +2898,7 @@ requires-dist = [
     { name = "qiskit-ibm-runtime", marker = "extra == 'examples'", specifier = ">=0.45.1" },
     { name = "qutip", marker = "extra == 'examples'" },
     { name = "scikit-learn", marker = "extra == 'examples'" },
+    { name = "scipy", specifier = ">=1.11" },
     { name = "tenacity", specifier = ">=8.2.3" },
     { name = "torch", marker = "extra == 'examples'", specifier = ">=2.11.0" },
     { name = "tqdm" },
