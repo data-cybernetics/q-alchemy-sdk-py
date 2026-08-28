@@ -54,6 +54,20 @@ NOISY_BACKEND_SIMULATOR_RESOURCE = "noisy-backend-simulator"
 
 LOG = logging.getLogger(__name__)
 
+__all__ = [
+    "IBMQuantumCredentials",
+    "QuantumBackend",
+    "QuantumIOJob",
+    "QuantumIOParams",
+    "QuantumIOService",
+    "LOCAL_SIMULATOR_RESOURCE",
+    "NOISY_BACKEND_SIMULATOR_RESOURCE",
+    "QUANTUM_BACKEND_RESOURCE",
+    "local_simulator_execution_plan",
+    "noisy_backend_execution_plan",
+    "quantum_backend_execution_plan",
+]
+
 # DataSlot order is part of the deployed Quantum I/O ProcessingStep contract.
 _RUN_EXPERIMENT_SLOT = 0
 _RUN_PLAN_SLOT = 1
@@ -364,21 +378,28 @@ class QuantumIOService:
         experiment: QuantumExperiment,
         execution_plan: ExecutionPlan | None = None,
         *,
-        shots: int = 1024,
+        shots: int | None = None,
         credentials: IBMQuantumCredentials | Mapping[str, Any] | None = None,
     ) -> QuantumIOJob:
         """Submit a typed quantum experiment and return a :class:`QuantumIOJob`.
 
         With no explicit execution plan, the service uses Q-Alchemy's local
-        sparse simulator. Advanced workflows pass a typed :class:`ExecutionPlan`.
-        Serialization to schema-3 JSON is entirely internal to the SDK.
+        sparse simulator and ``shots`` (default 1024). An :class:`ExecutionPlan`
+        carries its own ``shots``, so a conflicting ``shots`` passed alongside
+        one is rejected instead of being silently discarded. Serialization to
+        schema-3 JSON is entirely internal to the SDK.
         """
 
         if not isinstance(experiment, QuantumExperiment):
             raise TypeError("experiment must be a QuantumExperiment")
         if execution_plan is None:
-            plan = local_simulator_execution_plan(shots=shots)
+            plan = local_simulator_execution_plan(shots=1024 if shots is None else shots)
         elif isinstance(execution_plan, ExecutionPlan):
+            if shots is not None and shots != execution_plan.shots:
+                raise ValueError(
+                    f"shots={shots} conflicts with execution_plan.shots="
+                    f"{execution_plan.shots}; set shots on the ExecutionPlan instead"
+                )
             plan = execution_plan
         else:
             raise TypeError("execution_plan must be an ExecutionPlan")
@@ -791,6 +812,11 @@ def _download_json_output(job: Job, output_name: str) -> dict[str, Any]:
     ]
     if not matches:
         raise IOError(f"Quantum I/O job produced no {output_name!r} output")
+    if len(matches) > 1:
+        raise IOError(
+            f"Quantum I/O job produced {len(matches)} outputs named {output_name!r}; "
+            "the result is ambiguous"
+        )
     work_data = matches[0]
     if work_data.size_in_bytes == 0:
         raise IOError(f"Quantum I/O job returned an empty {output_name!r}")

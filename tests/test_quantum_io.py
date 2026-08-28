@@ -26,6 +26,7 @@ from q_alchemy import (
 )
 from q_alchemy.initialize import _version_sort_key
 from q_alchemy.quantum_io import (
+    _download_json_output,
     EXPERIMENT_INPUT_ALIAS,
     EXECUTION_PLAN_INPUT_ALIAS,
     IBM_CREDENTIALS_INPUT_ALIAS,
@@ -150,8 +151,25 @@ class _WorkData:
 
 
 class _OutputSlot:
-    def __init__(self, work_data):
-        self.assigned_workdatas = [work_data]
+    def __init__(self, *work_datas):
+        self.assigned_workdatas = list(work_datas)
+
+
+class _DownloadLink:
+    def __init__(self, payload: bytes):
+        self._payload = payload
+
+    def download(self) -> bytes:
+        return self._payload
+
+
+class _OutputWorkData:
+    """Output WorkData with the attributes _download_json_output actually reads."""
+
+    def __init__(self, name, payload: bytes):
+        self.name = name
+        self.size_in_bytes = len(payload)
+        self.download_link = _DownloadLink(payload)
 
 
 class _Step:
@@ -707,6 +725,63 @@ class TestServiceSubmission(unittest.TestCase):
         slots = [_slot_dump(slot) for slot in created["input_data_slots"]]
         self.assertEqual([slot.get("Index", slot.get("index")) for slot in slots], [0])
 
+    def test_backend_discovery_failure_preserves_job_and_credentials(self):
+        self.service.params.remove_data = True
+        self.service._ibm_credentials = IBMQuantumCredentials(token="secret")
+
+        def fail_wait(_self, *args, **kwargs):
+            raise RuntimeError("Job failed'. Error: provider unreachable")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch.object(
+            _FakePineJob, "wait_for_state", fail_wait
+        ):
+            with self.assertRaisesRegex(RuntimeError, "provider unreachable"):
+                self.service.backends(provider="ibm")
+
+        # The credential WorkData must survive so the failure can be diagnosed.
+        self.assertEqual(self.cleanup_events, [])
+
+    def test_backend_discovery_timeout_preserves_running_job(self):
+        self.service.params.remove_data = True
+        self.service._ibm_credentials = IBMQuantumCredentials(token="secret")
+
+        def timeout_wait(_self, *args, **kwargs):
+            raise TimeoutError("Job did not reach state: 'completed'")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch.object(
+            _FakePineJob, "wait_for_state", timeout_wait
+        ):
+            with self.assertRaises(TimeoutError):
+                self.service.backends(provider="ibm")
+
+        # A discovery job that is still running still needs its credentials.
+        self.assertEqual(self.cleanup_events, [])
+
+    def test_backend_discovery_parse_failure_preserves_credentials(self):
+        self.service.params.remove_data = True
+        self.service._ibm_credentials = IBMQuantumCredentials(token="secret")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch(
+            "q_alchemy.quantum_io._download_json_output",
+            return_value={"provider": "ibm", "backends": [{"name": "x"}]},  # no num_qubits
+        ):
+            with self.assertRaises(KeyError):
+                self.service.backends(provider="ibm")
+
+        self.assertEqual(self.cleanup_events, [])
+
+    def test_backend_discovery_preserves_everything_when_remove_data_false(self):
+        self.service.params.remove_data = False
+        self.service._ibm_credentials = IBMQuantumCredentials(token="secret")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch(
+            "q_alchemy.quantum_io._download_json_output",
+            return_value={"provider": "ibm", "backends": []},
+        ):
+            self.service.backends(provider="ibm")
+
+        self.assertEqual(self.cleanup_events, [])
+
     def test_backend_discovery_cleanup_deletes_job_before_credentials(self):
         self.service.params.remove_data = True
         credentials = IBMQuantumCredentials(token="secret")
@@ -727,6 +802,85 @@ class TestServiceSubmission(unittest.TestCase):
                 f"workdata:{IBM_CREDENTIALS_INPUT_ALIAS}",
             ],
         )
+
+
+class TestDownloadJsonOutput(unittest.TestCase):
+    """_download_json_output is stubbed out everywhere else; exercise it here."""
+
+    @staticmethod
+    def _job(*work_datas):
+        class Job:
+            def get_output_data_slots(self):
+                return [_OutputSlot(*work_datas)]
+
+        return Job()
+
+    def test_reads_the_named_output(self):
+        payload = json.dumps(_report_payload()).encode("utf-8")
+        job = self._job(_OutputWorkData(EXPERIMENT_REPORT_OUTPUT_ALIAS, payload))
+        result = _download_json_output(job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
+        self.assertEqual(result["kind"], "experiment-report")
+
+    def test_missing_output_is_reported_by_name(self):
+        job = self._job(_OutputWorkData("something_else.json", b"{}"))
+        with self.assertRaisesRegex(IOError, EXPERIMENT_REPORT_OUTPUT_ALIAS):
+            _download_json_output(job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
+
+    def test_empty_output_is_rejected_without_downloading(self):
+        job = self._job(_OutputWorkData(EXPERIMENT_REPORT_OUTPUT_ALIAS, b""))
+        with self.assertRaisesRegex(IOError, "empty"):
+            _download_json_output(job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
+
+    def test_non_object_json_is_rejected(self):
+        job = self._job(_OutputWorkData(EXPERIMENT_REPORT_OUTPUT_ALIAS, b"[1, 2, 3]"))
+        with self.assertRaisesRegex(IOError, "not a JSON object"):
+            _download_json_output(job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
+
+    def test_duplicate_outputs_are_ambiguous_rather_than_first_wins(self):
+        job = self._job(
+            _OutputWorkData(EXPERIMENT_REPORT_OUTPUT_ALIAS, b'{"a": 1}'),
+            _OutputWorkData(EXPERIMENT_REPORT_OUTPUT_ALIAS, b'{"a": 2}'),
+        )
+        with self.assertRaisesRegex(IOError, "ambiguous"):
+            _download_json_output(job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
+
+
+class TestArgumentValidation(unittest.TestCase):
+    def setUp(self):
+        self.service = QuantumIOService(QuantumIOParams(), client=object())
+
+    def test_shots_conflicting_with_an_execution_plan_is_rejected(self):
+        plan = local_simulator_execution_plan(shots=64)
+        with self.assertRaisesRegex(ValueError, "conflicts with execution_plan.shots"):
+            self.service.run(_bell_experiment(), plan, shots=8192)
+
+    def test_shots_matching_the_plan_is_accepted(self):
+        plan = local_simulator_execution_plan(shots=64)
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob):
+            self.service._upload_json = lambda f, p: _WorkData(f"https://wd/{f}")
+            self.service._step = lambda name: _Step()
+            self.service.run(_bell_experiment(), plan, shots=64)
+
+    def test_unbound_backend_cannot_run(self):
+        backend = QuantumBackend(provider="ibm", name="ibm_test", num_qubits=5)
+        with self.assertRaisesRegex(RuntimeError, "not bound"):
+            backend.run(_bell_experiment())
+
+    def test_credentials_reject_an_empty_token(self):
+        with self.assertRaisesRegex(ValueError, "non-empty"):
+            IBMQuantumCredentials(token="   ")
+
+    def test_credentials_reject_an_unknown_channel(self):
+        with self.assertRaisesRegex(ValueError, "channel"):
+            IBMQuantumCredentials(token="t", channel="nope")
+
+    def test_backend_discovery_rejects_unsupported_provider(self):
+        with self.assertRaisesRegex(ValueError, "not implemented"):
+            self.service.backends(provider="rigetti")
+
+    def test_backend_discovery_rejects_negative_min_num_qubits(self):
+        with self.assertRaisesRegex(ValueError, "must not be negative"):
+            self.service.backends(provider="ibm", min_num_qubits=-1)
 
 
 @unittest.skipUnless(
