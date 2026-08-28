@@ -47,6 +47,48 @@ from .simulator import (
     simulate_sparse_statevector,
     simulate_tomography,
 )
+
+
+from .quantum_io_contract import (
+    SCHEMA_VERSION,
+    BasisDistribution,
+    BasisMeasurement,
+    Circuit,
+    CircuitMetrics,
+    DistributionMetrics,
+    ErrorMetrics,
+    ExecutionPlan,
+    ExecutionResult,
+    ExperimentCircuitSummary,
+    ExperimentReport,
+    ExperimentSummary,
+    MeasurementPlan,
+    MeasurementPlanSummary,
+    ObservablePlanSummary,
+    Observation,
+    ObservationSet,
+    PauliObservable,
+    PortablePauliSum,
+    PreparationPreflightSummary,
+    PreparationSummary,
+    QuantumExperiment,
+    ReferenceSummary,
+    Runtime,
+    SimulationSummary,
+    State,
+    StateEstimateSummary,
+)
+
+from .quantum_io import (
+    QuantumIOService,
+    QuantumIOParams,
+    QuantumIOJob,
+    QuantumBackend,
+    IBMQuantumCredentials,
+    local_simulator_execution_plan,
+    noisy_backend_execution_plan,
+    quantum_backend_execution_plan,
+)
 try: # should fail silently if user has not installed optional dependencies
     from .qiskit_integration import QAlchemyInitialize
 except ImportError:
