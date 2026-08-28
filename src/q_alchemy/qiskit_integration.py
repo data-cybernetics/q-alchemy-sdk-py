@@ -74,7 +74,9 @@ class QAlchemyInitialize(Instruction):
         else:
             self.opt_params = OptParams(**opt_params)
 
-        self.client = create_client(self.opt_params)
+        # Built lazily: constructing the instruction (to draw or transpile a
+        # circuit) must not require an API key or open a connection pool.
+        self._client = None
 
         if label is None:
             label = "QAl"
@@ -85,9 +87,29 @@ class QAlchemyInitialize(Instruction):
         else:
             self.param_hash = datetime.datetime.utcnow().timestamp()
 
+    @property
+    def client(self):
+        """HTTP client for this instruction, created on first use."""
+        if self._client is None:
+            self._client = create_client(self.opt_params)
+        return self._client
+
+    def close(self) -> None:
+        """Release the HTTP connection pool held by this instruction."""
+        if self._client is not None:
+            self._client.close()
+            self._client = None
+
     def _define(self):
         # need to unbox params again.
-        qasm, summary = q_alchemy_as_qasm(self.params[0], self.opt_params, self.client, return_summary=True)
+        try:
+            qasm, summary = q_alchemy_as_qasm(
+                self.params[0], self.opt_params, self.client, return_summary=True
+            )
+        finally:
+            # One definition per instruction; do not hold the pool open for the
+            # lifetime of the circuit.
+            self.close()
         if self.opt_params.use_qasm3:
             qc = qasm3.loads(qasm)
         else:

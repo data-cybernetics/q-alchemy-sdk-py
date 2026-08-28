@@ -430,8 +430,22 @@ def q_alchemy_as_qasm(
 ) -> str | Tuple[str, dict]:
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm(state_vector, opt_params, client, return_summary)
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
+
+def _q_alchemy_as_qasm(
+        state_vector: List[complex] | np.ndarray | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> str | Tuple[str, dict]:
     # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
     data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
@@ -514,8 +528,24 @@ def q_alchemy_as_qasm_parallel_states(
     """
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm_parallel_states(
+            state_vector, opt_params, client, return_summary
+        )
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
+
+def _q_alchemy_as_qasm_parallel_states(
+        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> list[str] | tuple[list[str], list[dict]]:
     # cast/reshape state_vector into an (m x 2**n) coo_matrix, where m is the number of states
     if sparse.issparse(state_vector): # state_vector is a sparse matrix/array, and thus 2d.
         num_states = state_vector.shape[0]

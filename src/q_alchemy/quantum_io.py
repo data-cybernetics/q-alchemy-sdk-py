@@ -313,6 +313,7 @@ class QuantumIOService:
             else:
                 raise TypeError(f"Unknown QuantumIOService option {name!r}")
 
+        owns_client = client is None
         if client is None:
             if not resolved.api_key:
                 raise ValueError(
@@ -323,7 +324,25 @@ class QuantumIOService:
 
         self.params = resolved
         self.client = client
+        self._owns_client = owns_client
         self._ibm_credentials = _coerce_ibm_credentials(ibm_credentials)
+
+    def close(self) -> None:
+        """Release the HTTP connection pool created by this service.
+
+        A client passed in by the caller is left open: the service does not own
+        it. Calling this more than once is safe.
+        """
+
+        if self._owns_client and self.client is not None:
+            self.client.close()
+            self._owns_client = False
+
+    def __enter__(self) -> "QuantumIOService":
+        return self
+
+    def __exit__(self, *exc_info: Any) -> None:
+        self.close()
 
     def run(
         self,

@@ -337,9 +337,27 @@ class SparseSimulator:
             )
         # create_client only reads api_key/added_headers/schema/host/timeout, all
         # of which SimulatorParams provides.
+        self._owns_client = client is None
         self.client = client if client is not None else create_client(self.params)
         self._grants: list[str] | None = None  # cached UserGrants
         self._tier: str | None = None          # cached resolved tier
+
+    def close(self) -> None:
+        """Release the HTTP connection pool created by this simulator client.
+
+        A client passed in by the caller is left open: the simulator does not
+        own it. Calling this more than once is safe.
+        """
+
+        if self._owns_client and self.client is not None:
+            self.client.close()
+            self._owns_client = False
+
+    def __enter__(self) -> "SparseSimulator":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
 
     # -- plan / tier --------------------------------------------------------- #
     def user_grants(self) -> list[str]:
@@ -590,7 +608,8 @@ class SparseSimulator:
 def simulate_counts(circuit: Circuit, params: SimulatorParams | dict | None = None, **kwargs) -> CountsResult:
     """One-shot :meth:`SparseSimulator.counts` (see it for keyword options)."""
     run_kwargs = _split_run_kwargs(kwargs, SparseSimulator.counts)
-    return SparseSimulator(params, **kwargs).counts(circuit, **run_kwargs)
+    with SparseSimulator(params, **kwargs) as simulator:
+        return simulator.counts(circuit, **run_kwargs)
 
 
 def simulate_sparse_statevector(
@@ -598,7 +617,8 @@ def simulate_sparse_statevector(
 ) -> SparseStatevectorResult:
     """One-shot :meth:`SparseSimulator.sparse_statevector`."""
     run_kwargs = _split_run_kwargs(kwargs, SparseSimulator.sparse_statevector)
-    return SparseSimulator(params, **kwargs).sparse_statevector(circuit, **run_kwargs)
+    with SparseSimulator(params, **kwargs) as simulator:
+        return simulator.sparse_statevector(circuit, **run_kwargs)
 
 
 def simulate_tomography(
@@ -606,7 +626,8 @@ def simulate_tomography(
 ) -> TomographyResult:
     """One-shot :meth:`SparseSimulator.tomography`."""
     run_kwargs = _split_run_kwargs(kwargs, SparseSimulator.tomography)
-    return SparseSimulator(params, **kwargs).tomography(circuit, **run_kwargs)
+    with SparseSimulator(params, **kwargs) as simulator:
+        return simulator.tomography(circuit, **run_kwargs)
 
 
 def _split_run_kwargs(kwargs: dict, method) -> dict:

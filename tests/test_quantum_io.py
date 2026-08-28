@@ -7,6 +7,8 @@ import os
 import time
 import unittest
 import warnings
+
+import httpx
 from unittest.mock import patch
 
 from q_alchemy import (
@@ -359,6 +361,30 @@ class TestBackend(unittest.TestCase):
         self.assertEqual(plan.shots, 512)
         self.assertEqual(plan.acquisition.config["backend"], "ibm_test")
         self.assertIs(used_credentials, credentials)
+
+
+class TestClientLifecycle(unittest.TestCase):
+    def test_service_closes_the_client_it_created(self):
+        service = QuantumIOService(QuantumIOParams(api_key="k"))
+        client = service.client
+        self.assertFalse(client.is_closed)
+        service.close()
+        self.assertTrue(client.is_closed)
+
+    def test_service_leaves_a_caller_supplied_client_open(self):
+        borrowed = httpx.Client()
+        try:
+            service = QuantumIOService(QuantumIOParams(api_key="k"), client=borrowed)
+            service.close()
+            self.assertFalse(borrowed.is_closed)
+        finally:
+            borrowed.close()
+
+    def test_service_is_a_context_manager_and_close_is_idempotent(self):
+        with QuantumIOService(QuantumIOParams(api_key="k")) as service:
+            client = service.client
+        self.assertTrue(client.is_closed)
+        service.close()  # must not raise
 
 
 class TestServiceSubmission(unittest.TestCase):
