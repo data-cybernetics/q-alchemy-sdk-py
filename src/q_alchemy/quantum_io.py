@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import warnings
 from dataclasses import dataclass, field, fields
 from datetime import datetime
 from typing import Any, Mapping
@@ -94,7 +95,21 @@ class QuantumIOParams:
 
     @classmethod
     def from_dict(cls, env: Mapping[str, Any]) -> "QuantumIOParams":
+        """Build params from a mapping, ignoring keys this class does not define.
+
+        Unknown keys are dropped rather than rejected, so a settings dict shared
+        with the older SDK APIs still works. They are warned about, because a
+        silently discarded key is indistinguishable from a misspelled option.
+        """
+
         names = {item.name for item in fields(cls)}
+        unknown = sorted(key for key in env if key not in names)
+        if unknown:
+            warnings.warn(
+                "QuantumIOParams ignored unknown option(s): "
+                + ", ".join(repr(key) for key in unknown),
+                stacklevel=2,
+            )
         return cls(**{key: value for key, value in env.items() if key in names})
 
 

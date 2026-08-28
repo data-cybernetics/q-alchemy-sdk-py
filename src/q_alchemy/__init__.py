@@ -80,6 +80,9 @@ from .quantum_io_contract import (
 )
 
 from .quantum_io import (
+    LOCAL_SIMULATOR_RESOURCE,
+    NOISY_BACKEND_SIMULATOR_RESOURCE,
+    QUANTUM_BACKEND_RESOURCE,
     QuantumIOService,
     QuantumIOParams,
     QuantumIOJob,
