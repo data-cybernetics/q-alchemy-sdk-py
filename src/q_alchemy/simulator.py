@@ -90,11 +90,12 @@ class SimulatorParams:
     """
 
     api_key: str = field(
-        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY")
+        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+        repr=False,
     )
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
-    added_headers: dict[str, str] = field(default_factory=dict)
+    added_headers: dict[str, str] = field(default_factory=dict, repr=False)
     job_completion_timeout_sec: int | None = field(default=300)
     job_tags: list[str] = field(default_factory=list)
     remove_data: bool = field(default=True)

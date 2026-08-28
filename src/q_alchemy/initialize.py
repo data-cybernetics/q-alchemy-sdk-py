@@ -45,10 +45,13 @@ class OptParams:
     remove_data: bool = field(default=True)
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
-    api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
+    api_key: str | None = field(
+        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+        repr=False,
+    )
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
-    added_headers: Dict[str, str] = field(default_factory=dict)
+    added_headers: Dict[str, str] = field(default_factory=dict, repr=False)
     isometry_scheme: str = field(default="ccd")
     unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int | None = field(default=300)
@@ -68,6 +71,12 @@ class OptParams:
 
 
 def create_client(opt_params: OptParams):
+    if not opt_params.api_key:
+        raise ValueError(
+            "A Q-Alchemy API key is required. Set Q_ALCHEMY_API_KEY or "
+            "PINEXQ_API_KEY, or pass api_key=... in OptParams."
+        )
+
     headers = {"x-api-key": opt_params.api_key}
     headers.update(opt_params.added_headers)
 
@@ -241,6 +250,23 @@ class TimeAwareCache:
 
 step_cache = TimeAwareCache(ttl_seconds=300)
 
+def _version_sort_key(value: object) -> tuple[tuple[int, ...], int, str]:
+    """Natural ordering for deployed ProcessingStep versions.
+
+    PineXQ exposes versions as strings.  Lexicographic ordering would place
+    ``0.10.0`` before ``0.9.0``; this key compares the numeric release segments
+    first and keeps a final release after a prerelease with the same core.
+    """
+    import re
+
+    text = str(value or "")
+    match = re.match(r"^(\d+(?:\.\d+)*)(.*)$", text)
+    if match is None:
+        return ((), 0, text)
+    release = tuple(int(part) for part in match.group(1).split("."))
+    suffix = match.group(2)
+    return (release, 1 if not suffix else 0, suffix)
+
 def from_name(
     client: httpx.Client,
     step_name: str,
@@ -273,8 +299,10 @@ def from_name(
             f"deployed recently, it may not have been set public yet."
         )
 
-    sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
-    processing_step_hco = query_result.processing_steps[0]
+    processing_step_hco = max(
+        query_result.processing_steps,
+        key=lambda item: _version_sort_key(item.version),
+    )
 
     return ProcessingStep.from_hco(processing_step_hco)
 
