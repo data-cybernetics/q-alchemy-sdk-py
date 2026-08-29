@@ -267,7 +267,7 @@ class Circuit:
         try:
             from qiskit.qasm3 import dumps
         except ImportError as exc:  # pragma: no cover - optional dependency
-            raise RuntimeError("Circuit.from_qiskit requires qiskit>=2.5") from exc
+            raise RuntimeError("Circuit.from_qiskit requires qiskit>=2.3") from exc
         return cls.qasm3(dumps(circuit), metadata=metadata)
 
     def to_qiskit(self) -> Any:
