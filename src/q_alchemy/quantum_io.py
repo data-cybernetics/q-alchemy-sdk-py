@@ -9,7 +9,7 @@ Typical usage::
     experiment = QuantumExperiment(target=State.dense([1, 0]))
     report = QuantumIOService().preflight(experiment).result()
 
-Provider credentials are uploaded as dedicated WorkData and never placed in the
+Provider credentials are uploaded as Secret WorkData and never placed in the
 experiment or execution plan. Quantum I/O removes SDK-created Jobs and WorkData
 by default after retrieving results. Set ``remove_data=False`` to preserve the
 PineXQ execution lineage.
@@ -132,7 +132,7 @@ class IBMQuantumCredentials:
     """IBM Quantum BYOC credentials used by the deployed Quantum I/O service.
 
     The token is deliberately redacted from ``repr``.  The object is serialized
-    only into the dedicated ``ibm_credentials.json`` WorkData input required by
+    only into the Secret ``ibm_credentials.json`` WorkData input required by
     IBM-backed calls.
     """
 
@@ -254,12 +254,13 @@ class QuantumIOJob:
         self._remove_data = remove_data
         self._input_workdata = list(input_workdata or [])
         self._result: ExperimentReport | None = None
-        self._cleaned = False
+        self._job_removed = False
+        self._cleanup_complete = False
 
     @property
     def removed(self) -> bool:
-        """True once automatic cleanup has deleted this job's PineXQ resources."""
-        return self._cleaned
+        """True once automatic cleanup has deleted all SDK-created resources."""
+        return self._cleanup_complete
 
     @property
     def raw_job(self) -> Job:
@@ -268,7 +269,7 @@ class QuantumIOJob:
         Only available while the PineXQ resources still exist. With the default
         ``remove_data=True`` they are deleted as soon as :meth:`result` returns.
         """
-        if self._cleaned:
+        if self._job_removed:
             raise RuntimeError(
                 "The PineXQ Job for this Quantum I/O call has been removed. "
                 "Use QuantumIOParams(remove_data=False) to keep the Job and its "
@@ -277,45 +278,54 @@ class QuantumIOJob:
         return self._job
 
     def result(self, timeout: float | None = None) -> ExperimentReport:
-        if self._result is not None:
-            return self._result
+        """Wait for the report, then remove SDK-created resources if asked to.
 
-        timeout_sec = (
-            float(timeout)
-            if timeout is not None
-            else (
-                float(self._timeout_sec)
-                if self._timeout_sec is not None
-                else float(24 * 60 * 60)
+        The report is computed once and cached. Cleanup is *not* cached: while
+        ``remove_data`` is set and :attr:`removed` is still false, every call
+        retries whatever cleanup is outstanding, so a job whose resources cannot
+        be deleted issues delete requests on each call. Callers polling in a
+        loop should check :attr:`removed` rather than calling this repeatedly.
+        """
+
+        if self._result is None:
+            timeout_sec = (
+                float(timeout)
+                if timeout is not None
+                else (
+                    float(self._timeout_sec)
+                    if self._timeout_sec is not None
+                    else float(24 * 60 * 60)
+                )
             )
-        )
-        try:
-            self._job.wait_for_state(
-                JobStates.completed,
-                polling_interval_s=0.25,
-                timeout_s=timeout_sec,
-            )
-            raw = _download_json_output(self._job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
-            self._result = ExperimentReport.from_dict(raw)
-        except BaseException:
-            # Timeout, job failure, download failure and report-parsing failure
-            # all leave the PineXQ lineage in place. Deleting it here would
-            # destroy a still-running Job (timeout), the only record of why a
-            # Job failed, or the only copy of an unparsable report.
-            LOG.warning(
-                "Quantum I/O result retrieval failed; the PineXQ Job and its "
-                "WorkData were preserved for diagnosis and retry"
-            )
-            raise
-        if self._remove_data and not self._cleaned:
+            try:
+                self._job.wait_for_state(
+                    JobStates.completed,
+                    polling_interval_s=0.25,
+                    timeout_s=timeout_sec,
+                )
+                raw = _download_json_output(self._job, EXPERIMENT_REPORT_OUTPUT_ALIAS)
+                self._result = ExperimentReport.from_dict(raw)
+            except BaseException:
+                # Timeout, job failure, download failure and report-parsing failure
+                # all leave the PineXQ lineage in place. Deleting it here would
+                # destroy a still-running Job (timeout), the only record of why a
+                # Job failed, or the only copy of an unparsable report.
+                LOG.warning(
+                    "Quantum I/O result retrieval failed; the PineXQ Job and its "
+                    "WorkData were preserved for diagnosis and retry"
+                )
+                raise
+        if self._remove_data and not self._cleanup_complete:
             self._cleanup()
         return self._result
 
     def _cleanup(self) -> None:
-        try:
-            _delete_job_then_inputs(self._job, self._input_workdata)
-        finally:
-            self._cleaned = True
+        self._job_removed, self._input_workdata = _delete_job_then_inputs(
+            self._job,
+            self._input_workdata,
+            job_already_removed=self._job_removed,
+        )
+        self._cleanup_complete = self._job_removed and not self._input_workdata
 
 
 class QuantumIOService:
@@ -421,49 +431,63 @@ class QuantumIOService:
                 )
 
         step = self._step(RUN_QUANTUM_EXPERIMENT_STEP)
-        experiment_wd = self._upload_json(EXPERIMENT_INPUT_ALIAS, experiment_payload)
-        plan_wd = self._upload_json(EXECUTION_PLAN_INPUT_ALIAS, plan_payload)
-        owned_inputs = [
-            _OwnedWorkData(EXPERIMENT_INPUT_ALIAS, experiment_wd),
-            _OwnedWorkData(EXECUTION_PLAN_INPUT_ALIAS, plan_wd),
-        ]
-        input_slots = [
-            InputDataSlotParameter(
-                Index=_RUN_EXPERIMENT_SLOT,
-                WorkDataUrls=[str(experiment_wd.get_url())],
-            ),
-            InputDataSlotParameter(
-                Index=_RUN_PLAN_SLOT,
-                WorkDataUrls=[str(plan_wd.get_url())],
-            ),
-        ]
-        if ibm_credentials is not None:
-            credentials_wd = self._upload_json(
-                IBM_CREDENTIALS_INPUT_ALIAS,
-                ibm_credentials.to_dict(),
-            )
-            owned_inputs.append(
-                _OwnedWorkData(
-                    IBM_CREDENTIALS_INPUT_ALIAS,
-                    credentials_wd,
-                    sensitive=True,
-                )
-            )
-            input_slots.append(
+        owned_inputs: list[_OwnedWorkData] = []
+        job: Job | None = None
+        try:
+            experiment_wd = self._upload_json(EXPERIMENT_INPUT_ALIAS, experiment_payload)
+            owned_inputs.append(_OwnedWorkData(EXPERIMENT_INPUT_ALIAS, experiment_wd))
+            plan_wd = self._upload_json(EXECUTION_PLAN_INPUT_ALIAS, plan_payload)
+            owned_inputs.append(_OwnedWorkData(EXECUTION_PLAN_INPUT_ALIAS, plan_wd))
+            input_slots = [
                 InputDataSlotParameter(
-                    Index=_RUN_IBM_CREDENTIALS_SLOT,
-                    WorkDataUrls=[str(credentials_wd.get_url())],
+                    Index=_RUN_EXPERIMENT_SLOT,
+                    WorkDataUrls=[str(experiment_wd.get_url())],
+                ),
+                InputDataSlotParameter(
+                    Index=_RUN_PLAN_SLOT,
+                    WorkDataUrls=[str(plan_wd.get_url())],
+                ),
+            ]
+            if ibm_credentials is not None:
+                credentials_wd = self._upload_json(
+                    IBM_CREDENTIALS_INPUT_ALIAS,
+                    ibm_credentials.to_dict(),
+                    secret=True,
                 )
-            )
+                owned_inputs.append(
+                    _OwnedWorkData(
+                        IBM_CREDENTIALS_INPUT_ALIAS,
+                        credentials_wd,
+                        sensitive=True,
+                    )
+                )
+                input_slots.append(
+                    InputDataSlotParameter(
+                        Index=_RUN_IBM_CREDENTIALS_SLOT,
+                        WorkDataUrls=[str(credentials_wd.get_url())],
+                    )
+                )
 
-        job = Job(client=self.client).create_and_configure_rapidly(
-            name=f"Quantum I/O experiment ({datetime.now():%Y-%m-%d %H:%M:%S})",
-            tags=["SDK", "QuantumIO", "Experiment"] + list(self.params.job_tags),
-            processing_step_url=step.self_link(),
-            start=True,
-            allow_output_data_deletion=True,
-            input_data_slots=input_slots,
-        )
+            job = Job(client=self.client)
+            job.create_and_configure_rapidly(
+                name=f"Quantum I/O experiment ({datetime.now():%Y-%m-%d %H:%M:%S})",
+                tags=["SDK", "QuantumIO", "Experiment"] + list(self.params.job_tags),
+                processing_step_url=step.self_link(),
+                start=True,
+                allow_output_data_deletion=True,
+                input_data_slots=input_slots,
+            )
+        except BaseException:
+            # Remove inputs only while PineXQ still confirms that no Job was
+            # created. A create call can fail after the server accepted the Job;
+            # in that case its HCO is retained and the inputs may still be
+            # referenced, so preserving them is safer than risking data loss.
+            if self.params.remove_data and (
+                job is None or getattr(job, "job_hco", None) is None
+            ):
+                _delete_owned_inputs(owned_inputs)
+            raise
+        assert job is not None
         return QuantumIOJob(
             job,
             timeout_sec=self.params.job_completion_timeout_sec,
@@ -516,31 +540,50 @@ class QuantumIOService:
             raise ValueError("IBM backend discovery requires IBMQuantumCredentials")
 
         step = self._step(LIST_QUANTUM_BACKENDS_STEP)
-        credentials_wd = self._upload_json(
-            IBM_CREDENTIALS_INPUT_ALIAS,
-            resolved_credentials.to_dict(),
-        )
-        input_slots = [
-            InputDataSlotParameter(
-                Index=_LIST_IBM_CREDENTIALS_SLOT,
-                WorkDataUrls=[str(credentials_wd.get_url())],
+        owned_inputs: list[_OwnedWorkData] = []
+        job: Job | None = None
+        try:
+            credentials_wd = self._upload_json(
+                IBM_CREDENTIALS_INPUT_ALIAS,
+                resolved_credentials.to_dict(),
+                secret=True,
             )
-        ]
-        job = Job(client=self.client).create_and_configure_rapidly(
-            name=f"List quantum backends ({datetime.now():%Y-%m-%d %H:%M:%S})",
-            tags=["SDK", "QuantumIO", "Backends"] + list(self.params.job_tags),
-            processing_step_url=step.self_link(),
-            start=True,
-            parameters=json.dumps(
-                {
-                    "provider": provider_id,
-                    "min_num_qubits": int(min_num_qubits),
-                    "operational_only": bool(operational_only),
-                }
-            ),
-            allow_output_data_deletion=True,
-            input_data_slots=input_slots,
-        )
+            owned_inputs.append(
+                _OwnedWorkData(
+                    IBM_CREDENTIALS_INPUT_ALIAS,
+                    credentials_wd,
+                    sensitive=True,
+                )
+            )
+            input_slots = [
+                InputDataSlotParameter(
+                    Index=_LIST_IBM_CREDENTIALS_SLOT,
+                    WorkDataUrls=[str(credentials_wd.get_url())],
+                )
+            ]
+            job = Job(client=self.client)
+            job.create_and_configure_rapidly(
+                name=f"List quantum backends ({datetime.now():%Y-%m-%d %H:%M:%S})",
+                tags=["SDK", "QuantumIO", "Backends"] + list(self.params.job_tags),
+                processing_step_url=step.self_link(),
+                start=True,
+                parameters=json.dumps(
+                    {
+                        "provider": provider_id,
+                        "min_num_qubits": int(min_num_qubits),
+                        "operational_only": bool(operational_only),
+                    }
+                ),
+                allow_output_data_deletion=True,
+                input_data_slots=input_slots,
+            )
+        except BaseException:
+            if self.params.remove_data and (
+                job is None or getattr(job, "job_hco", None) is None
+            ):
+                _delete_owned_inputs(owned_inputs)
+            raise
+        assert job is not None
 
         timeout = (
             self.params.job_completion_timeout_sec
@@ -574,16 +617,7 @@ class QuantumIOService:
             )
             raise
         if self.params.remove_data:
-            _delete_job_then_inputs(
-                job,
-                [
-                    _OwnedWorkData(
-                        IBM_CREDENTIALS_INPUT_ALIAS,
-                        credentials_wd,
-                        sensitive=True,
-                    )
-                ],
-            )
+            _delete_job_then_inputs(job, owned_inputs)
         return discovered
 
     def backend(
@@ -610,10 +644,16 @@ class QuantumIOService:
             return from_name(self.client, name, version=self.params.step_version)
         return find_processing_step(self.client, name)
 
-    def _upload_json(self, filename: str, payload: Mapping[str, Any]) -> WorkDataLink:
+    def _upload_json(
+        self,
+        filename: str,
+        payload: Mapping[str, Any],
+        *,
+        secret: bool = False,
+    ) -> WorkDataLink:
         encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
         root = enter_jma(self.client).work_data_root_link.navigate()
-        return root.upload_action.execute(
+        link = root.upload_action.execute(
             UploadParameters(
                 filename=filename,
                 binary=encoded,
@@ -621,6 +661,11 @@ class QuantumIOService:
                 json=None,
             )
         )
+        if secret:
+            _mark_workdata_secret(
+                _OwnedWorkData(filename, link, sensitive=True)
+            )
+        return link
 
 
 
@@ -740,7 +785,9 @@ def _coerce_ibm_credentials(
 def _delete_job_then_inputs(
     job: Job,
     input_workdata: list[_OwnedWorkData],
-) -> None:
+    *,
+    job_already_removed: bool = False,
+) -> tuple[bool, list[_OwnedWorkData]]:
     """Delete SDK-owned Quantum I/O data in PineXQ lineage order.
 
     PineXQ requires Job outputs to be deleted before the Job itself. The
@@ -749,36 +796,79 @@ def _delete_job_then_inputs(
     can be allowed for deletion and then deleted.
     """
 
+    if not job_already_removed:
+        try:
+            job.delete_with_associated(
+                delete_subjobs_with_data=True,
+                delete_input_workdata=False,
+                delete_output_workdata=True,
+            )
+        except Exception as exc:
+            # Do not attempt input deletion while the Job may still reference it.
+            LOG.warning(
+                "Could not remove Quantum I/O output data/job; preserving input WorkData: %s",
+                exc,
+            )
+            return False, list(input_workdata)
+
+        if getattr(job, "job_hco", None) is not None:
+            # ``delete_with_associated`` is best effort: when PineXQ does not offer
+            # the Delete action (the Job is still running, or deletion is refused)
+            # pinexq-client only emits a warning. It clears ``job_hco`` exclusively
+            # on a real deletion, so a surviving hco means the Job -- and its
+            # reference to these inputs -- is still there.
+            LOG.warning(
+                "Quantum I/O job was not deleted by PineXQ; preserving input WorkData"
+            )
+            return False, list(input_workdata)
+
+    return True, _delete_owned_inputs(input_workdata)
+
+
+def _delete_owned_inputs(
+    input_workdata: list[_OwnedWorkData],
+) -> list[_OwnedWorkData]:
+    """Best-effort deletion of unreferenced SDK-created WorkData.
+
+    Returns only the inputs that could not be removed, allowing callers with a
+    cached result to retry incomplete cleanup without re-deleting resources that
+    are already gone.
+    """
+
+    return [
+        work_data
+        for work_data in input_workdata
+        if not _allow_then_delete_owned_workdata(work_data)
+    ]
+
+
+def _mark_workdata_secret(work_data: _OwnedWorkData) -> None:
+    """Mark credential WorkData Secret before it is referenced by a Job.
+
+    PineXQ 1.10 exposes Secret as a WorkData state transition rather than an
+    upload parameter. Failure is closed: an ordinary credential WorkData is
+    immediately removed and the provider request is not submitted.
+    """
+
+    message = (
+        f"Could not mark Quantum I/O credential WorkData {work_data.name!r} as Secret; "
+        "the provider request was not submitted"
+    )
     try:
-        job.delete_with_associated(
-            delete_subjobs_with_data=True,
-            delete_input_workdata=False,
-            delete_output_workdata=True,
-        )
+        hco = work_data.link.navigate()
+        if hco.secret is not True:
+            hco.mark_as_secret_action.execute()
+            hco = work_data.link.navigate()
     except Exception as exc:
-        # Do not attempt input deletion while the Job may still reference it.
-        LOG.warning(
-            "Could not remove Quantum I/O output data/job; preserving input WorkData: %s",
-            exc,
-        )
-        return
-
-    if getattr(job, "job_hco", None) is not None:
-        # ``delete_with_associated`` is best effort: when PineXQ does not offer
-        # the Delete action (the Job is still running, or deletion is refused)
-        # pinexq-client only emits a warning. It clears ``job_hco`` exclusively
-        # on a real deletion, so a surviving hco means the Job -- and its
-        # reference to these inputs -- is still there.
-        LOG.warning(
-            "Quantum I/O job was not deleted by PineXQ; preserving input WorkData"
-        )
-        return
-
-    for work_data in input_workdata:
         _allow_then_delete_owned_workdata(work_data)
+        raise RuntimeError(message) from exc
+
+    if hco.secret is not True:
+        _allow_then_delete_owned_workdata(work_data)
+        raise RuntimeError(message)
 
 
-def _allow_then_delete_owned_workdata(work_data: _OwnedWorkData) -> None:
+def _allow_then_delete_owned_workdata(work_data: _OwnedWorkData) -> bool:
     """Best-effort deletion of one SDK-created input WorkData object.
 
     ``pinexq-client`` 1.10 exposes the required HCO operations as
@@ -793,6 +883,7 @@ def _allow_then_delete_owned_workdata(work_data: _OwnedWorkData) -> None:
             hco.allow_deletion_action.execute()
             hco = work_data.link.navigate()
         hco.delete_action.execute()
+        return True
     except Exception as exc:
         log = LOG.error if work_data.sensitive else LOG.warning
         log(
@@ -801,6 +892,7 @@ def _allow_then_delete_owned_workdata(work_data: _OwnedWorkData) -> None:
             work_data.name,
             exc,
         )
+        return False
 
 
 def _download_json_output(job: Job, output_name: str) -> dict[str, Any]:

@@ -7,10 +7,12 @@ import os
 import time
 import unittest
 import warnings
+from typing import Any
 
 import httpx
 from unittest.mock import patch
 
+import q_alchemy.quantum_io as quantum_io_module
 from q_alchemy import (
     BasisMeasurement,
     ExecutionPlan,
@@ -113,6 +115,9 @@ class _DeleteAction:
     def execute(self):
         if not self.owner.deletable:
             raise RuntimeError("action is not available")
+        if self.owner.delete_failures_remaining:
+            self.owner.delete_failures_remaining -= 1
+            raise RuntimeError("temporary WorkData delete failure")
         self.owner.events.append(f"workdata:{self.owner.name}")
         self.owner.deleted = True
 
@@ -126,19 +131,45 @@ class _AllowDeletionAction:
         self.owner.deletable = True
 
 
+class _MarkSecretAction:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def execute(self):
+        if not self.owner.secret_marking_allowed:
+            raise RuntimeError("secret action is not available")
+        self.owner.events.append(f"mark-secret:{self.owner.name}")
+        self.owner.secret = True
+
+
 class _WorkDataHco:
     def __init__(self, owner):
         self.is_deletable = owner.deletable
+        self.secret = owner.secret
         self.allow_deletion_action = _AllowDeletionAction(owner)
+        self.mark_as_secret_action = _MarkSecretAction(owner)
         self.delete_action = _DeleteAction(owner)
 
 
 class _WorkData:
-    def __init__(self, url: str, events=None, name=None, *, deletable=False):
+    def __init__(
+        self,
+        url: str,
+        events=None,
+        name=None,
+        *,
+        deletable=False,
+        secret=False,
+        secret_marking_allowed=True,
+        delete_failures_remaining=0,
+    ):
         self._url = url
         self.events = events
         self.name = name
         self.deletable = deletable
+        self.secret = secret
+        self.secret_marking_allowed = secret_marking_allowed
+        self.delete_failures_remaining = delete_failures_remaining
         self.deleted = False
 
     def get_url(self):
@@ -188,11 +219,12 @@ class _FakePineJob:
     def __init__(self, client=None):
         self.client = client
         self.created = None
-        self.job_hco = object()  # pinexq clears this only on real deletion
+        self.job_hco = None
         _FakePineJob.last = self
 
     def create_and_configure_rapidly(self, **kwargs):
         self.created = kwargs
+        self.job_hco = object()  # pinexq clears this only on real deletion
         return self
 
     def wait_for_state(self, *args, **kwargs):
@@ -409,16 +441,21 @@ class TestServiceSubmission(unittest.TestCase):
     def setUp(self):
         self.service = QuantumIOService(QuantumIOParams(), client=object())
         self.uploads = []
+        self.upload_secret_flags = []
+        self.upload_links = []
         self.cleanup_events = []
         _FakePineJob.cleanup_events = self.cleanup_events
 
-        def upload(filename, payload):
+        def upload(filename, payload, *, secret=False):
             self.uploads.append((filename, dict(payload)))
-            return _WorkData(
+            self.upload_secret_flags.append((filename, bool(secret)))
+            link = _WorkData(
                 f"https://workdata.example/{filename}",
                 self.cleanup_events,
                 filename,
             )
+            self.upload_links.append(link)
+            return link
 
         self.service._upload_json = upload
         self.service._step = lambda name: _Step()
@@ -448,6 +485,13 @@ class TestServiceSubmission(unittest.TestCase):
         slots = [_slot_dump(slot) for slot in created["input_data_slots"]]
         self.assertEqual([slot.get("Index", slot.get("index")) for slot in slots], [0, 1])
         self.assertNotIn("parameters", created)
+        self.assertEqual(
+            self.upload_secret_flags,
+            [
+                (EXPERIMENT_INPUT_ALIAS, False),
+                (EXECUTION_PLAN_INPUT_ALIAS, False),
+            ],
+        )
 
     def test_preflight_uses_preparation_simulator_without_acquisition(self):
         with patch("q_alchemy.quantum_io.Job", _FakePineJob):
@@ -510,9 +554,12 @@ class TestServiceSubmission(unittest.TestCase):
             "q_alchemy.quantum_io._download_json_output",
             return_value=_report_payload(),
         ), patch.object(_FakePineJob, "delete_with_associated", fail_delete):
-            self.service.run(_bell_experiment(), shots=256).result()
+            job = self.service.run(_bell_experiment(), shots=256)
+            job.result()
 
         self.assertEqual(self.cleanup_events, [])
+        self.assertFalse(job.removed)
+        self.assertIs(job.raw_job, _FakePineJob.last)
 
     def test_cleanup_preserves_inputs_when_pinexq_only_warns(self):
         """pinexq's delete_with_associated warns instead of raising when the
@@ -524,9 +571,69 @@ class TestServiceSubmission(unittest.TestCase):
             return_value=_report_payload(),
         ), patch.object(_FakePineJob, "deletion_allowed", False), warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            self.service.run(_bell_experiment(), shots=256).result()
+            job = self.service.run(_bell_experiment(), shots=256)
+            job.result()
 
         self.assertEqual(self.cleanup_events, ["job-delete-refused"])
+        self.assertFalse(job.removed)
+        self.assertIs(job.raw_job, _FakePineJob.last)
+
+    def test_repeated_result_retries_cleanup_after_job_delete_failure(self):
+        calls = {"n": 0}
+        original_delete = _FakePineJob.delete_with_associated
+
+        def flaky_delete(job, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("temporary delete failure")
+            return original_delete(job, **kwargs)
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch(
+            "q_alchemy.quantum_io._download_json_output",
+            return_value=_report_payload(),
+        ), patch.object(_FakePineJob, "delete_with_associated", flaky_delete):
+            job = self.service.run(_bell_experiment(), shots=256)
+            first = job.result()
+            self.assertFalse(job.removed)
+            self.assertIs(job.raw_job, _FakePineJob.last)
+            second = job.result()
+
+        self.assertIs(first, second)
+        self.assertEqual(calls["n"], 2)
+        self.assertTrue(job.removed)
+        self.assertEqual(self.cleanup_events.count("job"), 1)
+        with self.assertRaisesRegex(RuntimeError, "remove_data=False"):
+            job.raw_job
+
+    def test_repeated_result_retries_only_inputs_left_after_partial_cleanup(self):
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch(
+            "q_alchemy.quantum_io._download_json_output",
+            return_value=_report_payload(),
+        ):
+            job = self.service.run(_bell_experiment(), shots=256)
+            self.upload_links[1].delete_failures_remaining = 1
+            first = job.result()
+
+            # The Job and the first input are already gone, while one input
+            # remains. ``removed`` therefore stays false, but raw_job cannot be
+            # returned because the Job itself really was deleted.
+            self.assertFalse(job.removed)
+            with self.assertRaisesRegex(RuntimeError, "remove_data=False"):
+                job.raw_job
+
+            second = job.result()
+
+        self.assertIs(first, second)
+        self.assertTrue(job.removed)
+        self.assertEqual(self.cleanup_events.count("job"), 1)
+        self.assertEqual(
+            self.cleanup_events.count(f"workdata:{EXPERIMENT_INPUT_ALIAS}"),
+            1,
+        )
+        self.assertEqual(
+            self.cleanup_events.count(f"workdata:{EXECUTION_PLAN_INPUT_ALIAS}"),
+            1,
+        )
 
     def test_failed_job_preserves_lineage_for_diagnosis(self):
         self.service.params.remove_data = True
@@ -656,6 +763,10 @@ class TestServiceSubmission(unittest.TestCase):
             ],
         )
         self.assertEqual(self.uploads[-1][1], {"token": "secret"})
+        self.assertEqual(
+            self.upload_secret_flags[-1],
+            (IBM_CREDENTIALS_INPUT_ALIAS, True),
+        )
         created = _FakePineJob.last.created
         slots = [_slot_dump(slot) for slot in created["input_data_slots"]]
         self.assertEqual([slot.get("Index", slot.get("index")) for slot in slots], [0, 1, 2])
@@ -669,6 +780,10 @@ class TestServiceSubmission(unittest.TestCase):
         with patch("q_alchemy.quantum_io.Job", _FakePineJob):
             self.service.run(_bell_experiment(), plan, credentials=credentials)
         self.assertEqual(self.uploads[-1], (IBM_CREDENTIALS_INPUT_ALIAS, {"token": "secret"}))
+        self.assertEqual(
+            self.upload_secret_flags[-1],
+            (IBM_CREDENTIALS_INPUT_ALIAS, True),
+        )
 
     def test_ibm_run_rejects_missing_credentials_before_job_creation(self):
         plan = quantum_backend_execution_plan(
@@ -717,6 +832,10 @@ class TestServiceSubmission(unittest.TestCase):
         self.assertIs(backend._credentials, credentials)
 
         self.assertEqual(self.uploads, [(IBM_CREDENTIALS_INPUT_ALIAS, {"token": "secret"})])
+        self.assertEqual(
+            self.upload_secret_flags,
+            [(IBM_CREDENTIALS_INPUT_ALIAS, True)],
+        )
         created = _FakePineJob.last.created
         parameters = json.loads(created["parameters"])
         self.assertEqual(parameters["provider"], "ibm")
@@ -802,6 +921,218 @@ class TestServiceSubmission(unittest.TestCase):
                 f"workdata:{IBM_CREDENTIALS_INPUT_ALIAS}",
             ],
         )
+
+    def test_partial_upload_failure_removes_inputs_created_before_any_job(self):
+        first = _WorkData(
+            "https://workdata.example/quantum_experiment.json",
+            self.cleanup_events,
+            EXPERIMENT_INPUT_ALIAS,
+        )
+        calls = {"n": 0}
+
+        def fail_second_upload(filename, payload, *, secret=False):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return first
+            raise RuntimeError("plan upload failed")
+
+        self.service._upload_json = fail_second_upload
+        with self.assertRaisesRegex(RuntimeError, "plan upload failed"):
+            self.service.run(_bell_experiment(), shots=256)
+
+        self.assertEqual(
+            self.cleanup_events,
+            [
+                f"allow-deletion:{EXPERIMENT_INPUT_ALIAS}",
+                f"workdata:{EXPERIMENT_INPUT_ALIAS}",
+            ],
+        )
+
+    def test_job_creation_failure_removes_all_unreferenced_inputs(self):
+        def fail_create(_job, **_kwargs):
+            raise RuntimeError("job creation failed")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch.object(
+            _FakePineJob, "create_and_configure_rapidly", fail_create
+        ):
+            with self.assertRaisesRegex(RuntimeError, "job creation failed"):
+                self.service.run(_bell_experiment(), shots=256)
+
+        self.assertEqual(
+            self.cleanup_events,
+            [
+                f"allow-deletion:{EXPERIMENT_INPUT_ALIAS}",
+                f"workdata:{EXPERIMENT_INPUT_ALIAS}",
+                f"allow-deletion:{EXECUTION_PLAN_INPUT_ALIAS}",
+                f"workdata:{EXECUTION_PLAN_INPUT_ALIAS}",
+            ],
+        )
+
+    def test_partial_job_creation_failure_preserves_inputs_if_job_exists(self):
+        def fail_after_create(job, **kwargs):
+            job.created = kwargs
+            job.job_hco = object()
+            raise RuntimeError("job start failed")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch.object(
+            _FakePineJob, "create_and_configure_rapidly", fail_after_create
+        ):
+            with self.assertRaisesRegex(RuntimeError, "job start failed"):
+                self.service.run(_bell_experiment(), shots=256)
+
+        self.assertEqual(self.cleanup_events, [])
+
+    def test_backend_discovery_job_creation_failure_removes_credentials(self):
+        self.service._ibm_credentials = IBMQuantumCredentials(token="secret")
+
+        def fail_create(_job, **_kwargs):
+            raise RuntimeError("backend job creation failed")
+
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch.object(
+            _FakePineJob, "create_and_configure_rapidly", fail_create
+        ):
+            with self.assertRaisesRegex(RuntimeError, "backend job creation failed"):
+                self.service.backends(provider="ibm")
+
+        self.assertEqual(
+            self.cleanup_events,
+            [
+                f"allow-deletion:{IBM_CREDENTIALS_INPUT_ALIAS}",
+                f"workdata:{IBM_CREDENTIALS_INPUT_ALIAS}",
+            ],
+        )
+
+
+class TestSecretWorkData(unittest.TestCase):
+    def test_mark_secret_transitions_workdata_before_job_use(self):
+        events = []
+        link = _WorkData(
+            "https://workdata.example/ibm_credentials.json",
+            events,
+            IBM_CREDENTIALS_INPUT_ALIAS,
+        )
+        owned = quantum_io_module._OwnedWorkData(
+            IBM_CREDENTIALS_INPUT_ALIAS,
+            link,
+            sensitive=True,
+        )
+
+        quantum_io_module._mark_workdata_secret(owned)
+
+        self.assertTrue(link.secret)
+        self.assertFalse(link.deleted)
+        self.assertEqual(events, [f"mark-secret:{IBM_CREDENTIALS_INPUT_ALIAS}"])
+
+    def test_mark_secret_failure_deletes_plaintext_credential_workdata(self):
+        events = []
+        link = _WorkData(
+            "https://workdata.example/ibm_credentials.json",
+            events,
+            IBM_CREDENTIALS_INPUT_ALIAS,
+            secret_marking_allowed=False,
+        )
+        owned = quantum_io_module._OwnedWorkData(
+            IBM_CREDENTIALS_INPUT_ALIAS,
+            link,
+            sensitive=True,
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "not submitted"):
+            quantum_io_module._mark_workdata_secret(owned)
+
+        self.assertFalse(link.secret)
+        self.assertTrue(link.deleted)
+        self.assertEqual(
+            events,
+            [
+                f"allow-deletion:{IBM_CREDENTIALS_INPUT_ALIAS}",
+                f"workdata:{IBM_CREDENTIALS_INPUT_ALIAS}",
+            ],
+        )
+
+
+class TestUploadJson(unittest.TestCase):
+    """_upload_json is stubbed out everywhere else; exercise the real one.
+
+    The single line that turns ``secret=True`` into a Secret state transition
+    carries the whole credential guarantee, so it needs its own coverage.
+    """
+
+    def setUp(self):
+        self.service = QuantumIOService(QuantumIOParams(), client=object())
+        self.events = []
+        self.uploaded = []
+
+    def _install_upload_root(self, link):
+        class _UploadAction:
+            def __init__(self, sink):
+                self._sink = sink
+
+            def execute(self, parameters):
+                self._sink.append(parameters)
+                return link
+
+        class _Root:
+            upload_action = _UploadAction(self.uploaded)
+
+        class _WorkDataRootLink:
+            @staticmethod
+            def navigate():
+                return _Root()
+
+        class _EntryPoint:
+            work_data_root_link = _WorkDataRootLink()
+
+        return patch("q_alchemy.quantum_io.enter_jma", lambda _client: _EntryPoint())
+
+    def test_plain_upload_does_not_touch_secret_state(self):
+        link = _WorkData("https://wd/plan", self.events, EXECUTION_PLAN_INPUT_ALIAS)
+        with self._install_upload_root(link):
+            returned = self.service._upload_json(EXECUTION_PLAN_INPUT_ALIAS, {"a": 1})
+
+        self.assertIs(returned, link)
+        self.assertFalse(link.secret)
+        self.assertEqual(self.events, [])
+        parameters = self.uploaded[0]
+        self.assertEqual(parameters.filename, EXECUTION_PLAN_INPUT_ALIAS)
+        self.assertEqual(parameters.mediatype, "application/json")
+
+    def test_secret_upload_marks_the_workdata_before_returning_the_link(self):
+        link = _WorkData("https://wd/creds", self.events, IBM_CREDENTIALS_INPUT_ALIAS)
+        with self._install_upload_root(link):
+            returned = self.service._upload_json(
+                IBM_CREDENTIALS_INPUT_ALIAS, {"token": "t"}, secret=True
+            )
+
+        self.assertIs(returned, link)
+        self.assertTrue(link.secret)
+        self.assertFalse(link.deleted)
+        self.assertEqual(self.events, [f"mark-secret:{IBM_CREDENTIALS_INPUT_ALIAS}"])
+
+    def test_secret_upload_that_cannot_be_marked_deletes_and_raises(self):
+        link = _WorkData(
+            "https://wd/creds",
+            self.events,
+            IBM_CREDENTIALS_INPUT_ALIAS,
+            secret_marking_allowed=False,
+        )
+        with self._install_upload_root(link):
+            with self.assertRaisesRegex(RuntimeError, "not submitted"):
+                self.service._upload_json(
+                    IBM_CREDENTIALS_INPUT_ALIAS, {"token": "t"}, secret=True
+                )
+
+        self.assertFalse(link.secret)
+        self.assertTrue(link.deleted)
+
+
+class TestResultCleanupRetryContract(unittest.TestCase):
+    """result() documents that cleanup is retried on every call."""
+
+    def test_docstring_warns_that_cleanup_is_retried(self):
+        doc = quantum_io_module.QuantumIOJob.result.__doc__ or ""
+        self.assertIn("retries", doc)
+        self.assertIn("removed", doc)
 
 
 class TestDownloadJsonOutput(unittest.TestCase):
@@ -997,6 +1328,87 @@ class TestLiveQuantumIOCleanup(unittest.TestCase):
                 f"Input WorkData still exists after remove_data=True: "
                 f"{link.get_url()}",
             )
+
+    @unittest.skipUnless(
+        os.getenv("IBM_QUANTUM_TOKEN"),
+        "no IBM_QUANTUM_TOKEN: skipping live Secret credential cleanup test",
+    )
+    def test_remove_data_true_deletes_secret_credential_workdata(self):
+        """Secret WorkData must still be deletable by the owning SDK call.
+
+        Every other cleanup path has been demonstrated against a real
+        deployment with ordinary WorkData. Credentials are the one input that
+        is uploaded and then transitioned into the Secret state before a Job
+        references it, so ``AllowDeletion`` -> ``Delete`` has to be confirmed
+        separately for that state: if PineXQ restricts deletion of Secret
+        WorkData, ``_allow_then_delete_owned_workdata`` returns False and the
+        credential survives with nothing but a LOG.error to show for it.
+        """
+
+        credentials = IBMQuantumCredentials(token=os.environ["IBM_QUANTUM_TOKEN"])
+        service = QuantumIOService(
+            QuantumIOParams(
+                remove_data=True,
+                job_completion_timeout_sec=180,
+            ),
+            ibm_credentials=credentials,
+        )
+
+        # Capture the credential WorkData as it is uploaded. Backend discovery
+        # owns its inputs internally, so there is no public handle to them.
+        uploaded: list[tuple[str, Any, bool, bool | None]] = []
+        original_upload = service._upload_json
+
+        def capturing_upload(filename, payload, *, secret=False):
+            link = original_upload(filename, payload, secret=secret)
+            server_secret = None
+            if filename == IBM_CREDENTIALS_INPUT_ALIAS:
+                # Inspect the live WorkData immediately after _upload_json()
+                # returns: the SDK has completed MarkAsSecret, but backend
+                # discovery has not yet submitted the Job or cleaned anything.
+                server_secret = link.navigate().secret
+            uploaded.append((filename, link, secret, server_secret))
+            return link
+
+        service._upload_json = capturing_upload
+
+        service.backends(provider="ibm", min_num_qubits=1, operational_only=False)
+
+        credential_uploads = [
+            (link, secret, server_secret)
+            for filename, link, secret, server_secret in uploaded
+            if filename == IBM_CREDENTIALS_INPUT_ALIAS
+        ]
+        self.assertEqual(
+            len(credential_uploads),
+            1,
+            "backend discovery should upload exactly one credential WorkData",
+        )
+        credential_link, requested_secret, server_secret = credential_uploads[0]
+        self.assertTrue(
+            requested_secret,
+            "credential WorkData must be uploaded with secret=True",
+        )
+        self.assertIs(
+            server_secret,
+            True,
+            "credential WorkData must reach PineXQ's Secret state before Job submission",
+        )
+
+        deleted = False
+        for _ in range(20):
+            try:
+                credential_link.navigate()
+            except Exception:
+                deleted = True
+                break
+            time.sleep(0.25)
+
+        self.assertTrue(
+            deleted,
+            "Secret credential WorkData still exists after remove_data=True: "
+            f"{credential_link.get_url()}",
+        )
 
 
 if __name__ == "__main__":
