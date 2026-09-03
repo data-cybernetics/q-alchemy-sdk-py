@@ -108,6 +108,121 @@ def _report_payload(
     }
 
 
+def _formatted_noisy_report_payload() -> dict:
+    payload = _report_payload(mode="noisy-simulation", source_kind="noisy-simulator")
+    report = payload["report"]
+    report["preparation"] = {
+        "num_qubits": 2,
+        "method": "qalchemy:iterative_auto",
+        "claimed_fidelity_loss": 0.0,
+        "found": True,
+        "metrics": {
+            "depth": 2,
+            "size": 2,
+            "cx_count": 1,
+            "two_qubit_count": 1,
+            "operation_counts": {"u": 1, "cx": 1},
+        },
+        "metadata": {},
+    }
+    report["preparation_preflight"] = {
+        "preparation": report["preparation"],
+        "simulation": None,
+        "simulation_status": "unavailable",
+        "target_to_prepared_fidelity": None,
+        "preparation_approximation_infidelity": None,
+        "observable_plan": None,
+        "generated_at": "2026-08-25T16:23:25Z",
+        "warnings": [],
+    }
+    report["experiment_circuit"] = {
+        "num_qubits": 2,
+        "evolution_present": True,
+        "evolution_qargs": [0, 1],
+        "metrics": {
+            "depth": 3,
+            "size": 3,
+            "cx_count": 1,
+            "two_qubit_count": 1,
+            "operation_counts": {"rz": 1, "u": 1, "cx": 1},
+        },
+        "metadata": {},
+    }
+    reference_observations = [
+        {"label": "ZI", "value": 2.220446049250313e-16},
+        {"label": "IZ", "value": 2.220446049250313e-16},
+        {"label": "ZZ", "value": 1.0},
+        {"label": "XX", "value": 0.5},
+    ]
+    acquired_observations = [
+        {"label": "ZI", "value": 0.0101, "stderr": 0.007, "shots": 20000},
+        {"label": "IZ", "value": 0.0104, "stderr": 0.007, "shots": 20000},
+        {"label": "ZZ", "value": 0.8512, "stderr": 0.004, "shots": 20000},
+        {"label": "XX", "value": 0.4096, "stderr": 0.006, "shots": 20000},
+    ]
+    reference_distribution = {
+        "label": "q0-q1",
+        "qubits": [0, 1],
+        "probabilities": {"00": 0.5, "11": 0.4999999999999999},
+        "shots": None,
+        "metadata": {},
+    }
+    acquired_distribution = {
+        "label": "q0-q1",
+        "qubits": [0, 1],
+        "probabilities": {"00": 0.4687, "01": 0.03665, "10": 0.037, "11": 0.45765},
+        "shots": 20000,
+        "metadata": {},
+    }
+    report["reference"] = {
+        "status": "available",
+        "simulation": None,
+        "measurements": {
+            "source": "q-alchemy-simulator:SparseAerBackend",
+            "source_kind": "ideal-simulator",
+            "observations": {
+                "source": "q-alchemy-simulator:SparseAerBackend",
+                "observations": reference_observations,
+                "metadata": {},
+            },
+            "basis_distributions": [reference_distribution],
+            "metadata": {},
+        },
+        "warnings": [],
+    }
+    report["execution"] = {
+        "source": "aer_simulator",
+        "source_kind": "noisy-simulator",
+        "observations": {
+            "source": "aer_simulator",
+            "observations": acquired_observations,
+            "metadata": {},
+        },
+        "basis_distributions": [acquired_distribution],
+        "metadata": {},
+    }
+    report["observable_error"] = {
+        "count": 4,
+        "rmse": 0.08735526601184376,
+        "mean_absolute_error": 0.064925,
+        "max_absolute_error": 0.14879999999999982,
+        "normalized_rmse": 21.2615,
+    }
+    report["distribution_errors"] = {
+        "q0-q1": {
+            "outcome_count": 4,
+            "total_variation_distance": 0.07364999999999994,
+            "hellinger_distance": 0.19376878161498423,
+            "classical_fidelity": 0.9263170462449939,
+        }
+    }
+    report["warnings"] = [
+        "Q-Alchemy sparse checkpoint simulation failed: 'SparseSimulationCheckpoint' object has no attribute 'metadata'",
+        "Preparation circuit was not independently simulated; target-to-prepared fidelity is unavailable.",
+    ]
+    return payload
+
+
 class _DeleteAction:
     def __init__(self, owner):
         self.owner = owner
@@ -307,6 +422,75 @@ class TestTypedContract(unittest.TestCase):
         self.assertEqual(result.execution.source_kind, "ideal-simulator")
         self.assertEqual(result.preparation.metrics.cx_count, None)
         self.assertEqual(result.warnings, ("warning",))
+
+
+    def test_experiment_report_format_summary_matches_quantum_io_presentation(self):
+        result = ExperimentReport.from_dict(_formatted_noisy_report_payload())
+        expected = """STATE PREPARATION (target vs prepared state)
+--------------------------------------------
+Target qubits:             2
+Method:                    qalchemy:iterative_auto
+Claimed fidelity loss (initializer): 0
+Preparation simulation:  unavailable
+Target-to-prepared fidelity: not available
+Preparation circuit:      CX count=1, two-qubit count=1, depth=2, size=2, operations=cx=1, u=1
+
+FULL EXPERIMENT CIRCUIT (P + U)
+-------------------------------
+Evolution U present:       yes
+Evolution qubits:         (0, 1)
+Complete circuit:         CX count=1, two-qubit count=1, depth=3, size=3, operations=cx=1, rz=1, u=1
+
+FINAL OUTPUT COMPARISON (ideal/reference P + U vs acquisition P + U)
+--------------------------------------------------------------------
+Reference:                 q-alchemy-simulator:SparseAerBackend (ideal-simulator)
+Acquisition:               aer_simulator (noisy-simulator)
+
+Observable comparison (complete-circuit final measurements):
+  RMSE:                     0.0873553
+  Mean absolute error:      0.064925
+  Maximum absolute error:   0.1488
+  Normalized RMSE:          21.2615
+  Values (reference -> acquisition):
+    ZI: 2.22045e-16 -> 0.0101 (delta=0.0101)
+    IZ: 2.22045e-16 -> 0.0104 (delta=0.0104)
+    ZZ: 1 -> 0.8512 (delta=-0.1488)
+    XX: 0.5 -> 0.4096 (delta=-0.0904)
+
+Distribution comparison [q0-q1] (complete-circuit final measurement):
+  Reference distribution:  {00: 0.5, 11: 0.5}
+  Acquired distribution:   {00: 0.4687, 01: 0.03665, 10: 0.037, 11: 0.45765}
+  Acquisition shots:       20000
+  Classical fidelity (final distribution): 0.926317
+  Total variation distance: 0.07365
+  Hellinger distance:       0.193769
+
+WARNINGS
+--------
+- Q-Alchemy sparse checkpoint simulation failed: 'SparseSimulationCheckpoint' object has no attribute 'metadata'
+- Preparation circuit was not independently simulated; target-to-prepared fidelity is unavailable."""
+        self.assertEqual(result.format_summary(), expected)
+
+    def test_experiment_report_format_summary_includes_state_estimation(self):
+        payload = _report_payload(mode="qpu", source_kind="qpu")
+        payload["report"]["estimate"] = {
+            "estimator": "qtucker-state-estimation:fit_with_restarts",
+            "statevector_materialized": False,
+            "metadata": {"target_to_estimated_fidelity": 0.987654321},
+        }
+        payload["report"]["held_out_verification_error"] = {
+            "count": 4,
+            "rmse": 0.01234567,
+            "mean_absolute_error": 0.01,
+            "max_absolute_error": 0.02345678,
+            "normalized_rmse": None,
+        }
+        summary = ExperimentReport.from_dict(payload).format_summary()
+        self.assertIn("STATE ESTIMATION / HELD-OUT VERIFICATION", summary)
+        self.assertIn("Estimator:                 qtucker-state-estimation:fit_with_restarts", summary)
+        self.assertIn("Target-to-estimated fidelity: 0.987654", summary)
+        self.assertIn("Held-out RMSE:             0.0123457", summary)
+        self.assertIn("Held-out max abs. error:   0.0234568", summary)
 
 
 class TestExecutionPlans(unittest.TestCase):

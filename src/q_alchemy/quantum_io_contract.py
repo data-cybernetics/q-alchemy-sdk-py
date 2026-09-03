@@ -1257,6 +1257,273 @@ class StateEstimateSummary:
         }
 
 
+
+def _format_summary_number(value: float | int | None) -> str:
+    if value is None:
+        return "not available"
+    if isinstance(value, int):
+        return str(value)
+    return f"{float(value):.6g}"
+
+
+def _format_circuit_metrics(metrics: CircuitMetrics) -> str:
+    operations = ", ".join(
+        f"{name}={count}" for name, count in sorted(metrics.operation_counts.items())
+    ) or "not available"
+    return (
+        f"CX count={_format_summary_number(metrics.cx_count)}, "
+        f"two-qubit count={_format_summary_number(metrics.two_qubit_count)}, "
+        f"depth={_format_summary_number(metrics.depth)}, "
+        f"size={_format_summary_number(metrics.size)}, "
+        f"operations={operations}"
+    )
+
+
+def _format_distribution(probabilities: Mapping[str, float]) -> str:
+    body = ", ".join(
+        f"{outcome}: {_format_summary_number(probabilities[outcome])}"
+        for outcome in sorted(probabilities)
+    )
+    return "{" + body + "}"
+
+
+def _execution_observations(result: ExecutionResult | None) -> dict[str, Observation]:
+    if result is None or result.observations is None:
+        return {}
+    return result.observations.by_label()
+
+
+def _execution_distributions(result: ExecutionResult | None) -> dict[str, BasisDistribution]:
+    if result is None:
+        return {}
+    return {item.label: item for item in result.basis_distributions}
+
+
+def _reference_execution(report: "ExperimentReport") -> ExecutionResult | None:
+    if report.reference is None:
+        return None
+    return report.reference.measurements
+
+
+def _reference_simulation_path(report: "ExperimentReport") -> str | None:
+    candidates: list[Mapping[str, Any]] = []
+    reference_execution = _reference_execution(report)
+    if reference_execution is not None:
+        candidates.append(reference_execution.metadata)
+    if report.reference is not None and report.reference.simulation is not None:
+        candidates.append(report.reference.simulation.metadata)
+    for metadata in candidates:
+        for key in (
+            "reference_simulation_path",
+            "simulation_path",
+            "execution_path",
+        ):
+            value = metadata.get(key)
+            if value:
+                return str(value)
+    return None
+
+
+def _estimate_fidelity(metadata: Mapping[str, Any]) -> float | None:
+    # Keep compatibility with the names used by successive Quantum I/O releases.
+    for key in (
+        "target_to_estimated_fidelity",
+        "target_to_estimate_fidelity",
+        "estimated_state_fidelity",
+        "state_fidelity",
+    ):
+        value = metadata.get(key)
+        if value is not None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
+def _format_experiment_report_summary(report: "ExperimentReport") -> str:
+    """Format an ExperimentReport like q-alchemy-quantum-io's runtime report."""
+
+    lines = [
+        "STATE PREPARATION (target vs prepared state)",
+        "--------------------------------------------",
+        f"Target qubits:             {report.preparation.num_qubits}",
+        f"Method:                    {report.preparation.method}",
+    ]
+    if report.preparation.claimed_fidelity_loss is not None:
+        lines.append(
+            "Claimed fidelity loss (initializer): "
+            f"{_format_summary_number(report.preparation.claimed_fidelity_loss)}"
+        )
+
+    preflight = report.preparation_preflight
+    if preflight is None:
+        lines.append("Preparation simulation:  unavailable")
+        lines.append("Target-to-prepared fidelity: not available")
+    else:
+        simulation = preflight.simulation
+        if simulation is None:
+            lines.append(f"Preparation simulation:  {preflight.simulation_status}")
+        else:
+            lines.append(
+                "Preparation simulation:  "
+                f"{simulation.simulator} ({simulation.reference_quality})"
+            )
+        lines.append(
+            "Target-to-prepared fidelity: "
+            f"{_format_summary_number(preflight.target_to_prepared_fidelity)}"
+        )
+        if preflight.preparation_approximation_infidelity is not None:
+            lines.append(
+                "Preparation infidelity: "
+                f"{_format_summary_number(preflight.preparation_approximation_infidelity)}"
+            )
+    lines.append(f"Preparation circuit:      {_format_circuit_metrics(report.preparation.metrics)}")
+
+    lines.extend(
+        [
+            "",
+            "FULL EXPERIMENT CIRCUIT (P + U)",
+            "-------------------------------",
+            "Evolution U present:       "
+            + ("yes" if report.experiment_circuit.evolution_present else "no"),
+        ]
+    )
+    if report.experiment_circuit.evolution_qargs is not None:
+        lines.append(f"Evolution qubits:         {report.experiment_circuit.evolution_qargs}")
+    lines.append(f"Complete circuit:         {_format_circuit_metrics(report.experiment_circuit.metrics)}")
+
+    lines.extend(
+        [
+            "",
+            "FINAL OUTPUT COMPARISON (ideal/reference P + U vs acquisition P + U)",
+            "--------------------------------------------------------------------",
+        ]
+    )
+
+    reference_execution = _reference_execution(report)
+    if reference_execution is not None:
+        lines.append(
+            f"Reference:                 {reference_execution.source} "
+            f"({reference_execution.source_kind})"
+        )
+    elif report.reference is not None and report.reference.simulation is not None:
+        simulation = report.reference.simulation
+        lines.append(
+            f"Reference:                 {simulation.simulator} "
+            f"({simulation.reference_quality})"
+        )
+    else:
+        lines.append("Reference:                 not available")
+
+    simulation_path = _reference_simulation_path(report)
+    if simulation_path is not None:
+        lines.append(f"Reference simulation path: {simulation_path}")
+
+    if report.execution is not None:
+        lines.append(
+            f"Acquisition:               {report.execution.source} "
+            f"({report.execution.source_kind})"
+        )
+    else:
+        lines.append("Acquisition:               not available")
+
+    reference_observations = _execution_observations(reference_execution)
+    acquired_observations = _execution_observations(report.execution)
+    if report.observable_error is not None:
+        metrics = report.observable_error
+        lines.extend(
+            [
+                "",
+                "Observable comparison (complete-circuit final measurements):",
+                f"  RMSE:                     {_format_summary_number(metrics.rmse)}",
+                f"  Mean absolute error:      {_format_summary_number(metrics.mean_absolute_error)}",
+                f"  Maximum absolute error:   {_format_summary_number(metrics.max_absolute_error)}",
+            ]
+        )
+        if metrics.normalized_rmse is not None:
+            lines.append(
+                f"  Normalized RMSE:          {_format_summary_number(metrics.normalized_rmse)}"
+            )
+        comparable_labels = [
+            label for label in reference_observations if label in acquired_observations
+        ]
+        if comparable_labels:
+            lines.append("  Values (reference -> acquisition):")
+            for label in comparable_labels:
+                reference_value = reference_observations[label].value
+                acquired_value = acquired_observations[label].value
+                lines.append(
+                    f"    {label}: {_format_summary_number(reference_value)} -> "
+                    f"{_format_summary_number(acquired_value)} "
+                    f"(delta={_format_summary_number(acquired_value - reference_value)})"
+                )
+
+    reference_distributions = _execution_distributions(reference_execution)
+    acquired_distributions = _execution_distributions(report.execution)
+    for label, metrics in report.distribution_errors.items():
+        reference_distribution = reference_distributions.get(label)
+        acquired_distribution = acquired_distributions.get(label)
+        lines.extend(
+            [
+                "",
+                f"Distribution comparison [{label}] (complete-circuit final measurement):",
+            ]
+        )
+        if reference_distribution is not None:
+            lines.append(
+                "  Reference distribution:  "
+                + _format_distribution(reference_distribution.probabilities)
+            )
+        if acquired_distribution is not None:
+            lines.append(
+                "  Acquired distribution:   "
+                + _format_distribution(acquired_distribution.probabilities)
+            )
+            if acquired_distribution.shots is not None:
+                lines.append(f"  Acquisition shots:       {acquired_distribution.shots}")
+        lines.extend(
+            [
+                "  Classical fidelity (final distribution): "
+                f"{_format_summary_number(metrics.classical_fidelity)}",
+                "  Total variation distance: "
+                f"{_format_summary_number(metrics.total_variation_distance)}",
+                "  Hellinger distance:       "
+                f"{_format_summary_number(metrics.hellinger_distance)}",
+            ]
+        )
+
+    if report.estimate is not None or report.held_out_verification_error is not None:
+        lines.extend(
+            [
+                "",
+                "STATE ESTIMATION / HELD-OUT VERIFICATION",
+                "----------------------------------------",
+            ]
+        )
+        if report.estimate is not None:
+            lines.append(f"Estimator:                 {report.estimate.estimator}")
+            fidelity = _estimate_fidelity(report.estimate.metadata)
+            if fidelity is not None:
+                lines.append(
+                    "Target-to-estimated fidelity: "
+                    f"{_format_summary_number(fidelity)}"
+                )
+        if report.held_out_verification_error is not None:
+            held_out = report.held_out_verification_error
+            lines.append(f"Held-out RMSE:             {_format_summary_number(held_out.rmse)}")
+            lines.append(
+                "Held-out max abs. error:   "
+                f"{_format_summary_number(held_out.max_absolute_error)}"
+            )
+
+    if report.warnings:
+        lines.extend(["", "WARNINGS", "--------"])
+        lines.extend(f"- {warning}" for warning in report.warnings)
+
+    return "\n".join(lines)
+
+
 @dataclass(frozen=True)
 class ExperimentReport:
     """Typed, service-safe experiment report.
@@ -1278,7 +1545,6 @@ class ExperimentReport:
     estimate: StateEstimateSummary | None = None
     held_out_verification_error: ErrorMetrics | None = None
     warnings: tuple[str, ...] = ()
-
 
     @classmethod
     def _from_report_data(cls, data: Mapping[str, Any]) -> "ExperimentReport":
@@ -1374,6 +1640,11 @@ class ExperimentReport:
         if not isinstance(report, Mapping):
             raise ValueError("experiment-report payload has no report object")
         return cls._from_report_data(report)
+
+    def format_summary(self) -> str:
+        """Return the canonical human-readable Quantum I/O experiment summary."""
+
+        return _format_experiment_report_summary(self)
 
     def to_json(self, *, indent: int | None = None) -> str:
         return json.dumps(self.to_dict(), indent=indent, sort_keys=True)

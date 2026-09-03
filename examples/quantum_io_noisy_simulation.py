@@ -1,57 +1,81 @@
-"""Exercise Quantum I/O end to end without submitting a QPU job.
+"""Complete SDK example for backend-calibrated noisy Quantum I/O simulation.
 
-The example discovers an IBM backend, uses its topology/calibration to construct
-an AerSimulator on PineXQ, compares the noisy result with an ideal Q-Alchemy
-sparse reference, and exercises observable fitting/held-out verification.
+The experiment is::
+
+    Bell target -- Q-Alchemy state preparation P -- RZ(pi/3) -- measurements
+
+The SDK discovers an accessible IBM Quantum backend and uses its topology and
+calibration to construct a noisy Aer simulation inside the deployed Quantum I/O
+service. No QPU job is submitted. In parallel, Q-Alchemy's sparse simulator
+provides the ideal reference, and qTucker state estimation is exercised with
+training observables plus a held-out validation observable.
+
+This example also shows the portable JSON boundary used by Quantum I/O: the
+typed experiment and execution plan are serialized and reconstructed before
+submission. IBM credentials are *not* part of either JSON document; the SDK
+uploads them separately as Secret PineXQ WorkData.
+
+Required environment variables:
+
+* ``Q_ALCHEMY_API_KEY`` (or ``PINEXQ_API_KEY``)
+* ``IBM_QUANTUM_TOKEN``
+
+A local ``.env`` file is loaded when present.
 """
 
 from __future__ import annotations
 
+from dataclasses import replace
+from math import pi, sqrt
 import os
 
+from dotenv import load_dotenv
 from qiskit import QuantumCircuit
 
 from q_alchemy import (
     BasisMeasurement,
     Circuit,
+    ExecutionPlan,
     ExperimentReport,
     IBMQuantumCredentials,
     MeasurementPlan,
     PauliObservable,
     QuantumExperiment,
     QuantumIOService,
+    Runtime,
     State,
     noisy_backend_execution_plan,
 )
 
 
 def experiment() -> QuantumExperiment:
+    """Return the portable WHAT-to-run description for the example."""
+
+    # Make state preparation non-trivial: Q-Alchemy prepares the Bell target,
+    # while the evolution is a separate phase rotation applied afterwards.
     evolution = QuantumCircuit(2)
-    evolution.h(0)
-    evolution.cx(0, 1)
+    evolution.rz(pi / 3, 0)
 
     return QuantumExperiment(
-        target=State.dense([1.0, 0.0, 0.0, 0.0]),
+        target=State.dense([1 / sqrt(2), 0.0, 0.0, 1 / sqrt(2)]),
         evolution=Circuit.from_qiskit(evolution),
         measurement_plan=MeasurementPlan(
             training=(
                 PauliObservable.pauli("ZI", "ZI"),
                 PauliObservable.pauli("IZ", "IZ"),
-            ),
-            validation=(
-                PauliObservable.pauli("XX", "XX"),
                 PauliObservable.pauli("ZZ", "ZZ"),
             ),
-            basis_measurements=(
-                BasisMeasurement("computational", (0, 1)),
-            ),
+            validation=(PauliObservable.pauli("XX", "XX"),),
+            basis_measurements=(BasisMeasurement("q0-q1", (0, 1)),),
             observable_plan_metadata={"example": "fit-vs-held-out"},
         ),
-        metadata={"example": "sdk-quantum-io-noisy-simulation"},
+        metadata={"name": "bell-state-preparation-with-phase-evolution"},
     )
 
 
 def print_report(report: ExperimentReport) -> None:
+    """Print the most useful fields from the typed experiment report."""
+
     print("\nEXPERIMENT")
     print("generated at:", report.generated_at)
     print("mode:", report.mode)
@@ -184,32 +208,77 @@ def print_report(report: ExperimentReport) -> None:
 
 
 def main() -> None:
-    credentials = IBMQuantumCredentials(token=os.environ["IBM_QUANTUM_TOKEN"])
-    service = QuantumIOService(ibm_credentials=credentials)
+    load_dotenv()
 
-    # Backend discovery reads device metadata only. No QPU execution occurs.
-    backends = service.backends(provider="ibm", min_num_qubits=2)
-    if not backends:
-        raise RuntimeError("IBM Quantum returned no accessible backend with >=2 qubits")
+    token = os.getenv("IBM_QUANTUM_TOKEN")
+    if not token:
+        raise RuntimeError("Set IBM_QUANTUM_TOKEN before running this example")
 
-    # Prefer the smallest accessible device model for this demonstration.
-    # Aer can truncate inactive qubits, but a smaller backend still keeps the
-    # calibration/noise model easier and cheaper to simulate.
-    backend = min(
-        backends,
-        key=lambda item: (item.num_qubits, item.pending_jobs or 0, item.name),
-    )
-    print("using calibration from:", backend.name)
+    credentials = IBMQuantumCredentials(token=token)
 
-    plan = noisy_backend_execution_plan(
-        provider="ibm",
-        backend=backend.name,
-        shots=4096,
-        ideal_reference=True,
-        estimator=True,
-    )
-    report = service.run(experiment(), execution_plan=plan).result()
+    # The service reads Q_ALCHEMY_API_KEY (or PINEXQ_API_KEY) from the
+    # environment.  The context manager closes its HTTP connection pool.
+    with QuantumIOService(ibm_credentials=credentials) as service:
+        # Backend discovery reads device metadata only. No QPU execution occurs.
+        backends = service.backends(provider="ibm", min_num_qubits=2)
+        if not backends:
+            raise RuntimeError(
+                "IBM Quantum returned no accessible backend with >=2 qubits"
+            )
+
+        # Prefer the smallest accessible device model for this demonstration.
+        # Aer can truncate inactive qubits, but a smaller backend keeps the
+        # backend-derived topology/calibration model cheaper to simulate.
+        backend = min(
+            backends,
+            key=lambda item: (item.num_qubits, item.pending_jobs or 0, item.name),
+        )
+        print(
+            "using calibration from:",
+            backend.name,
+            f"({backend.num_qubits} qubits, pending_jobs={backend.pending_jobs})",
+        )
+
+        # HOW to run it. The IBM backend is used for topology/calibration only;
+        # acquisition itself is a noisy Aer simulation in Quantum I/O.
+        plan = noisy_backend_execution_plan(
+            provider="ibm",
+            backend=backend.name,
+            shots=20_000,
+            ideal_reference=True,
+            estimator=True,
+        )
+        plan = replace(
+            plan,
+            reference=Runtime.qalchemy_sparse(
+                source="ideal-reference",
+                sparse_epsilon=0.0,
+                final_sparse_epsilon=0.0,
+            ),
+            preparation_options={"max_fidelity_loss": 1e-6},
+            metadata={
+                "purpose": (
+                    "backend-calibrated noisy simulation instead of QPU acquisition"
+                )
+            },
+        )
+
+        request = experiment()
+
+        # Demonstrate the service boundary explicitly. These JSON documents are
+        # portable and contain no IBM token or Q-Alchemy API key.
+        print("\nPORTABLE EXPERIMENT JSON")
+        print(request.to_json(indent=2))
+        print("\nPORTABLE EXECUTION PLAN JSON")
+        print(plan.to_json(indent=2))
+        request = QuantumExperiment.from_json(request.to_json())
+        plan = ExecutionPlan.from_json(plan.to_json())
+
+        report = service.run(request, execution_plan=plan).result()
+
     print_report(report)
+    print("\nPORTABLE TYPED REPORT JSON")
+    print(report.to_json(indent=2))
 
 
 if __name__ == "__main__":

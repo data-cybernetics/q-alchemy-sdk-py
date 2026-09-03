@@ -1,6 +1,14 @@
 import logging
 import os
+from pkgutil import extend_path
 import warnings
+
+# The SDK keeps convenience exports in this package while other Q-Alchemy
+# distributions contribute sibling subpackages (for example
+# ``q_alchemy.visualization``).  Extending ``__path__`` preserves those
+# separately installed subpackages in editable/source-tree environments, where
+# they are not physically merged into the SDK package directory.
+__path__ = extend_path(__path__, __name__)
 
 LOG = logging.getLogger(__name__)
 
@@ -92,6 +100,22 @@ from .quantum_io import (
     noisy_backend_execution_plan,
     quantum_backend_execution_plan,
 )
+from .feasibility_contract import (
+    ClassicalResources,
+    Criterion,
+    EvidenceCollectionConfig,
+    FeasibilityPolicy,
+    FeasibilityRecommendation,
+    FeasibilityStatus,
+    FeasibilityReport,
+    FeasibilityRequest,
+    QuantumExecutionPolicy,
+    RecommendedCompute,
+    Relation,
+    SolutionCriteria,
+)
+from .feasibility import FeasibilityJob, FeasibilityParams, FeasibilityService
+
 try: # should fail silently if user has not installed optional dependencies
     from .qiskit_integration import QAlchemyInitialize
 except ImportError:
