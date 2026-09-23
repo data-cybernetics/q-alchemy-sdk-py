@@ -5,13 +5,9 @@ API which helps quantum computing researchers to put classical data into the qua
 This is all also called: the loading problem, encoding problem, or quantum state preparation.
 Some people also call it a form of QRAM, or quantum random-access memory.
 
-This SDK builds upon the Hypermedia-Siren API of [data cybernetics](https://www.data-cybernetics.com)
-which uses a document-first approach added with actions. The standardized way makes the API programmatically
-accessible, which can be explored by the [Hypermedia-Test-UI](https://hypermedia-ui.dev.pinexq.net/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
-
-The SDK builds upon this, so that any software developer planning to integrate with the API and
-experience the API through the UI and the SDK in a very similar fashion. Also, any GUI around this
-has similar characteristics.
+Under the hood, Q-Alchemy runs on [PineXQ](https://pinexq.net), the hypermedia (Siren) API platform of
+[data cybernetics](https://www.data-cybernetics.com). You do not need to know anything about it to use this
+SDK; if you want to work with the API directly, see the [PineXQ documentation](https://pinexq.net/docs/).
 
 ## Installation
 
@@ -406,11 +402,6 @@ def circuit():
     qml.CNOT([0, 1])
     return qml.counts()
 ```
-
-### Developer UI
-
-You can play around with this as you please and check out the [Hypermedia-Test-UI](https://hypermedia-ui.dev.pinexq.net/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
-for more info!
 
 ## Contributions
 
