@@ -1,8 +1,9 @@
 """Remote sparse state-vector simulation via the Q-Alchemy ProCon.
 
 The Q-Alchemy simulator (``q-alchemy-simulator``) is deployed as a pinexq ProCon
-that exposes nine ProcessingSteps — three capabilities, each in three circuit
-input forms:
+that exposes eighteen ProcessingSteps — three capabilities, each in three circuit
+input forms, each once on the Medium preset and once, suffixed ``_enterprise``,
+on the XLarge preset for the enterprise plan:
 
 ============================  ===================  ===================  ================
 capability                    QASM file            inline QASM string   QPY file
@@ -148,7 +149,12 @@ class CountsResult:
 
 @dataclass
 class SparseStatevectorResult:
-    """Exact sparse state-vector: only non-zero/significant amplitudes."""
+    """Sparse state-vector: only the amplitudes above the simulator's ``1e-10`` cutoff.
+
+    Exact unless the run set ``max_nnz``: the simulator then keeps only the
+    ``max_nnz`` largest amplitudes after every gate and renormalises them, and
+    nothing here marks that the state was truncated.
+    """
 
     num_qubits: int
     nnz: int
@@ -437,7 +443,13 @@ class SparseSimulator:
         max_nnz: int = 0,
         input_form: InputForm = "auto",
     ) -> SparseStatevectorResult:
-        """Export the exact sparse state-vector produced by ``circuit``."""
+        """Export the sparse state-vector produced by ``circuit``.
+
+        ``max_nnz=0`` (the default) keeps every amplitude above ``1e-10``: exact,
+        but a state that is not sparse needs as much memory as the dense vector.
+        A positive ``max_nnz`` caps it, keeping the largest amplitudes and
+        renormalising after every gate, so the result becomes approximate.
+        """
         raw = self._run(
             "sparse_statevector",
             circuit,
