@@ -60,7 +60,7 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
-from q_alchemy.initialize import create_client, delete_job_with_data, find_processing_step
+from q_alchemy.initialize import allow_deletion, create_client, delete_job_with_data, find_processing_step
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
@@ -556,9 +556,11 @@ class SparseSimulator:
 
     def _upload(self, filename: str, payload: bytes, mediatype: str) -> WorkDataLink:
         work_data_root = enter_jma(self.client).work_data_root_link.navigate()
-        return work_data_root.upload_action.execute(
+        work_data = work_data_root.upload_action.execute(
             UploadParameters(filename=filename, binary=payload, mediatype=mediatype, json=None)
         )
+        allow_deletion(work_data)
+        return work_data
 
     @staticmethod
     def _download_return(job: Job, output_name: str) -> dict:

@@ -104,6 +104,23 @@ def encode_statevector(state_vector: pa.Table) -> str:
     return base64.encodebytes(buffer.read()).decode("utf-8").replace("\n", "")
 
 
+def allow_deletion(wd_link: WorkDataLink) -> None:
+    """Mark WorkData deletable, unless it already is.
+
+    Do it right after the upload: the platform stops offering AllowDeletion
+    while a job uses the WorkData, and the upload's creator is then the only one
+    to send it -- which matters because AllowDeletion is not idempotent. Marking
+    only permits deletion; nothing is deleted unless remove_data asks for it.
+    """
+    try:
+        wd = wd_link.navigate()
+        if not wd.is_deletable and wd.allow_deletion_action.is_available():
+            wd.allow_deletion_action.execute()
+    except Exception:
+        # A concurrent call sharing the WorkData can race on AllowDeletion.
+        LOG.warning("Could not mark WorkData %s deletable.", wd_link.get_url(), exc_info=True)
+
+
 def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
     # Convert to buffer to get hash and later possibly upload
     buffer = io.BytesIO()
@@ -148,6 +165,7 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
         wd_link.navigate().edit_tags_action.execute(
             SetTagsWorkDataParameters(Tags=sequence_wd_tags)
         )
+        allow_deletion(wd_link)
     else:
         wd_link = existing_wd_query.workdatas[0].self_link
 
@@ -390,15 +408,14 @@ def delete_job_with_data(job: Job) -> None:
     """Delete the job, its output WorkData and its uploaded input WorkData.
 
     Data lineage fixes the order: output WorkData must go before the job that
-    produced it, and input WorkData only once no job uses it. An upload is also
-    not deletable until it has been marked so, and the platform only offers
-    AllowDeletion once nothing uses it -- i.e. after the job is gone. So
-    delete_with_associated handles the outputs and the job, and the inputs are
-    marked and deleted afterwards.
+    produced it, and input WorkData only once no job uses it. So
+    delete_with_associated handles the outputs and the job, and the inputs go
+    afterwards -- here rather than in delete_with_associated, which would warn
+    about every input another job still uses (state uploads are shared by hash);
+    those are left for that job's clean-up.
 
-    AllowDeletion is not idempotent, so it is only sent while the input is not
-    deletable yet. An input another job still uses (state uploads are shared by
-    hash) is left for that job's clean-up.
+    Uploads are marked deletable when they are made. An input uploaded before
+    that was done can only be marked now, once the job no longer uses it.
     """
     job.refresh()
     inputs = [wd.self_link for slot in job.job_hco.input_dataslots for wd in slot.selected_workdatas]
@@ -408,20 +425,15 @@ def delete_job_with_data(job: Job) -> None:
         delete_output_workdata=True,
     )
     for link in inputs:
+        allow_deletion(link)
         try:
             wd = link.navigate()
-            if not wd.is_deletable:
-                if not wd.allow_deletion_action.is_available():
-                    LOG.info("Input WorkData %s is still in use; leaving it.", link.get_url())
-                    continue
-                wd.allow_deletion_action.execute()
-                wd = link.navigate()
             if wd.delete_action.is_available():
                 wd.delete_action.execute()
             else:
                 LOG.info("Input WorkData %s is still in use; leaving it.", link.get_url())
         except Exception:
-            # Concurrent calls sharing an upload can race on AllowDeletion or the delete.
+            # A concurrent call sharing the upload can delete it first.
             LOG.warning("Could not delete input WorkData %s.", link.get_url(), exc_info=True)
 
 
