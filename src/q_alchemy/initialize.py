@@ -1,3 +1,4 @@
+import logging
 import time
 import base64
 import json
@@ -33,6 +34,8 @@ from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16
 
+LOG = logging.getLogger(__name__)
+
 class InitializationMethods(StrEnum):
     AUTO = "auto"
     HIERARCHICAL_TUCKER = "hierarchical_tucker"
@@ -49,6 +52,8 @@ class OptParams:
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
     added_headers: Dict[str, str] = field(default_factory=dict)
+    # Never sent to the service; kept so existing callers passing them do not break.
+    # BAA_LOW_RANK takes its schemes through extra_kwargs as iso_scheme/unitary_scheme.
     isometry_scheme: str = field(default="ccd")
     unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int | None = field(default=300)
@@ -101,6 +106,23 @@ def encode_statevector(state_vector: pa.Table) -> str:
     return base64.encodebytes(buffer.read()).decode("utf-8").replace("\n", "")
 
 
+def allow_deletion(wd_link: WorkDataLink) -> None:
+    """Mark WorkData deletable, unless it already is.
+
+    Do it right after the upload: the platform stops offering AllowDeletion
+    while a job uses the WorkData, and the upload's creator is then the only one
+    to send it -- which matters because AllowDeletion is not idempotent. Marking
+    only permits deletion; nothing is deleted unless remove_data asks for it.
+    """
+    try:
+        wd = wd_link.navigate()
+        if not wd.is_deletable and wd.allow_deletion_action.is_available():
+            wd.allow_deletion_action.execute()
+    except Exception:
+        # A concurrent call sharing the WorkData can race on AllowDeletion.
+        LOG.warning("Could not mark WorkData %s deletable.", wd_link.get_url(), exc_info=True)
+
+
 def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
     # Convert to buffer to get hash and later possibly upload
     buffer = io.BytesIO()
@@ -145,6 +167,7 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
         wd_link.navigate().edit_tags_action.execute(
             SetTagsWorkDataParameters(Tags=sequence_wd_tags)
         )
+        allow_deletion(wd_link)
     else:
         wd_link = existing_wd_query.workdatas[0].self_link
 
@@ -383,14 +406,66 @@ def extract_result(job: Job):
             raise IOError("Unknown return value.")
 
 
-def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
-    # Clean-up now.
+def delete_job_with_data(job: Job) -> None:
+    """Delete the job, its output WorkData and its uploaded input WorkData.
+
+    Data lineage fixes the order: output WorkData must go before the job that
+    produced it, and input WorkData only once no job uses it. So
+    delete_with_associated handles the outputs and the job, and the inputs go
+    afterwards -- here rather than in delete_with_associated, which would warn
+    about every input another job still uses (state uploads are shared by hash);
+    those are left for that job's clean-up.
+
+    Uploads are marked deletable when they are made. An input uploaded before
+    that was done can only be marked now, once the job no longer uses it.
+    """
+    job.refresh()
+    inputs = [wd.self_link for slot in job.job_hco.input_dataslots for wd in slot.selected_workdatas]
+    job.delete_with_associated(
+        delete_subjobs_with_data=True,
+        delete_input_workdata=False,
+        delete_output_workdata=True,
+    )
+    for link in inputs:
+        allow_deletion(link)
+        try:
+            wd = link.navigate()
+            if wd.delete_action.is_available():
+                wd.delete_action.execute()
+            else:
+                LOG.info("Input WorkData %s is still in use; leaving it.", link.get_url())
+        except Exception:
+            # A concurrent call sharing the upload can delete it first.
+            LOG.warning("Could not delete input WorkData %s.", link.get_url(), exc_info=True)
+
+
+def clean_up_job(job: Job, opt_params: OptParams) -> None:
     if opt_params.remove_data:
-        job.delete_with_associated(
-            delete_subjobs_with_data=True,
-            delete_input_workdata=num_qubits > USE_INLINE_STATE_NUM_QUBITS,
-            delete_output_workdata=True,
+        delete_job_with_data(job)
+
+
+def run_job(job: Job, opt_params: OptParams, timeout_s: float):
+    """Wait for the job, extract its result, and clean up whether or not it succeeded.
+
+    A failed job (e.g. an option the chosen method rejects) must not leak the job
+    and its uploaded state when remove_data is set. On that path a clean-up error
+    is only logged, so it cannot mask the reason the job failed.
+    """
+    try:
+        job.wait_for_state(
+            state=JobStates.completed,
+            polling_interval_s=0.25,
+            timeout_s=timeout_s
         )
+        result = extract_result(job)
+    except BaseException:
+        try:
+            clean_up_job(job, opt_params)
+        except Exception:
+            LOG.warning("Could not clean up the failed Q-Alchemy job.", exc_info=True)
+        raise
+    clean_up_job(job, opt_params)
+    return result
 
 
 def q_alchemy_as_qasm(
@@ -435,14 +510,7 @@ def q_alchemy_as_qasm(
         statevector_data=statevector_data
     )
 
-    job.wait_for_state(
-        state=JobStates.completed,
-        polling_interval_s=0.250,
-        timeout_s=job_timeout
-    )
-
-    result_summary, qasm = extract_result(job)
-    clean_up_job(job, opt_params, num_qubits)
+    result_summary, qasm = run_job(job, opt_params, job_timeout)
 
     if return_summary:
         return qasm, result_summary
@@ -522,14 +590,7 @@ def q_alchemy_as_qasm_parallel_states(
         num_states=num_states
     )
 
-    job.wait_for_state(
-        state=JobStates.completed,
-        polling_interval_s=0.25,
-        timeout_s=job_timeout
-    )
-
-    result_summary_list, qasm_list = extract_result(job)
-    clean_up_job(job, opt_params, num_qubits)
+    result_summary_list, qasm_list = run_job(job, opt_params, job_timeout)
 
     if return_summary:
         return qasm_list, result_summary_list

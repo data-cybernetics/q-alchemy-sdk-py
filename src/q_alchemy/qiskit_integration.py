@@ -37,26 +37,29 @@ class QAlchemyInitialize(Instruction):
         """
         Parameters
         ----------
-        params: list of complex
+        params: Statevector, list of complex, np.ndarray or sparse array
             A unit vector representing a quantum state.
             Values are amplitudes.
 
-        opt_params: Dictionary
+        opt_params: OptParams or dict with the same keys
+            The most commonly used fields are:
+
             max_fidelity_loss: float
-                ``state`` allowed (fidelity) error for approximation
-                (0<=``max_fidelity_loss``<=1). If ``max_fidelity_loss`` is not in the valid
-                range, it will be ignored.
+                Allowed fidelity loss for approximation (0 <= ``max_fidelity_loss`` <= 1).
+                Default ``0.0``, an exact preparation.
 
-            isometry_scheme: string
-                Scheme used to decompose isometries.
-                Possible values are ``'knill'`` and ``'ccd'`` (column-by-column decomposition).
-                Default is ``isometry_scheme='ccd'``.
+            basis_gates: list of str
+                Gate set the returned circuit is transpiled to. Default ``["u", "cx"]``.
 
-            unitary_scheme: string
-                Scheme used to decompose unitaries.
-                Possible values are ``'csd'`` (cosine-sine decomposition) and ``'qsd'`` (quantum
-                Shannon decomposition).
-                Default is ``unitary_scheme='qsd'``.
+            initialization_method: InitializationMethods
+                Which algorithm builds the circuit. Default ``InitializationMethods.AUTO``.
+
+            extra_kwargs: dict
+                Method-specific options. They are validated per method: a key the chosen
+                method does not accept fails the job. See the README's "Advanced options"
+                for the keys each method accepts.
+
+            See ``OptParams`` for the rest.
         """
         if issparse(params):
             num_qubits = int(np.ceil(np.log2(params.shape[0]*params.shape[1])))

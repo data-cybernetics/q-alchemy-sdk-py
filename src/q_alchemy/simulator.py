@@ -1,8 +1,9 @@
 """Remote sparse state-vector simulation via the Q-Alchemy ProCon.
 
 The Q-Alchemy simulator (``q-alchemy-simulator``) is deployed as a pinexq ProCon
-that exposes nine ProcessingSteps — three capabilities, each in three circuit
-input forms:
+that exposes eighteen ProcessingSteps — three capabilities, each in three circuit
+input forms, each once on the Medium preset and once, suffixed ``_enterprise``,
+on the XLarge preset for the enterprise plan:
 
 ============================  ===================  ===================  ================
 capability                    QASM file            inline QASM string   QPY file
@@ -60,7 +61,7 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
-from q_alchemy.initialize import create_client, find_processing_step
+from q_alchemy.initialize import allow_deletion, create_client, delete_job_with_data, find_processing_step
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
@@ -148,7 +149,12 @@ class CountsResult:
 
 @dataclass
 class SparseStatevectorResult:
-    """Exact sparse state-vector: only non-zero/significant amplitudes."""
+    """Sparse state-vector: only the amplitudes above the simulator's ``1e-10`` cutoff.
+
+    Exact unless the run set ``max_nnz``: the simulator then keeps only the
+    ``max_nnz`` largest amplitudes after every gate and renormalises them, and
+    nothing here marks that the state was truncated.
+    """
 
     num_qubits: int
     nnz: int
@@ -437,7 +443,13 @@ class SparseSimulator:
         max_nnz: int = 0,
         input_form: InputForm = "auto",
     ) -> SparseStatevectorResult:
-        """Export the exact sparse state-vector produced by ``circuit``."""
+        """Export the sparse state-vector produced by ``circuit``.
+
+        ``max_nnz=0`` (the default) keeps every amplitude above ``1e-10``: exact,
+        but a state that is not sparse needs as much memory as the dense vector.
+        A positive ``max_nnz`` caps it, keeping the largest amplitudes and
+        renormalising after every gate, so the result becomes approximate.
+        """
         raw = self._run(
             "sparse_statevector",
             circuit,
@@ -509,14 +521,7 @@ class SparseSimulator:
             return self._download_return(job, _OUTPUT_ALIAS[capability])
         finally:
             if self.params.remove_data:
-                # Leave input workdata alone: an uploaded circuit is a pinexq
-                # "Client Upload", protected by data-lineage and not deletable
-                # here (attempting it only warns). Only the job + its outputs go.
-                job.delete_with_associated(
-                    delete_subjobs_with_data=True,
-                    delete_input_workdata=False,
-                    delete_output_workdata=True,
-                )
+                delete_job_with_data(job)
 
     def _prepare_input(
         self, circuit: Circuit, input_form: InputForm
@@ -563,9 +568,11 @@ class SparseSimulator:
 
     def _upload(self, filename: str, payload: bytes, mediatype: str) -> WorkDataLink:
         work_data_root = enter_jma(self.client).work_data_root_link.navigate()
-        return work_data_root.upload_action.execute(
+        work_data = work_data_root.upload_action.execute(
             UploadParameters(filename=filename, binary=payload, mediatype=mediatype, json=None)
         )
+        allow_deletion(work_data)
+        return work_data
 
     @staticmethod
     def _download_return(job: Job, output_name: str) -> dict:
