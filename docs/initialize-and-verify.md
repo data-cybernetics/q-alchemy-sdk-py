@@ -69,7 +69,8 @@ print("vs qiskit:", state_fidelity(Statevector(sv.to_dense()), Statevector(prep)
 measured = prep.copy(); measured.measure_all()
 print(sim.counts(measured, shots=8192).counts)
 
-# (c) Tomography: density matrix + fidelity against the dense reference.
+# (c) Tomography: an exact analysis of the simulated state (not measurement-based):
+#     density matrix and purity, plus fidelity against a dense reference for small circuits.
 tomo = sim.tomography(prep)
 print("purity:", tomo.purity, "fidelity:", tomo.state_fidelity)
 ```

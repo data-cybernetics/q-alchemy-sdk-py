@@ -368,6 +368,14 @@ numbers, or roughly 17 TB. **A dense export is impossible in that regime; a
 sparse one is a few hundred kilobytes.** Standard Qiskit backends offer no
 equivalent.
 
+That only helps if the state *is* sparse, and nothing forces it to be. By
+default the simulator keeps every amplitude above `1e-10`, so the result is
+exact, but a circuit that populates most of its basis states needs as much
+memory as the dense form and can exhaust the simulator. Pass `max_nnz=N` (to
+`backend.run` or `SparseSimulator.sparse_statevector`) to cap it: after every
+gate only the `N` largest amplitudes are kept and renormalised. The result is
+then approximate, and nothing in it marks that it was truncated.
+
 Ask for both together and you pay for one simulation:
 
 ```python
