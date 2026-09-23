@@ -69,7 +69,8 @@ print("vs qiskit:", state_fidelity(Statevector(sv.to_dense()), Statevector(prep)
 measured = prep.copy(); measured.measure_all()
 print(sim.counts(measured, shots=8192).counts)
 
-# (c) Tomography: density matrix + fidelity against the dense reference.
+# (c) Tomography: an exact analysis of the simulated state (not measurement-based):
+#     density matrix and purity, plus fidelity against a dense reference for small circuits.
 tomo = sim.tomography(prep)
 print("purity:", tomo.purity, "fidelity:", tomo.state_fidelity)
 ```
@@ -148,5 +149,5 @@ section of the README.
 
 - [`examples/simulator_vs_initializer.ipynb`](../examples/simulator_vs_initializer.ipynb)
   — the full prepare → simulate → verify notebook with plots.
-- The [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
-  to explore the API directly.
+- The [PineXQ documentation](https://pinexq.net/docs/), to work with the
+  underlying API directly.

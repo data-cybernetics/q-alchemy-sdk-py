@@ -5,20 +5,20 @@ API which helps quantum computing researchers to put classical data into the qua
 This is all also called: the loading problem, encoding problem, or quantum state preparation.
 Some people also call it a form of QRAM, or quantum random-access memory.
 
-This SDK builds upon the Hypermedia-Siren API of [data cybernetics](https://www.data-cybernetics.com)
-which uses a document-first approach added with actions. The standardized way makes the API programmatically
-accessible, which can be explored by the [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
-
-The SDK builds upon this, so that any software developer planning to integrate with the API and
-experience the API through the UI and the SDK in a very similar fashion. Also, any GUI around this
-has similar characteristics.
+Under the hood, Q-Alchemy runs on [PineXQ](https://pinexq.net), the hypermedia (Siren) API platform of
+[data cybernetics](https://www.data-cybernetics.com). You do not need to know anything about it to use this
+SDK; if you want to work with the API directly, see the [PineXQ documentation](https://pinexq.net/docs/).
 
 ## Installation
 
-The SDK is published on PyPI, so you can install it with pip (or poetry, uv, ...):
+The SDK is published on PyPI, so you can install it with pip (or poetry, uv, pdm, ...):
 
 ```bash
 pip install q-alchemy-sdk-py
+# or
+uv add q-alchemy-sdk-py
+# or
+pdm add q-alchemy-sdk-py
 ```
 
 If you want to use the qiskit-integration, please use
@@ -36,7 +36,7 @@ If you would like to run our examples, please use
 pip install q-alchemy-sdk-py[examples]
 ```
 
-We use [uv](https://docs.astral.sh/uv/) and have tested this all with Python 3.11 or higher (but less than 4!). So the way to install 
+We use [uv](https://docs.astral.sh/uv/) and have tested this all with Python 3.11 through 3.14. So the way to install 
 it after cloning is simply
 
 ```bash
@@ -192,6 +192,74 @@ print(qml.draw(circuit, level="device", max_length=100)(X_tensor))
 
 This example demonstrates how batched data can be processed using broadcasting with `AmplitudeEmbedding`, and how Q-Alchemy is triggered on simulators like `qiskit.aer`. When moving to real hardware or gate-based backends that lack `StatePrep` gate, Q-Alchemy will transparently handle the state preparation.
 
+### Advanced options
+
+Every entry point (`q_alchemy_as_qasm`, `QAlchemyInitialize`,
+`QAlchemyStatePreparation`, `AmplitudeEmbedding`) takes its settings as an
+`OptParams` object, or as a plain dict with the same keys. `q_alchemy_as_qasm`
+also accepts them as keyword arguments. The state itself can be a list, a numpy
+array, a scipy sparse array or, for Qiskit, a `Statevector`.
+
+The fields you are most likely to touch:
+
+| Field | Default | Meaning |
+|---|---|---|
+| `max_fidelity_loss` | `0.0` | How much fidelity you are willing to give up for a shallower circuit. `0.0` asks for an exact preparation. |
+| `basis_gates` | `["u", "cx"]` | Gate set the returned circuit is transpiled to. |
+| `api_key` | `$Q_ALCHEMY_API_KEY` | Your Q-Alchemy API key. Keep it safe! |
+| `initialization_method` | `InitializationMethods.AUTO` | Which algorithm builds the circuit (see below). |
+| `extra_kwargs` | `{}` | Method-specific options, as a dict (see below). |
+| `use_qasm3` | `False` | Experimental: return OpenQASM 3 instead of OpenQASM 2. |
+| `remove_data` | `True` | Delete the job and its uploaded data once the result is fetched. |
+| `job_completion_timeout_sec` | `300` | How long to wait for the job before giving up. |
+
+`InitializationMethods` lives in `q_alchemy.initialize`:
+
+- `AUTO` (default) runs several Tucker candidates (iterative and hierarchical,
+  as resources allow) at your fidelity budget and keeps the cheapest realized
+  circuit. Trivial inputs such as single-qubit and single-basis states take an
+  exact fast path.
+- `ITERATIVE_TUCKER` and `HIERARCHICAL_TUCKER` pin one Tucker variant.
+- `SWAP_PIVOT` is suited to very sparse states.
+- `BAA_LOW_RANK` uses the BAA low-rank initializer; it is limited to 12 qubits.
+
+#### Method-specific options (`extra_kwargs`)
+
+`extra_kwargs` is passed through to the chosen method. Pass a dict, and the SDK
+serializes it for you:
+
+```python
+from q_alchemy.initialize import OptParams, InitializationMethods
+
+opt_params = OptParams(
+    max_fidelity_loss=0.05,
+    initialization_method=InitializationMethods.ITERATIVE_TUCKER,
+    extra_kwargs={"max_iterations": 10, "factors_size": 4},
+)
+```
+
+> ⚠️ **Options are validated per method.** A key that the chosen method does
+> not accept fails the job with `Could not build the initialization circuit: ...`
+> instead of being silently ignored. In particular, the iterative-Tucker keys
+> below are **not** valid under `AUTO`. Pin the method to use them.
+
+| Method | Accepted `extra_kwargs` keys |
+|---|---|
+| `AUTO` | `cost_function` (`"cx_then_depth"` default, `"depth_then_cx"`, `"two_qubit_then_depth"`, `"cx+depth"`, `"cx"`, `"depth"`), `basis_gates` (gate set used to *compare* candidates, default `["u", "cx"]`), `transpile_optimization_level` (1), `seed_transpiler` (0), `dominant_basis_fast_path` (`True`), `fidelity_tolerance`, `geometric_entanglement`, `check_normalization` (`True`) |
+| `ITERATIVE_TUCKER` | `max_iterations` (≤ 0 picks one from the qubit count), `factors_size` (0 = automatic), `max_stepup` (0), `fallback` (`True`), `perturbation` (`None`), `geometric_entanglement` (0.0), `check_normalization` (`True`), `barriers` (`False`; debugging only, hurts transpilation) |
+| `HIERARCHICAL_TUCKER` | `geometric_entanglement`, `check_normalization` |
+| `SWAP_PIVOT` | `aux` |
+| `BAA_LOW_RANK` | `strategy` (`"greedy"`), `use_low_rank` (`True`), `max_combination_size`, `iso_scheme`, `unitary_scheme` |
+
+Two interactions worth knowing:
+
+- **Set the fidelity with `max_fidelity_loss` on `OptParams`, not in
+  `extra_kwargs`.** Every method accepts `max_fidelity_loss` in `extra_kwargs`
+  too, but if you put it there it silently overrides the top-level value.
+- **Under `AUTO`, `basis_gates` on `OptParams` only affects the final
+  transpilation.** Candidates are compared on `u`/`cx` cost unless you also pass
+  `extra_kwargs={"basis_gates": [...]}`.
+
 ### Verifying preparation circuits with the sparse simulator
 
 Q-Alchemy also hosts a **sparse state-vector simulator** so you can verify that a
@@ -300,6 +368,14 @@ numbers, or roughly 17 TB. **A dense export is impossible in that regime; a
 sparse one is a few hundred kilobytes.** Standard Qiskit backends offer no
 equivalent.
 
+That only helps if the state *is* sparse, and nothing forces it to be. By
+default the simulator keeps every amplitude above `1e-10`, so the result is
+exact, but a circuit that populates most of its basis states needs as much
+memory as the dense form and can exhaust the simulator. Pass `max_nnz=N` (to
+`backend.run` or `SparseSimulator.sparse_statevector`) to cap it: after every
+gate only the `N` largest amplitudes are kept and renormalised. The result is
+then approximate, and nothing in it marks that it was truncated.
+
 Ask for both together and you pay for one simulation:
 
 ```python
@@ -334,11 +410,6 @@ def circuit():
     qml.CNOT([0, 1])
     return qml.counts()
 ```
-
-### Developer UI
-
-You can play around with this as you please and check out the [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
-for more info!
 
 ## Contributions
 
