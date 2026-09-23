@@ -1,12 +1,16 @@
 import unittest
 from cmath import polar
+from unittest.mock import patch
 
 import numpy as np
 from qiskit import qasm2, qasm3
 from qiskit.quantum_info import Statevector
 
 from qiskit_addon_utils.slicing import slice_by_barriers
-from q_alchemy.initialize import OptParams, q_alchemy_as_qasm_parallel_states, InitializationMethods, q_alchemy_as_qasm
+from pinexq.client.core.polling import PollingException
+from pinexq.client.job_management import Job
+from q_alchemy.initialize import OptParams, q_alchemy_as_qasm_parallel_states, InitializationMethods, q_alchemy_as_qasm, \
+    create_client
 
 from dotenv import load_dotenv
 
@@ -88,6 +92,40 @@ class InitializeTestCase(unittest.TestCase):
             sv_layer = Statevector(layered_circuit)
             print(
                 f"layers {first_layer}-{len(layers) - 1}: {polar(np.vdot(state_vector, sv_layer))}")
+
+    def test_batch_leaves_no_job_or_upload_behind(self):
+        # A batch always uploads its states, whatever the qubit count. With remove_data
+        # the job and that upload must both be gone afterwards -- also when the job
+        # fails, here on an option AUTO rejects.
+        rng = np.random.default_rng()
+        states = [rng.normal(size=16) + 1j * rng.normal(size=16) for _ in range(3)]
+        states = [s / np.linalg.norm(s) for s in states]
+
+        for failing in (False, True):
+            with self.subTest(failing=failing):
+                seen = {}
+                original = Job.delete_with_associated
+
+                def record(job, **kwargs):
+                    job.refresh()
+                    seen["urls"] = [job.self_link().get_url()] + [
+                        wd.self_link.get_url()
+                        for slot in job.job_hco.input_dataslots for wd in slot.selected_workdatas
+                    ]
+                    return original(job, **kwargs)
+
+                opt_params = OptParams(extra_kwargs={"max_iterations": 3} if failing else {})
+                with patch.object(Job, "delete_with_associated", record):
+                    if failing:
+                        with self.assertRaises(PollingException):
+                            q_alchemy_as_qasm_parallel_states(states, opt_params=opt_params)
+                    else:
+                        q_alchemy_as_qasm_parallel_states(states, opt_params=opt_params)
+
+                self.assertEqual(len(seen["urls"]), 2)  # the job and its one upload
+                client = create_client(opt_params)
+                for url in seen["urls"]:
+                    self.assertEqual(client.get(str(url)).status_code, 404, url)
 
 if __name__ == '__main__':
     unittest.main()

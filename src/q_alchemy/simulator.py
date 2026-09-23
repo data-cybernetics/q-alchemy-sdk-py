@@ -60,7 +60,7 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
-from q_alchemy.initialize import create_client, find_processing_step
+from q_alchemy.initialize import create_client, delete_job_with_data, find_processing_step
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
@@ -509,14 +509,7 @@ class SparseSimulator:
             return self._download_return(job, _OUTPUT_ALIAS[capability])
         finally:
             if self.params.remove_data:
-                # Leave input workdata alone: an uploaded circuit is a pinexq
-                # "Client Upload", protected by data-lineage and not deletable
-                # here (attempting it only warns). Only the job + its outputs go.
-                job.delete_with_associated(
-                    delete_subjobs_with_data=True,
-                    delete_input_workdata=False,
-                    delete_output_workdata=True,
-                )
+                delete_job_with_data(job)
 
     def _prepare_input(
         self, circuit: Circuit, input_form: InputForm

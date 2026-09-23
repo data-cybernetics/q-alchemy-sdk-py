@@ -1,3 +1,4 @@
+import logging
 import time
 import base64
 import json
@@ -32,6 +33,8 @@ from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16
+
+LOG = logging.getLogger(__name__)
 
 class InitializationMethods(StrEnum):
     AUTO = "auto"
@@ -383,14 +386,72 @@ def extract_result(job: Job):
             raise IOError("Unknown return value.")
 
 
-def clean_up_job(job: Job, opt_params: OptParams, num_qubits: int) -> None:
-    # Clean-up now.
+def delete_job_with_data(job: Job) -> None:
+    """Delete the job, its output WorkData and its uploaded input WorkData.
+
+    Data lineage fixes the order: output WorkData must go before the job that
+    produced it, and input WorkData only once no job uses it. An upload is also
+    not deletable until it has been marked so, and the platform only offers
+    AllowDeletion once nothing uses it -- i.e. after the job is gone. So
+    delete_with_associated handles the outputs and the job, and the inputs are
+    marked and deleted afterwards.
+
+    AllowDeletion is not idempotent, so it is only sent while the input is not
+    deletable yet. An input another job still uses (state uploads are shared by
+    hash) is left for that job's clean-up.
+    """
+    job.refresh()
+    inputs = [wd.self_link for slot in job.job_hco.input_dataslots for wd in slot.selected_workdatas]
+    job.delete_with_associated(
+        delete_subjobs_with_data=True,
+        delete_input_workdata=False,
+        delete_output_workdata=True,
+    )
+    for link in inputs:
+        try:
+            wd = link.navigate()
+            if not wd.is_deletable:
+                if not wd.allow_deletion_action.is_available():
+                    LOG.info("Input WorkData %s is still in use; leaving it.", link.get_url())
+                    continue
+                wd.allow_deletion_action.execute()
+                wd = link.navigate()
+            if wd.delete_action.is_available():
+                wd.delete_action.execute()
+            else:
+                LOG.info("Input WorkData %s is still in use; leaving it.", link.get_url())
+        except Exception:
+            # Concurrent calls sharing an upload can race on AllowDeletion or the delete.
+            LOG.warning("Could not delete input WorkData %s.", link.get_url(), exc_info=True)
+
+
+def clean_up_job(job: Job, opt_params: OptParams) -> None:
     if opt_params.remove_data:
-        job.delete_with_associated(
-            delete_subjobs_with_data=True,
-            delete_input_workdata=num_qubits > USE_INLINE_STATE_NUM_QUBITS,
-            delete_output_workdata=True,
+        delete_job_with_data(job)
+
+
+def run_job(job: Job, opt_params: OptParams, timeout_s: float):
+    """Wait for the job, extract its result, and clean up whether or not it succeeded.
+
+    A failed job (e.g. an option the chosen method rejects) must not leak the job
+    and its uploaded state when remove_data is set. On that path a clean-up error
+    is only logged, so it cannot mask the reason the job failed.
+    """
+    try:
+        job.wait_for_state(
+            state=JobStates.completed,
+            polling_interval_s=0.25,
+            timeout_s=timeout_s
         )
+        result = extract_result(job)
+    except BaseException:
+        try:
+            clean_up_job(job, opt_params)
+        except Exception:
+            LOG.warning("Could not clean up the failed Q-Alchemy job.", exc_info=True)
+        raise
+    clean_up_job(job, opt_params)
+    return result
 
 
 def q_alchemy_as_qasm(
@@ -435,14 +496,7 @@ def q_alchemy_as_qasm(
         statevector_data=statevector_data
     )
 
-    job.wait_for_state(
-        state=JobStates.completed,
-        polling_interval_s=0.250,
-        timeout_s=job_timeout
-    )
-
-    result_summary, qasm = extract_result(job)
-    clean_up_job(job, opt_params, num_qubits)
+    result_summary, qasm = run_job(job, opt_params, job_timeout)
 
     if return_summary:
         return qasm, result_summary
@@ -522,14 +576,7 @@ def q_alchemy_as_qasm_parallel_states(
         num_states=num_states
     )
 
-    job.wait_for_state(
-        state=JobStates.completed,
-        polling_interval_s=0.25,
-        timeout_s=job_timeout
-    )
-
-    result_summary_list, qasm_list = extract_result(job)
-    clean_up_job(job, opt_params, num_qubits)
+    result_summary_list, qasm_list = run_job(job, opt_params, job_timeout)
 
     if return_summary:
         return qasm_list, result_summary_list
