@@ -148,5 +148,5 @@ section of the README.
 
 - [`examples/simulator_vs_initializer.ipynb`](../examples/simulator_vs_initializer.ipynb)
   — the full prepare → simulate → verify notebook with plots.
-- The [Hypermedia-Test-UI](https://hypermedia-ui-demo.q-alchemy.com/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
+- The [Hypermedia-Test-UI](https://hypermedia-ui.dev.pinexq.net/hui?apiPath=https%3A%2F%2Fjobs.api.q-alchemy.com%2Fapi%2FEntryPoint)
   to explore the API directly.
