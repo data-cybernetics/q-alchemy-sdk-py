@@ -33,3 +33,4 @@ Notes:
 - The integration tests are *live-service* tests requiring `Q_ALCHEMY_API_KEY`
   and are intentionally not part of the publish workflow — run them before
   merging release PRs.
+- PRs run `package-check.yaml`, a keyless build-and-test of the wheel; the live tests only run in the manual pass above.
