@@ -49,10 +49,13 @@ class OptParams:
     remove_data: bool = field(default=True)
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
-    api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
+    api_key: str | None = field(
+        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+        repr=False,
+    )
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
-    added_headers: Dict[str, str] = field(default_factory=dict)
+    added_headers: Dict[str, str] = field(default_factory=dict, repr=False)
     # Never sent to the service; kept so existing callers passing them do not break.
     # BAA_LOW_RANK takes its schemes through extra_kwargs as iso_scheme/unitary_scheme.
     isometry_scheme: str = field(default="ccd")
@@ -74,6 +77,12 @@ class OptParams:
 
 
 def create_client(opt_params: OptParams):
+    if not opt_params.api_key:
+        raise ValueError(
+            "A Q-Alchemy API key is required. Set Q_ALCHEMY_API_KEY or "
+            "PINEXQ_API_KEY, or pass api_key=... in OptParams."
+        )
+
     headers = {"x-api-key": opt_params.api_key}
     headers.update(opt_params.added_headers)
 
@@ -499,8 +508,22 @@ def q_alchemy_as_qasm(
 ) -> str | Tuple[str, dict]:
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm(state_vector, opt_params, client, return_summary)
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
+
+def _q_alchemy_as_qasm(
+        state_vector: List[complex] | np.ndarray | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> str | Tuple[str, dict]:
     # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
     data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
     data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
@@ -576,8 +599,24 @@ def q_alchemy_as_qasm_parallel_states(
     """
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm_parallel_states(
+            state_vector, opt_params, client, return_summary
+        )
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
+
+def _q_alchemy_as_qasm_parallel_states(
+        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> list[str] | tuple[list[str], list[dict]]:
     # cast/reshape state_vector into an (m x 2**n) coo_matrix, where m is the number of states
     if sparse.issparse(state_vector): # state_vector is a sparse matrix/array, and thus 2d.
         num_states = state_vector.shape[0]
