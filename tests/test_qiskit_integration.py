@@ -1,4 +1,5 @@
 import math
+import os
 import random
 import unittest
 from pathlib import Path
@@ -19,6 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+@unittest.skipUnless(os.getenv("Q_ALCHEMY_API_KEY"), "no Q_ALCHEMY_API_KEY: skipping live Qiskit tests")
 class TestQiskitIntegration(unittest.TestCase):
 
     def setUp(self):

@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import unittest
 from cmath import polar
 from unittest.mock import patch
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env") # the 'assert' was causing the import to fail during test discovery.
 
+@unittest.skipUnless(os.getenv("Q_ALCHEMY_API_KEY"), "no Q_ALCHEMY_API_KEY: skipping live state preparation tests")
 class InitializeTestCase(unittest.TestCase):
     def test_batch(self):
         n_qubits = 8

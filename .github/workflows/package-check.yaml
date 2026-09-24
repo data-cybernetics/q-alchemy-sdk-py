@@ -1,14 +1,15 @@
 name: Package check
 
-# Offline check that the package builds and imports as it would from PyPI.
-# No secrets and no calls to the Q-Alchemy API: state preparation and the
-# simulator run on PineXQ, so the SDK never needs the simulator engine
-# installed. It can't catch anything only the live service would reject.
+# Offline check that the package builds, imports and passes its offline tests
+# as it would from PyPI. No secrets and no calls to the Q-Alchemy API: state
+# preparation and the simulator run on PineXQ, so the SDK never needs the
+# simulator engine installed. It can't catch anything only the live service
+# would reject.
 #
 #   build:   sdist + wheel, lints the wheel contents and the PyPI README
 #   install: the built wheel with all extras in a clean venv, on the lowest
-#            and highest supported Python (requires-python), then imports
-#            every q_alchemy module
+#            and highest supported Python (requires-python); imports every
+#            q_alchemy module, then runs the tests that need no API key
 
 on:
   pull_request:
@@ -31,7 +32,7 @@ jobs:
         uses: hynek/build-and-inspect-python-package@v3
 
   install:
-    name: Install and import (Python ${{ matrix.python }})
+    name: Install and test (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
     needs: build
     strategy:
@@ -39,6 +40,9 @@ jobs:
       matrix:
         python: ["3.11", "3.14"]
     steps:
+      # Checked out for tests/ only: src/ never lands on sys.path (src layout),
+      # so every step below imports the installed wheel.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: ${{ needs.build.outputs.artifact-name }}
@@ -52,17 +56,22 @@ jobs:
           uv venv
           uv pip install "$(ls dist/*.whl)[qiskit,pennylane]"
           uv pip check
-      # No checkout in this job, so only the installed wheel is importable.
       - name: Import every module
-        env:
-          MPLBACKEND: Agg
         run: |
           .venv/bin/python - <<'EOF'
           import importlib, pkgutil
           import q_alchemy
 
+          assert "site-packages" in q_alchemy.__file__, q_alchemy.__file__
           mods = [m.name for m in pkgutil.walk_packages(q_alchemy.__path__, "q_alchemy.")]
           for m in mods:
               importlib.import_module(m)
           print(f"imported {len(mods)} modules from {q_alchemy.__file__}")
           EOF
+      # Without Q_ALCHEMY_API_KEY every live test skips itself, so this runs
+      # only the tests that need no service. test_data_upload is left out: it
+      # downloads MNIST from OpenML and needs scikit-learn.
+      - name: Run the offline tests
+        run: |
+          uv pip install pytest python-dotenv qiskit-addon-utils matplotlib
+          .venv/bin/python -m pytest -rs --ignore=tests/test_data_upload.py tests
