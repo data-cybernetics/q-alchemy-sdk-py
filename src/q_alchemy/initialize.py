@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 import httpx
 import numpy as np
+from packaging.version import Version, InvalidVersion
 from scipy import sparse
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -264,6 +265,14 @@ class TimeAwareCache:
 
 step_cache = TimeAwareCache(ttl_seconds=300)
 
+def _release_version(version: str) -> Optional[Version]:
+    """The version as a `Version` if it is a final release, else None (dev, pre-release or unparseable)."""
+    try:
+        parsed = Version(version)
+    except (InvalidVersion, TypeError):
+        return None
+    return None if parsed.is_prerelease else parsed
+
 def from_name(
     client: httpx.Client,
     step_name: str,
@@ -274,7 +283,8 @@ def from_name(
     Args:
         client: Create a ProcessingStep object from an existing name.
         step_name: Name of the registered processing step.
-        version: Version of the ProcessingStep to be created
+        version: Version of the ProcessingStep to be created. If None, the newest
+            released version is used; dev and pre-release versions are skipped.
 
     Returns:
         The newly created processing step as `ProcessingStep` object
@@ -296,8 +306,20 @@ def from_name(
             f"deployed recently, it may not have been set public yet."
         )
 
-    sorted(query_result.processing_steps, key=lambda x: x.version, reverse=True)
-    processing_step_hco = query_result.processing_steps[0]
+    if version is not None:
+        processing_step_hco = query_result.processing_steps[0]
+    else:
+        # The SDK is the public interface: never hand out dev or pre-release steps.
+        releases = [(v, step) for step in query_result.processing_steps
+                    if (v := _release_version(step.version)) is not None]
+        if not releases:
+            raise NameError(
+                f"Processing step '{step_name}' has no released version on {client.base_url}, "
+                f"only: {', '.join(str(step.version) for step in query_result.processing_steps)}."
+            )
+        # Newest first. Compare as versions, not strings: as text "0.10.0" sorts below "0.9.0".
+        newest_first = sorted(releases, key=lambda pair: pair[0], reverse=True)
+        processing_step_hco = newest_first[0][1]
 
     return ProcessingStep.from_hco(processing_step_hco)
 

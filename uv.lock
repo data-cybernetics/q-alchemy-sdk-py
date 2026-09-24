@@ -2827,6 +2827,7 @@ source = { editable = "." }
 dependencies = [
     { name = "httpx" },
     { name = "numpy" },
+    { name = "packaging" },
     { name = "pinexq-client" },
     { name = "pyarrow" },
     { name = "pydantic" },
@@ -2881,6 +2882,7 @@ requires-dist = [
     { name = "matplotlib", marker = "extra == 'examples'" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "openqasm3", extras = ["parser"], marker = "extra == 'pennylane'" },
+    { name = "packaging", specifier = ">=20" },
     { name = "pandas", marker = "extra == 'examples'" },
     { name = "pennylane", marker = "extra == 'examples'", specifier = ">=0.42.0" },
     { name = "pennylane", marker = "extra == 'pennylane'", specifier = ">=0.42.0" },
