@@ -52,30 +52,25 @@ def main() -> None:
         print("------------------")
         print(computation.format_summary())
 
-    circuit_payload = report.quantum_circuit_payload
-    if circuit_payload is not None:
-        print("\nQUANTUM CIRCUIT")
-        print("---------------")
-        try:
-            print(report.draw_quantum_circuit(output="text"))
-        except (RuntimeError, ValueError) as exc:
-            print(f"Circuit payload received, but drawing is unavailable: {exc}")
-            print("circuit role:", circuit_payload.get("role"))
-            print("circuit format:", circuit_payload.get("format"))
+    try:
+        circuit = report.quantum_circuit
+    except (RuntimeError, ValueError) as exc:
+        print(f"\nQuantum circuit is unavailable: {exc}")
+    else:
+        if circuit is not None:
+            print("\nQUANTUM CIRCUIT")
+            print("---------------")
+            print(circuit.draw(output="text"))
 
-    diagram_payload = report.experiment_diagram_payload
-    if diagram_payload is not None:
-        print("\nEXPERIMENT DIAGRAM")
-        print("------------------")
-        try:
-            print(report.draw(output="text"))
-        except RuntimeError as exc:
-            # The service always returns the renderer-neutral payload. Rendering
-            # is optional on the SDK side; preserve the payload information while
-            # also exposing the actual rendering/import error.
-            print(f"Diagram payload received, but rendering is unavailable: {exc}")
-            print("diagram kind:", diagram_payload.get("kind"))
-            print("schema version:", diagram_payload.get("schema_version"))
+    try:
+        diagram = report.experiment_diagram
+    except RuntimeError as exc:
+        print(f"\nExperiment diagram is unavailable: {exc}")
+    else:
+        if diagram is not None:
+            print("\nEXPERIMENT DIAGRAM")
+            print("------------------")
+            print(diagram.draw(output="text"))
 
 
 if __name__ == "__main__":

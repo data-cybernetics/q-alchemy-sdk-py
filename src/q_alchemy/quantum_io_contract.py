@@ -401,6 +401,7 @@ class BasisMeasurement:
 
 @dataclass(frozen=True)
 class MeasurementPlan:
+    observables: tuple[PauliObservable, ...] = ()
     training: tuple[PauliObservable, ...] = ()
     validation: tuple[PauliObservable, ...] = ()
     basis_measurements: tuple[BasisMeasurement, ...] = ()
@@ -412,7 +413,10 @@ class MeasurementPlan:
             raise ValueError(
                 "portable observable plans require both fitting and held-out observable sets"
             )
-        labels = [item.label for item in self.training + self.validation]
+        labels = [
+            item.label
+            for item in self.observables + self.training + self.validation
+        ]
         labels.extend(item.label for item in self.basis_measurements)
         if len(set(labels)) != len(labels):
             raise ValueError("measurement labels must be unique across the portable plan")
@@ -425,6 +429,7 @@ class MeasurementPlan:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "observables": [item.to_dict() for item in self.observables],
             "training": [item.to_dict() for item in self.training],
             "validation": [item.to_dict() for item in self.validation],
             "observable_plan_metadata": _validated_metadata(
@@ -438,6 +443,9 @@ class MeasurementPlan:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "MeasurementPlan":
         return cls(
+            observables=tuple(
+                PauliObservable.from_dict(item) for item in data.get("observables", ())
+            ),
             training=tuple(PauliObservable.from_dict(item) for item in data.get("training", ())),
             validation=tuple(
                 PauliObservable.from_dict(item) for item in data.get("validation", ())
@@ -473,7 +481,11 @@ class QuantumExperiment:
                 for qubit in self.evolution_qargs
             ):
                 raise ValueError("evolution_qargs contains an out-of-range qubit")
-        for observable in self.measurement_plan.training + self.measurement_plan.validation:
+        for observable in (
+            self.measurement_plan.observables
+            + self.measurement_plan.training
+            + self.measurement_plan.validation
+        ):
             if any(len(pauli) != self.target.num_qubits for pauli, _ in observable.terms):
                 raise ValueError(
                     f"observable {observable.label!r} width does not match target num_qubits"
@@ -1086,6 +1098,15 @@ class ExecutionResult:
 
 @dataclass(frozen=True)
 class PreparationPreflightSummary:
+    """Server-side preparation verification, independent of initializer estimates.
+
+    ``claim_contradicted`` is True when an exact simulation certifies a loss
+    above the estimate, False when that comparison passes, and None when no
+    certified comparison is available. Quantum I/O owns the tolerance and
+    exactness checks; the SDK preserves the verdict without recomputing it.
+    ``preparation_approximation_infidelity`` is the measured loss, and
+    ``preparation.claimed_fidelity_loss`` is the initializer's estimate.
+    """
     preparation: PreparationSummary
     simulation: SimulationSummary | None
     simulation_status: str
@@ -1094,11 +1115,15 @@ class PreparationPreflightSummary:
     observable_plan: ObservablePlanSummary | None
     generated_at: str
     warnings: tuple[str, ...] = ()
+    claim_contradicted: bool | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PreparationPreflightSummary":
         simulation = data.get("simulation")
         observable_plan = data.get("observable_plan")
+        claim_contradicted = data.get("claim_contradicted")
+        if claim_contradicted is not None and not isinstance(claim_contradicted, bool):
+            raise ValueError("claim_contradicted must be a boolean or null")
         return cls(
             preparation=PreparationSummary.from_dict(data["preparation"]),
             simulation=(
@@ -1124,6 +1149,7 @@ class PreparationPreflightSummary:
             ),
             generated_at=str(data["generated_at"]),
             warnings=tuple(str(item) for item in data.get("warnings", ())),
+            claim_contradicted=claim_contradicted,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -1138,6 +1164,7 @@ class PreparationPreflightSummary:
             ),
             "generated_at": self.generated_at,
             "warnings": list(self.warnings),
+            "claim_contradicted": self.claim_contradicted,
         }
 
 

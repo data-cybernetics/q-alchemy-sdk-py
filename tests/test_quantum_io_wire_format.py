@@ -17,6 +17,7 @@ from q_alchemy import (
     ExecutionPlan,
     ExperimentReport,
     MeasurementPlan,
+    PauliObservable,
     QuantumExperiment,
     Runtime,
     State,
@@ -66,6 +67,7 @@ class TestFrozenPayloads(unittest.TestCase):
         experiment = QuantumExperiment(
             target=State.dense([amplitude, 0.0, 0.0, amplitude]),
             measurement_plan=MeasurementPlan(
+                observables=(PauliObservable.pauli("ZI", "ZI"),),
                 basis_measurements=(BasisMeasurement("q0-q1", (0, 1)),),
             ),
         )
@@ -82,7 +84,11 @@ class TestFrozenPayloads(unittest.TestCase):
         self.assertEqual(
             sorted(payload["measurement_plan"]),
             ["basis_measurements", "metadata", "observable_plan_metadata",
-             "training", "validation"],
+             "observables", "training", "validation"],
+        )
+        self.assertEqual(
+            payload["measurement_plan"]["observables"],
+            [PauliObservable.pauli("ZI", "ZI").to_dict()],
         )
         self.assertEqual(QuantumExperiment.from_dict(payload), experiment)
 

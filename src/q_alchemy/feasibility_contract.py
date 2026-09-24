@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 import json
+from math import isfinite
+from numbers import Integral
 from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
     from .quantum_io_contract import ExperimentReport
     from q_alchemy.visualization import ExperimentDiagram
+    from qiskit import QuantumCircuit
 
 
 class Relation(str, Enum):
@@ -30,6 +34,8 @@ class Criterion:
     def __post_init__(self) -> None:
         if not self.metric:
             raise ValueError("criterion metric must not be empty")
+        if not isfinite(self.threshold):
+            raise ValueError("criterion threshold must be finite")
 
     @classmethod
     def at_most(cls, metric: str, threshold: float, *, label: str | None = None) -> "Criterion":
@@ -135,10 +141,14 @@ class RecommendedCompute(str, Enum):
 class FeasibilityPolicy:
     classical_first: bool = True
     quantum_execution: QuantumExecutionPolicy = QuantumExecutionPolicy.WHEN_NEEDED
-    allow_noisy_simulation: bool = True
     dense_memory_utilization_fraction: float = 0.80
 
     def __post_init__(self) -> None:
+        if self.classical_first is not True:
+            raise ValueError(
+                "classical_first=False is not supported; feasibility is always "
+                "classical-first. Use quantum_execution=COMPARE to run both paths."
+            )
         if not 0 < self.dense_memory_utilization_fraction <= 1:
             raise ValueError("dense_memory_utilization_fraction must be in (0, 1]")
 
@@ -146,7 +156,6 @@ class FeasibilityPolicy:
         return {
             "classical_first": self.classical_first,
             "quantum_execution": self.quantum_execution.value,
-            "allow_noisy_simulation": self.allow_noisy_simulation,
             "dense_memory_utilization_fraction": self.dense_memory_utilization_fraction,
         }
 
@@ -157,7 +166,6 @@ class FeasibilityPolicy:
             quantum_execution=QuantumExecutionPolicy(
                 str(data.get("quantum_execution", QuantumExecutionPolicy.WHEN_NEEDED.value))
             ),
-            allow_noisy_simulation=bool(data.get("allow_noisy_simulation", True)),
             dense_memory_utilization_fraction=float(
                 data.get("dense_memory_utilization_fraction", 0.80)
             ),
@@ -196,20 +204,77 @@ class ClassicalResources:
 
 
 @dataclass(frozen=True)
+class CircuitCompressionConfig:
+    """Exact compression settings for the complete logical experiment circuit."""
+
+    enabled: bool = True
+    options: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.enabled, bool):
+            raise ValueError("circuit_compression.enabled must be a bool")
+        if not isinstance(self.options, Mapping):
+            raise ValueError("circuit_compression.options must be a mapping")
+        normalized = dict(self.options)
+        if "equivalence" in normalized:
+            if normalized["equivalence"] != "reachable_subspace":
+                raise ValueError(
+                    "feasibility full-circuit compression requires "
+                    "equivalence='reachable_subspace'"
+                )
+            normalized.pop("equivalence")
+        if "collect_report" in normalized:
+            if normalized["collect_report"] is not True:
+                raise ValueError(
+                    "feasibility owns collect_report and requires it to be true"
+                )
+            normalized.pop("collect_report")
+        object.__setattr__(self, "options", normalized)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"enabled": self.enabled, "options": dict(self.options)}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "CircuitCompressionConfig":
+        if not isinstance(data, Mapping):
+            raise ValueError("circuit_compression must be an object")
+        return cls(
+            enabled=data.get("enabled", True),
+            options=data.get("options", {}),
+        )
+
+
+@dataclass(frozen=True)
 class EvidenceCollectionConfig:
+    """Portable acquisition controls for Feasibility >= 0.6.48.
+
+    Execution controls are separate from backend configuration. Retired sweep
+    keys in saved JSON are ignored, as they are by the service.
+    """
     provider: str = "ibm"
     backend: str | None = None
     least_busy: bool = False
+    backend_options: Mapping[str, Any] = field(default_factory=dict)
     shots: int = 4096
     preparation_options: Mapping[str, Any] = field(default_factory=dict)
     sparse_config: Mapping[str, Any] = field(default_factory=lambda: {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})
     qtucker_config: Mapping[str, Any] = field(default_factory=dict)
-    resource_sweep_scales: tuple[float, ...] = (1.0, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125)
-    attribution_noise_scales: tuple[float, ...] = (0.75, 0.5, 0.25, 0.125)
-    attribution_shot_multipliers: tuple[float, ...] = (2.0, 4.0, 8.0, 16.0)
-    attribution_dimensions: tuple[str, ...] = ("one-qubit-gate-error", "two-qubit-gate-error", "coherence", "readout-error", "shots")
+    circuit_compression: CircuitCompressionConfig = field(
+        default_factory=CircuitCompressionConfig
+    )
+    # Controls automatic QTucker reconstruction-observable generation when the
+    # feasibility service needs state-estimation evidence and the experiment did
+    # not supply an explicit estimator training plan.
+    qtucker_observable_config: Mapping[str, Any] = field(default_factory=dict)
+    execution_options: Mapping[str, Any] = field(
+        default_factory=lambda: {"transpile": True}
+    )
 
     def __post_init__(self) -> None:
+        if not isinstance(self.circuit_compression, CircuitCompressionConfig):
+            raise ValueError("circuit_compression must be a CircuitCompressionConfig")
+        if not isinstance(self.qtucker_observable_config, Mapping):
+            raise ValueError("qtucker_observable_config must be a mapping")
         if not isinstance(self.provider, str) or not self.provider.strip():
             raise ValueError("provider must be a non-empty string")
         if self.backend is not None and (
@@ -218,56 +283,57 @@ class EvidenceCollectionConfig:
             raise ValueError("backend must be a non-empty string when provided")
         if self.backend is not None and self.least_busy:
             raise ValueError("select at most one backend strategy: backend or least_busy")
-        if self.shots <= 0:
-            raise ValueError("shots must be positive")
-        _validate_decreasing_scales(
-            self.resource_sweep_scales,
-            allow_one=True,
-            name="resource_sweep_scales",
-        )
-        _validate_decreasing_scales(
-            self.attribution_noise_scales,
-            allow_one=False,
-            name="attribution_noise_scales",
-        )
-        previous = 1.0
-        for raw in self.attribution_shot_multipliers:
-            value = float(raw)
-            if value <= previous:
+        if not isinstance(self.execution_options, Mapping):
+            raise ValueError("execution_options must be a mapping")
+        backend_options = dict(self.backend_options)
+        execution_options = dict(self.execution_options)
+        # Normalize the legacy request form exactly as the core does. No
+        # backend objects are constructed by this lightweight client.
+        for key in ("transpile", "transpile_options", "estimator_options",
+                    "backend_run_options", "run_options"):
+            if key not in backend_options:
+                continue
+            value = backend_options.pop(key)
+            if key in execution_options and execution_options[key] != value:
                 raise ValueError(
-                    "attribution_shot_multipliers must be strictly increasing and > 1"
+                    f"conflicting Quantum I/O execution option {key!r} in "
+                    "backend_options and execution_options"
                 )
-            previous = value
-        allowed = {
-            "one-qubit-gate-error",
-            "two-qubit-gate-error",
-            "coherence",
-            "readout-error",
-            "shots",
-        }
-        if not self.attribution_dimensions:
-            raise ValueError("attribution_dimensions must not be empty")
-        if len(set(self.attribution_dimensions)) != len(self.attribution_dimensions):
-            raise ValueError("attribution_dimensions must be unique")
-        unknown = set(self.attribution_dimensions) - allowed
-        if unknown:
+            execution_options[key] = value
+        transpile = execution_options.get("transpile", False)
+        if not isinstance(transpile, bool):
+            raise ValueError("execution_options.transpile must be a boolean")
+        if execution_options.get("transpile_options") and not transpile:
+            raise ValueError("execution_options.transpile_options require transpile=True")
+        try:
+            json.dumps(backend_options, allow_nan=False)
+        except (TypeError, ValueError) as exc:
             raise ValueError(
-                f"unsupported attribution dimensions: {sorted(unknown)!r}"
-            )
+                "backend_options must be JSON-serializable; encode Qiskit Aer "
+                "NoiseModel values using the qiskit-aer-noise-model-v1 envelope"
+            ) from exc
+        try:
+            json.dumps(execution_options, allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("execution_options must be JSON-serializable") from exc
+        object.__setattr__(self, "backend_options", backend_options)
+        object.__setattr__(self, "execution_options", execution_options)
+        if isinstance(self.shots, bool) or not isinstance(self.shots, Integral) or self.shots <= 0:
+            raise ValueError("shots must be a positive integer")
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "provider": self.provider,
             "backend": self.backend,
             "least_busy": self.least_busy,
+            "backend_options": dict(self.backend_options),
             "shots": self.shots,
             "preparation_options": dict(self.preparation_options),
             "sparse_config": dict(self.sparse_config),
             "qtucker_config": dict(self.qtucker_config),
-            "resource_sweep_scales": list(self.resource_sweep_scales),
-            "attribution_noise_scales": list(self.attribution_noise_scales),
-            "attribution_shot_multipliers": list(self.attribution_shot_multipliers),
-            "attribution_dimensions": list(self.attribution_dimensions),
+            "qtucker_observable_config": dict(self.qtucker_observable_config),
+            "execution_options": dict(self.execution_options),
+            "circuit_compression": self.circuit_compression.to_dict(),
         }
 
     @classmethod
@@ -276,38 +342,24 @@ class EvidenceCollectionConfig:
             provider=str(data.get("provider", "ibm")),
             backend=(str(data["backend"]) if data.get("backend") is not None else None),
             least_busy=bool(data.get("least_busy", False)),
-            shots=int(data.get("shots", 4096)),
+            backend_options=dict(data.get("backend_options", {})),
+            shots=data.get("shots", 4096),
             preparation_options=dict(data.get("preparation_options", {})),
             sparse_config=dict(data.get("sparse_config", {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})),
             qtucker_config=dict(data.get("qtucker_config", {})),
-            resource_sweep_scales=tuple(float(v) for v in data.get("resource_sweep_scales", (1.0, 0.75, 0.5, 0.25, 0.125, 0.0625, 0.03125))),
-            attribution_noise_scales=tuple(float(v) for v in data.get("attribution_noise_scales", (0.75, 0.5, 0.25, 0.125))),
-            attribution_shot_multipliers=tuple(float(v) for v in data.get("attribution_shot_multipliers", (2.0, 4.0, 8.0, 16.0))),
-            attribution_dimensions=tuple(str(v) for v in data.get("attribution_dimensions", ("one-qubit-gate-error", "two-qubit-gate-error", "coherence", "readout-error", "shots"))),
+            circuit_compression=CircuitCompressionConfig.from_dict(
+                data.get("circuit_compression", {})
+            ),
+            qtucker_observable_config=dict(data.get("qtucker_observable_config", {})),
+            execution_options=dict(data.get("execution_options", {"transpile": True})),
         )
-
-
-def _validate_decreasing_scales(
-    values: tuple[float, ...], *, allow_one: bool, name: str
-) -> None:
-    if not values:
-        raise ValueError(f"{name} must not be empty")
-    previous: float | None = None
-    for raw in values:
-        value = float(raw)
-        if value <= 0 or value > 1 or (not allow_one and value == 1):
-            interval = "(0, 1]" if allow_one else "(0, 1)"
-            raise ValueError(f"{name} values must be in {interval}")
-        if previous is not None and value >= previous:
-            raise ValueError(f"{name} must be strictly decreasing")
-        previous = value
 
 
 @dataclass(frozen=True)
 class FeasibilityRequest:
     criteria: SolutionCriteria
-    policy: FeasibilityPolicy = FeasibilityPolicy()
-    evidence_collection: EvidenceCollectionConfig = EvidenceCollectionConfig()
+    policy: FeasibilityPolicy = field(default_factory=FeasibilityPolicy)
+    evidence_collection: EvidenceCollectionConfig = field(default_factory=EvidenceCollectionConfig)
     classical_resources: ClassicalResources | None = None
     max_steps: int = 16
     metadata: Mapping[str, Any] = field(default_factory=dict)
@@ -318,8 +370,8 @@ class FeasibilityRequest:
             raise ValueError(
                 f"unsupported feasibility request schema_version={self.schema_version}"
             )
-        if self.max_steps <= 0:
-            raise ValueError("max_steps must be positive")
+        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, Integral) or self.max_steps <= 0:
+            raise ValueError("max_steps must be a positive integer")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -343,7 +395,7 @@ class FeasibilityRequest:
             policy=FeasibilityPolicy.from_dict(data.get("policy", {})),
             evidence_collection=EvidenceCollectionConfig.from_dict(data.get("evidence_collection", {})),
             classical_resources=ClassicalResources.from_dict(resources) if resources is not None else None,
-            max_steps=int(data.get("max_steps", 16)),
+            max_steps=data.get("max_steps", 16),
             metadata=dict(data.get("metadata", {})),
         )
 
@@ -372,10 +424,11 @@ _FEASIBILITY_CRITERION_LABELS = {
 _CLASSICAL_AMPLITUDE_CAPPING_OCCURRED = (
     "classical.approximation.amplitude_capping_occurred"
 )
-_DENSE_STATEVECTOR_MIN_MEMORY_BYTES = (
-    "classical.dense_statevector.minimum_memory_bytes"
+_CLASSICAL_SIMULATOR_BUDGET_BYTES = "classical.resources.simulator_budget_bytes"
+_CLASSICAL_ESTIMATED_PEAK_MEMORY_BYTES = (
+    "classical.resources.estimated_peak_memory_bytes"
 )
-_QPU_NOISY_SIMULATION_ATTEMPTED = "quantum.model.execution_attempted"
+_QPU_NOISY_SIMULATION_COMPLETED = "quantum.model.execution_completed"
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -413,6 +466,8 @@ def _format_criteria_lines(
     evaluation: Any,
     *,
     heading: str = "Quality criteria",
+    include_all_missing: bool = False,
+    qualify_reference: bool = False,
 ) -> list[str]:
     evaluation_data = _mapping(evaluation)
     results = _sequence_of_mappings(evaluation_data.get("results"))
@@ -422,7 +477,7 @@ def _format_criteria_lines(
     # Match q-alchemy-feasibility: suppress an all-missing table when a branch
     # was decided entirely from static/resource evidence. Once one criterion has
     # evidence, keep missing companion criteria visible.
-    if not any(isinstance(result.get("evidence"), Mapping) for result in results):
+    if not include_all_missing and not any(isinstance(result.get("evidence"), Mapping) for result in results):
         return []
 
     lines = [f"  {heading}:"]
@@ -465,6 +520,9 @@ def _format_criteria_lines(
         lines.append(
             f"    {label}: {rendered_value} {relation} "
             f"{threshold}{unit} [{status_text}]"
+            + (" (relative to the simulated circuit reference)"
+               if qualify_reference and evidence.get("source") == "quantum-io:exact-reference"
+               else "")
         )
     return lines
 
@@ -548,10 +606,18 @@ def _classical_infeasibility_reason(
 def _quantum_infeasibility_reason(
     assessment: Mapping[str, Any],
 ) -> str | None:
-    if str(assessment.get("status")) != "infeasible":
+    status = str(assessment.get("status"))
+    basis = str(assessment.get("assessment_basis") or "")
+    if (
+        status == "unknown"
+        and str(assessment.get("inconclusive_kind") or "") == "execution"
+        and basis == "execution-unavailable"
+    ):
+        notes = _notes(assessment)
+        return notes[-1] if notes else "The configured quantum target is unavailable."
+    if status != "infeasible":
         return None
 
-    basis = str(assessment.get("assessment_basis") or "")
     if basis.startswith("measured-qpu"):
         reason = _quality_failure_reason(
             assessment.get("criteria"),
@@ -559,10 +625,14 @@ def _quantum_infeasibility_reason(
         )
         if reason is not None:
             return reason
-    if basis.startswith("calibrated-model"):
+    if basis.startswith("calibrated-model") or basis == "simulated-quantum":
         reason = _quality_failure_reason(
             assessment.get("model_criteria"),
-            source="Backend-calibrated noisy simulation",
+            source=(
+                "Configured quantum simulator"
+                if basis == "simulated-quantum"
+                else "Backend-calibrated noisy simulation"
+            ),
         )
         if reason is not None:
             return reason
@@ -588,10 +658,14 @@ def _quantum_quality_reason(assessment: Mapping[str, Any]) -> str | None:
                 assessment.get("criteria"),
                 source="Measured QPU evidence",
             )
-        if basis.startswith("calibrated-model"):
+        if basis.startswith("calibrated-model") or basis == "simulated-quantum":
             return _quality_failure_reason(
                 assessment.get("model_criteria"),
-                source="Backend-calibrated noisy simulation",
+                source=(
+                    "Configured quantum simulator"
+                    if basis == "simulated-quantum"
+                    else "Backend-calibrated noisy simulation"
+                ),
             )
 
     if quality_status != "inconclusive":
@@ -599,7 +673,7 @@ def _quantum_quality_reason(assessment: Mapping[str, Any]) -> str | None:
 
     evaluation = (
         assessment.get("model_criteria")
-        if basis.startswith("calibrated-model")
+        if basis.startswith("calibrated-model") or basis == "simulated-quantum"
         else assessment.get("criteria")
     )
     for result in _sequence_of_mappings(_mapping(evaluation).get("results")):
@@ -611,6 +685,32 @@ def _quantum_quality_reason(assessment: Mapping[str, Any]) -> str | None:
         reason = _mapping(evidence.get("metadata")).get("qualification_reason")
         if reason:
             return str(reason)
+    missing = [
+        result for result in _sequence_of_mappings(_mapping(evaluation).get("results"))
+        if _mapping(result.get("criterion")).get("required", True)
+        and result.get("status") == "missing"
+    ]
+    if missing:
+        labels = [
+            _criterion_label(str(_mapping(result.get("criterion")).get("metric", "")),
+                             _mapping(result.get("criterion")).get("label"))
+            for result in missing
+        ]
+        subject = (
+            "The configured quantum simulator"
+            if basis.startswith("calibrated-model") or basis == "simulated-quantum"
+            else "The QPU execution"
+        )
+        message = (
+            f"{subject} completed, but the required {labels[0]} metric is unavailable"
+            if len(labels) == 1 else
+            f"{subject} completed, but {len(labels)} required quality metrics are "
+            f"unavailable: {', '.join(labels)}"
+        )
+        metrics = {_mapping(result.get("criterion")).get("metric") for result in missing}
+        if metrics == {"quality.observable_rmse"}:
+            return message + " because no independent reference observable values were available."
+        return message + "."
     for note in reversed(_notes(assessment)):
         lowered = note.lower()
         if "cannot conclusively" in lowered or "did not produce every metric" in lowered:
@@ -632,23 +732,81 @@ def _latest_evidence(
     ]
     if not records:
         return None
-    if all(record.get("generated_at") is not None for record in records):
-        return max(
-            enumerate(records),
-            key=lambda pair: (str(pair[1].get("generated_at")), pair[0]),
-        )[1]
-    return records[-1]
+    # Compare instants, not ISO strings: offsets/precision may differ. Missing,
+    # malformed, or naive timestamps use report insertion order, matching core.
+    instants: list[datetime] = []
+    for record in records:
+        try:
+            instant = datetime.fromisoformat(str(record.get("generated_at")))
+            if instant.utcoffset() is None:
+                return records[-1]
+            instants.append(instant.astimezone(timezone.utc))
+        except (ValueError, TypeError, OverflowError):
+            return records[-1]
+    return records[max(range(len(records)), key=lambda i: (instants[i], i))]
+
+
+def _preparation_claim_warning(evidence: Mapping[str, Any]) -> str | None:
+    """Render Quantum I/O's verdict; never infer it or simulate in the SDK.
+
+    True means the verified loss contradicted the estimate, False means the
+    comparison passed, and None/missing means no certified comparison. This
+    diagnostic does not change resource feasibility or measure target energy.
+    """
+    record = _latest_evidence(evidence, "preparation.claim_contradicted", scopes=("classical",))
+    if record is None or record.get("value") is not True:
+        return None
+    metadata = _mapping(record.get("metadata"))
+
+    def number(key: str) -> str:
+        value = _numeric_value(metadata.get(key))
+        return f"{value:.12g}" if value is not None and isfinite(value) else "unavailable"
+
+    return (
+        "Preparation fidelity discrepancy: Quantum I/O reports that measured "
+        f"loss {number('preparation_approximation_infidelity')} exceeds the "
+        f"initializer's estimated loss {number('claimed_fidelity_loss')} "
+        f"(target-to-prepared fidelity {number('target_to_prepared_fidelity')}). "
+        "The simulated circuit reference includes the preparation circuit; "
+        "reference-relative quality does not establish accuracy against the intended target."
+    )
 
 
 def _format_classical_resource_criteria_lines(
     assessment: Mapping[str, Any],
     evidence: Mapping[str, Any],
 ) -> list[str]:
+    # Keep this formatter aligned with q-alchemy-feasibility 0.6.48. The SDK
+    # intentionally keeps a dependency-free copy so formatting stays local.
     criteria: list[str] = []
     available_resources = _mapping(assessment.get("available_resources"))
     available = available_resources.get("available_memory_bytes")
     requirement_value = assessment.get("required_resources")
     requirement = _mapping(requirement_value) if requirement_value is not None else None
+    criteria.append(f"Classical RAM limit: {_format_bytes(available)}")
+
+    selected_method = assessment.get("selected_method")
+    telemetry_records = [
+        record
+        for record in _sequence_of_mappings(evidence.get("records"))
+        if str(record.get("scope", "general")) == "classical"
+        and (selected_method is None or record.get("source") == selected_method)
+    ]
+    telemetry = {"records": telemetry_records}
+    for metric, label in (
+        (
+            _CLASSICAL_SIMULATOR_BUDGET_BYTES,
+            "Detected simulator host budget",
+        ),
+        (
+            _CLASSICAL_ESTIMATED_PEAK_MEMORY_BYTES,
+            "Sparse memory estimate at amplitude limit",
+        ),
+    ):
+        record = _latest_evidence(telemetry, metric, scopes=("classical",))
+        value = _numeric_value(record.get("value")) if record is not None else None
+        if value is not None and value >= 0:
+            criteria.append(f"{label}: {_format_bytes(int(value))}")
 
     capping = _latest_evidence(
         evidence,
@@ -682,22 +840,21 @@ def _format_classical_resource_criteria_lines(
             criteria.append(
                 "Sparse simulation memory: configured allocation exceeded [VIOLATED]"
             )
-
-    dense = _latest_evidence(
-        evidence,
-        _DENSE_STATEVECTOR_MIN_MEMORY_BYTES,
-        scopes=("classical",),
-    )
-    dense_value = _numeric_value(dense.get("value")) if dense is not None else None
-    if dense_value is not None:
-        dense_bytes = int(dense_value)
-        lower_bound = " (lower bound)" if bool(dense.get("lower_bound", False)) else ""
-        if available is not None and dense_bytes > int(available):
-            criteria.append(
-                "Dense statevector memory: "
-                f"{_format_bytes(dense_bytes)} minimum{lower_bound} > "
-                f"{_format_bytes(available)} available [VIOLATED]"
-            )
+    elif requirement is not None and requirement.get("memory_bytes") is not None:
+        needed = int(requirement["memory_bytes"])
+        is_lower_bound = bool(requirement.get("memory_is_lower_bound", False))
+        bound = " (lower bound)" if is_lower_bound else ""
+        if available is None:
+            comparison = "available RAM unknown [INCONCLUSIVE]"
+        elif needed > int(available):
+            comparison = f"> {_format_bytes(available)} available [VIOLATED]"
+        elif is_lower_bound:
+            comparison = f"<= {_format_bytes(available)} available [INCONCLUSIVE]"
+        else:
+            comparison = f"<= {_format_bytes(available)} available [SATISFIED]"
+        criteria.append(
+            f"Classical memory requirement: {_format_bytes(needed)}{bound}; {comparison}"
+        )
 
     if requirement is not None:
         available_cpu = available_resources.get("cpu_cores")
@@ -735,10 +892,7 @@ def _format_classical_resource_criteria_lines(
                 f"{_format_bytes(additional_gpu)} additional required [VIOLATED]"
             )
 
-    if not criteria:
-        return []
     return ["  Resource criteria:"] + [f"    {item}" for item in criteria]
-
 
 def _format_quantum_resource_criteria_lines(
     assessment: Mapping[str, Any],
@@ -767,12 +921,10 @@ def _format_quantum_resource_criteria_lines(
                 f"Backend operational: {'yes' if bool(operational) else 'no'} [{status}]"
             )
 
-        pairs = (
+        for required_key, available_key, label in (
             ("max_one_qubit_error", "median_one_qubit_error", "Median 1Q error"),
             ("max_two_qubit_error", "median_two_qubit_error", "Median 2Q error"),
-            ("max_readout_error", "median_readout_error", "Median readout error"),
-        )
-        for required_key, available_key, label in pairs:
+        ):
             required_value = requirement.get(required_key)
             available_value = resources.get(available_key)
             if required_value is None or available_value is None:
@@ -796,6 +948,16 @@ def _format_quantum_resource_criteria_lines(
             criteria.append(
                 f"{label}: {float(available_value):.4g} s >= "
                 f"{float(required_value):.4g} s "
+                f"[{'SATISFIED' if satisfied else 'VIOLATED'}]"
+            )
+
+        required_readout = requirement.get("max_readout_error")
+        available_readout = resources.get("median_readout_error")
+        if required_readout is not None and available_readout is not None:
+            satisfied = float(available_readout) <= float(required_readout)
+            criteria.append(
+                f"Median readout error: {float(available_readout):.4g} <= "
+                f"{float(required_readout):.4g} "
                 f"[{'SATISFIED' if satisfied else 'VIOLATED'}]"
             )
 
@@ -851,6 +1013,11 @@ class FeasibilityReport:
         return value if isinstance(value, Mapping) else {}
 
     @property
+    def circuit_compression(self) -> Mapping[str, Any] | None:
+        value = self.raw.get("circuit_compression")
+        return value if isinstance(value, Mapping) else None
+
+    @property
     def execution_trace(self) -> Mapping[str, Any] | None:
         value = self.raw.get("execution_trace")
         return value if isinstance(value, Mapping) else None
@@ -880,33 +1047,26 @@ class FeasibilityReport:
         return ExperimentReport.from_dict(payload)
 
     @property
-    def quantum_circuit_payload(self) -> Mapping[str, Any] | None:
-        """Portable logical experiment circuit returned by feasibility core."""
-
-        value = self.raw.get("quantum_circuit")
-        return value if isinstance(value, Mapping) else None
-
-    @property
-    def quantum_circuit(self) -> Any | None:
+    def quantum_circuit(self) -> "QuantumCircuit | None":
         """Return the produced logical experiment circuit as a Qiskit circuit.
 
         The service transports the exact logical ``P + U`` circuit as QASM 3.
         Qiskit performs the reconstruction; the SDK does not implement its own
-        circuit parser or representation.
+        circuit parser, representation, or drawer.
         """
 
-        payload = self.quantum_circuit_payload
-        if payload is None:
+        value = self.raw.get("quantum_circuit")
+        if not isinstance(value, Mapping):
             return None
-        if payload.get("kind") != "quantum-circuit":
+        if value.get("kind") != "quantum-circuit":
             raise ValueError("unsupported quantum circuit payload kind")
-        if int(payload.get("schema_version", 0)) != 1:
+        if int(value.get("schema_version", 0)) != 1:
             raise ValueError("unsupported quantum circuit payload schema")
-        if payload.get("role") != "logical-experiment-circuit":
+        if value.get("role") != "logical-experiment-circuit":
             raise ValueError("unsupported quantum circuit role")
-        if payload.get("format") != "qasm3":
+        if value.get("format") != "qasm3":
             raise ValueError("unsupported quantum circuit format")
-        qasm = payload.get("qasm")
+        qasm = value.get("qasm")
         if not isinstance(qasm, str) or not qasm.strip():
             raise ValueError("quantum circuit payload has no QASM 3 program")
         try:
@@ -918,32 +1078,17 @@ class FeasibilityReport:
             ) from exc
         return qasm3.loads(qasm)
 
-    def draw_quantum_circuit(self, *, output: str = "text", **kwargs: Any) -> Any:
-        """Draw the produced logical experiment circuit with Qiskit."""
-
-        circuit = self.quantum_circuit
-        if circuit is None:
-            raise ValueError("feasibility report does not contain a quantum_circuit")
-        return circuit.draw(output=output, **kwargs)
-
-    @property
-    def experiment_diagram_payload(self) -> Mapping[str, Any] | None:
-        """Renderer-neutral diagram payload returned by feasibility core."""
-
-        value = self.raw.get("experiment_diagram")
-        return value if isinstance(value, Mapping) else None
-
     @property
     def experiment_diagram(self) -> "ExperimentDiagram | None":
-        """Deserialize the server-provided diagram with q-alchemy-visualization.
+        """Return the server-provided typed experiment diagram.
 
         The SDK deliberately does not reconstruct feasibility steps or statuses.
         Install the optional ``visualization`` extra to obtain the shared diagram
         model and renderers.
         """
 
-        payload = self.experiment_diagram_payload
-        if payload is None:
+        value = self.raw.get("experiment_diagram")
+        if not isinstance(value, Mapping):
             return None
         try:
             from q_alchemy.visualization import ExperimentDiagram
@@ -953,7 +1098,7 @@ class FeasibilityReport:
                 "Install the SDK visualization extra and configure the Q-Alchemy "
                 "package index."
             ) from exc
-        return ExperimentDiagram.from_dict(payload)
+        return ExperimentDiagram.from_dict(value)
 
     @property
     def classical_status(self) -> FeasibilityStatus:
@@ -985,21 +1130,69 @@ class FeasibilityReport:
             raise ValueError("feasibility report JSON must contain an object")
         return cls.from_dict(data)
 
-    def draw(self, *, output: str = "text", show_title: bool = False) -> Any:
-        """Render the experiment diagram returned by the feasibility service."""
-
-        diagram = self.experiment_diagram
-        if diagram is None:
-            raise ValueError("feasibility report does not contain an experiment_diagram")
-        return diagram.draw(output=output, show_title=show_title)
-
     def format_summary(self) -> str:
-        """Format the report using q-alchemy-feasibility's canonical summary."""
+        """Format the report using q-alchemy-feasibility's canonical summary.
+
+        Keep this implementation synchronized with
+        ``q_alchemy.feasibility.models.FeasibilityReport.format_summary``. The
+        SDK intentionally formats locally instead of depending on the heavier
+        hosted feasibility runtime.
+        """
 
         classical = self.classical
         quantum = self.quantum
         evidence = self.evidence
         lines = ["COMPUTE FEASIBILITY", "-------------------"]
+
+        compression = self.circuit_compression
+        if compression is not None:
+            lines.extend(["", "CIRCUIT COMPRESSION"])
+            lines.append(f"  Attempted: {bool(compression.get('attempted', False))}")
+            lines.append(f"  Applied: {bool(compression.get('applied', False))}")
+            changed = compression.get("changed")
+            lines.append(
+                "  Changed: "
+                + (str(bool(changed)) if changed is not None else "not available")
+            )
+            lines.append(
+                f"  Circuit used: {compression.get('circuit_used') or 'not available'}"
+            )
+            lines.append(f"  Result: {compression.get('reason') or 'not available'}")
+            lines.append(
+                f"  Equivalence: {compression.get('equivalence') or 'not available'}"
+            )
+            input_metrics = compression.get("input_metrics")
+            compressed_metrics = compression.get("compressed_metrics")
+            if isinstance(input_metrics, Mapping):
+                after = (
+                    compressed_metrics
+                    if isinstance(compressed_metrics, Mapping)
+                    else input_metrics
+                )
+                lines.append(
+                    "  1Q operations: "
+                    f"{input_metrics.get('one_qubit_operations')} -> "
+                    f"{after.get('one_qubit_operations')}"
+                )
+                lines.append(
+                    "  2Q operations: "
+                    f"{input_metrics.get('two_qubit_operations')} -> "
+                    f"{after.get('two_qubit_operations')}"
+                )
+                lines.append(
+                    f"  Depth: {input_metrics.get('depth')} -> {after.get('depth')}"
+                )
+            else:
+                lines.extend(
+                    [
+                        "  1Q operations: not available",
+                        "  2Q operations: not available",
+                        "  Depth: not available",
+                    ]
+                )
+            lines.append(
+                f"  Accepted regions: {int(compression.get('accepted_regions', 0))}"
+            )
 
         lines.extend(
             [
@@ -1011,11 +1204,33 @@ class FeasibilityReport:
         classical_reason = _classical_infeasibility_reason(classical)
         if classical_reason is not None:
             lines.append(f"  Reason: {classical_reason}")
+        classical_quality = str(classical.get("quality_status") or "not-assessed")
+        results = _sequence_of_mappings(_mapping(classical.get("criteria")).get("results"))
+        reference_only = bool(results) and all(
+            _mapping(result.get("evidence")).get("source") == "quantum-io:exact-reference"
+            for result in results
+        )
+        qualifier = " (relative to the simulated circuit reference)" if reference_only else ""
+        lines.append(f"  Quality: {classical_quality}{qualifier}")
+        quality_reason = (
+            _quality_failure_reason(
+                classical.get("criteria"), source="Available classical evidence"
+            )
+            if classical_quality == "violated"
+            else None
+        )
+        if quality_reason is not None:
+            lines.append(f"  Quality reason: {quality_reason}")
         lines.append(
             f"  Method: {classical.get('selected_method') or 'not selected'}"
         )
+        preparation_warning = _preparation_claim_warning(evidence)
+        if preparation_warning is not None:
+            lines.append(f"  WARNING: {preparation_warning}")
         lines.extend(_format_classical_resource_criteria_lines(classical, evidence))
-        lines.extend(_format_criteria_lines(classical.get("criteria")))
+        lines.extend(_format_criteria_lines(
+            classical.get("criteria"), qualify_reference=not reference_only,
+        ))
 
         lines.extend(
             [
@@ -1039,12 +1254,12 @@ class FeasibilityReport:
             ]
         )
 
-        noisy_attempt = _latest_evidence(
+        noisy_completion = _latest_evidence(
             evidence,
-            _QPU_NOISY_SIMULATION_ATTEMPTED,
+            _QPU_NOISY_SIMULATION_COMPLETED,
             scopes=("quantum-model",),
         )
-        if noisy_attempt is not None and noisy_attempt.get("value") is True:
+        if noisy_completion is not None and noisy_completion.get("value") is True:
             lines.append("  Noisy simulation performed: True")
         lines.append(
             f"  QPU execution performed: {bool(quantum.get('execution_performed', False))}"
@@ -1062,41 +1277,6 @@ class FeasibilityReport:
                     f"  Median T2: {float(available_resources['median_t2_sec']):.4g} s"
                 )
 
-        resource_gap = quantum.get("resource_gap")
-        if isinstance(resource_gap, Mapping):
-            factor = resource_gap.get(
-                "required_balanced_quantum_noise_improvement_factor"
-            )
-            if factor is not None:
-                prefix = (
-                    "> "
-                    if bool(
-                        resource_gap.get(
-                            "balanced_quantum_noise_improvement_is_lower_bound",
-                            False,
-                        )
-                    )
-                    else ""
-                )
-                lines.append(
-                    "  Required balanced quantum-noise improvement: "
-                    f"{prefix}{float(factor):.3g}x"
-                )
-
-        attribution = quantum.get("resource_attribution")
-        if isinstance(attribution, Mapping):
-            remedies = attribution.get("single_resource_remedies")
-            if isinstance(remedies, (list, tuple)) and remedies:
-                lines.append(
-                    "  Single-resource remedies: "
-                    + ", ".join(str(item) for item in remedies)
-                )
-            if attribution.get("dominant_dimension") is not None:
-                lines.append(
-                    "  Dominant demonstrated limitation: "
-                    f"{attribution['dominant_dimension']}"
-                )
-
         lines.extend(_format_quantum_resource_criteria_lines(quantum))
         quantum_basis = str(quantum.get("assessment_basis") or "")
         if quantum_basis.startswith("measured-qpu"):
@@ -1104,13 +1284,22 @@ class FeasibilityReport:
                 _format_criteria_lines(
                     quantum.get("criteria"),
                     heading="Quality criteria (measured QPU)",
+                    include_all_missing=(
+                        quantum.get("quality_status") == "inconclusive"
+                        and bool(quantum.get("execution_performed", False))
+                    ),
                 )
             )
-        elif quantum_basis.startswith("calibrated-model"):
+        elif quantum_basis.startswith("calibrated-model") or quantum_basis == "simulated-quantum":
             lines.extend(
                 _format_criteria_lines(
                     quantum.get("model_criteria"),
-                    heading="Quality criteria (calibrated model)",
+                    heading=(
+                        "Quality criteria (quantum simulator)"
+                        if quantum_basis == "simulated-quantum"
+                        else "Quality criteria (calibrated model)"
+                    ),
+                    include_all_missing=quantum.get("quality_status") == "inconclusive",
                 )
             )
 

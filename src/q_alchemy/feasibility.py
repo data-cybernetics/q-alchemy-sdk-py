@@ -42,6 +42,26 @@ _IBM_CREDENTIALS_SLOT = 2
 LOG = logging.getLogger(__name__)
 
 
+class FeasibilityExecutionError(RuntimeError):
+    """The hosted feasibility execution did not complete successfully."""
+
+    def __init__(self, message: str, *, original_exception: Exception | None = None):
+        super().__init__(message)
+        self.original_exception = original_exception
+
+
+def _remote_feasibility_error_message(exc: Exception) -> str:
+    """Extract the user-visible failure detail returned by PineXQ."""
+
+    message = str(exc).strip()
+    marker = "[/procon/error]"
+    if marker in message:
+        remote_message = message.rsplit(marker, 1)[-1].strip()
+        if remote_message:
+            return remote_message
+    return message or type(exc).__name__
+
+
 @dataclass
 class FeasibilityParams:
     api_key: str | None = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"), repr=False)
@@ -99,12 +119,16 @@ class FeasibilityJob:
                 self._result = FeasibilityReport.from_dict(
                     _download_json_output(self._job, FEASIBILITY_REPORT_OUTPUT_ALIAS)
                 )
-            except BaseException:
+            except Exception as exc:
                 LOG.warning(
                     "Feasibility result retrieval failed; the PineXQ Job and its "
                     "WorkData were preserved for diagnosis and retry"
                 )
-                raise
+                detail = _remote_feasibility_error_message(exc)
+                raise FeasibilityExecutionError(
+                    f"Feasibility execution failed: {detail}",
+                    original_exception=exc,
+                ) from None
         if self._remove_data and not self._cleanup_complete:
             self._job_removed, self._input_workdata = _delete_job_then_inputs(
                 self._job,

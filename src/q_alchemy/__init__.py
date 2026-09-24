@@ -101,6 +101,7 @@ from .quantum_io import (
     quantum_backend_execution_plan,
 )
 from .feasibility_contract import (
+    CircuitCompressionConfig,
     ClassicalResources,
     Criterion,
     EvidenceCollectionConfig,
@@ -114,7 +115,12 @@ from .feasibility_contract import (
     Relation,
     SolutionCriteria,
 )
-from .feasibility import FeasibilityJob, FeasibilityParams, FeasibilityService
+from .feasibility import (
+    FeasibilityExecutionError,
+    FeasibilityJob,
+    FeasibilityParams,
+    FeasibilityService,
+)
 
 try: # should fail silently if user has not installed optional dependencies
     from .qiskit_integration import QAlchemyInitialize

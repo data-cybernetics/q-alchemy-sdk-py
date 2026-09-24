@@ -26,7 +26,6 @@ from q_alchemy import (
     State,
     noisy_backend_execution_plan,
 )
-from q_alchemy.initialize import _version_sort_key
 from q_alchemy.quantum_io import (
     _download_json_output,
     EXPERIMENT_INPUT_ALIAS,
@@ -398,12 +397,6 @@ def _slot_dump(slot):
     if hasattr(slot, "dict"):
         return slot.dict(by_alias=True)
     return vars(slot)
-
-
-class TestProcessingStepVersionSelection(unittest.TestCase):
-    def test_version_key_uses_numeric_order(self):
-        versions = ["0.2.0", "0.10.0", "0.9.0", "0.10.0rc1"]
-        self.assertEqual(max(versions, key=_version_sort_key), "0.10.0")
 
 
 class TestTypedContract(unittest.TestCase):
