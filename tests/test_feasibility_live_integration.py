@@ -242,7 +242,10 @@ def test_live_qtucker_observable_config_reaches_state_estimation():
         # convergence quality.
         criteria=SolutionCriteria.common(max_held_out_rmse=2.0),
         policy=FeasibilityPolicy(
-            quantum_execution=QuantumExecutionPolicy.WHEN_NEEDED,
+            # Aer is a comparison target rather than a production fallback:
+            # it is itself classical computation, so WHEN_NEEDED must not use
+            # it to replace a resource-infeasible classical path.
+            quantum_execution=QuantumExecutionPolicy.COMPARE,
         ),
         classical_resources=ClassicalResources(available_memory_bytes=1),
         evidence_collection=EvidenceCollectionConfig(
@@ -251,8 +254,9 @@ def test_live_qtucker_observable_config_reaches_state_estimation():
             shots=512,
             # GHZ has two nonzero amplitudes. max_nnz=1 makes the sparse
             # classical reference resource-limited; the one-byte classical
-            # budget also excludes the dense fallback, so WHEN_NEEDED must
-            # escalate to the simulator-backed quantum path.
+            # budget also excludes the dense fallback. COMPARE still runs the
+            # explicitly requested simulator path so its observable plan can
+            # be checked below.
             sparse_config={
                 "max_nnz": 1,
                 "sparse_epsilon": 0.0,

@@ -6,6 +6,7 @@ from textwrap import dedent
 from dotenv import load_dotenv
 import math
 import os
+import matplotlib.pyplot as plt
 import numpy as np
 import pennylane as qml
 from qiskit import QuantumCircuit
