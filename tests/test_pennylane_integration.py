@@ -1,8 +1,11 @@
+from pathlib import Path
 import unittest
 from textwrap import dedent
 
 from dotenv import load_dotenv
 import math
+import os
+import matplotlib.pyplot as plt
 import numpy as np
 import pennylane as qml
 from qiskit import QuantumCircuit
@@ -11,7 +14,12 @@ from scipy.sparse import coo_matrix, coo_array, csr_matrix, vstack
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams, pennylane_batch_initialize
 
-load_dotenv("../.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
+
+# The qasm3 import tests run locally; everything else prepares states on the live API.
+requires_api_key = unittest.skipUnless(
+    os.getenv("Q_ALCHEMY_API_KEY"), "no Q_ALCHEMY_API_KEY: skipping live PennyLane tests")
+
 
 class TestPennyLaneIntegration(unittest.TestCase):
 
@@ -23,9 +31,10 @@ class TestPennyLaneIntegration(unittest.TestCase):
         # This method will be called after each test
         pass
 
+    @requires_api_key
     def test_fixed_complex(self):
 
-        with open("data/test.qasm", "r") as f:
+        with open(Path(__file__).parent / "data" / "test.qasm", "r") as f:
             qasm = f.read()
 
         qc = QuantumCircuit.from_qasm_str(qasm)
@@ -50,6 +59,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(np.linalg.norm(state_qiskit - state_pennylane), 1e-10) #not that precise?
 
 
+    @requires_api_key
     def test_rnd_real(self):
 
         n_qubits = 4
@@ -74,6 +84,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
+    @requires_api_key
     def test_rnd_complex(self):
 
         n_qubits = 4
@@ -98,6 +109,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
+    @requires_api_key
     def test_fixed_coo(self):
 
         n_qubits = 4
@@ -152,6 +164,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
 
+    @requires_api_key
     def test_batch_complex(self):
         n_qubits = 8
         n_states = 4
@@ -173,11 +186,12 @@ class TestPennyLaneIntegration(unittest.TestCase):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-11)  # phase. Also a little small?
         fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
-        fig.show()
+        plt.close(fig)
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
         #     fig.show()
 
+    @requires_api_key
     def test_batch_coo(self):
         n_qubits = 4
         coo_data = np.array([1/math.sqrt(3) for i in range(3)])
@@ -202,12 +216,13 @@ class TestPennyLaneIntegration(unittest.TestCase):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-11)  # phase. Also a little small?
         fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
-        fig.show()
+        plt.close(fig)
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
         #     fig.show()
 
 
+    @requires_api_key
     def test_big_coo(self):
         n_qubits = 4
         coo_data = np.array([1/math.sqrt(3) for i in range(3)])
@@ -233,7 +248,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-11)  # phase. Also a little small?
         fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
-        fig.show()
+        plt.close(fig)
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
         #     fig.show()

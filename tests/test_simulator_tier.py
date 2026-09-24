@@ -6,12 +6,13 @@ plan from the hypermedia API and is gated on Q_ALCHEMY_API_KEY.
 
 import os
 import unittest
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 from q_alchemy.simulator import SparseSimulator, ENTERPRISE_GRANT
 
-load_dotenv("../.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 def _sim(tier="auto", grants=None):

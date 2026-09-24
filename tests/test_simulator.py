@@ -7,6 +7,7 @@ they skip when no key is present.
 
 import os
 import unittest
+from pathlib import Path
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -22,7 +23,7 @@ from q_alchemy.simulator import (
 )
 from q_alchemy.pyarrow_data import recover_sparse_coo_from_arrow
 
-load_dotenv("../.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 A = 1.0 / np.sqrt(2.0)
 
