@@ -71,7 +71,13 @@ jobs:
       # Without Q_ALCHEMY_API_KEY every live test skips itself, so this runs
       # only the tests that need no service. test_data_upload is left out: it
       # downloads MNIST from OpenML and needs scikit-learn.
+      # Blanked here, where it overrides any workflow- or job-level env, so
+      # adding the key to this workflow later can't turn it into a live run:
+      # the live tests skip on an empty key.
       - name: Run the offline tests
+        env:
+          Q_ALCHEMY_API_KEY: ""
+          PINEXQ_API_KEY: ""
         run: |
           uv pip install pytest python-dotenv qiskit-addon-utils matplotlib
           .venv/bin/python -m pytest -rs --ignore=tests/test_data_upload.py tests
