@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import unittest
 from cmath import polar
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -10,9 +11,9 @@ from qiskit.quantum_info import Statevector
 
 from qiskit_addon_utils.slicing import slice_by_barriers
 from pinexq.client.core.polling import PollingException
-from pinexq.client.job_management import Job
+from pinexq.client.job_management import Job, ProcessingStep
 from q_alchemy.initialize import OptParams, q_alchemy_as_qasm_parallel_states, InitializationMethods, q_alchemy_as_qasm, \
-    create_client
+    create_client, from_name
 
 from dotenv import load_dotenv
 
@@ -129,6 +130,36 @@ class InitializeTestCase(unittest.TestCase):
                 client = create_client(opt_params)
                 for url in seen["urls"]:
                     self.assertEqual(client.get(str(url)).status_code, 404, url)
+
+class FromNameTestCase(unittest.TestCase):
+    # Offline: the server query is faked, so no API key is needed.
+    def _pick(self, versions, version=None):
+        steps = [SimpleNamespace(version=v) for v in versions]
+        with patch.object(ProcessingStep, "_query_processing_steps",
+                          return_value=SimpleNamespace(processing_steps=steps)),                 patch.object(ProcessingStep, "from_hco", side_effect=lambda hco: hco):
+            return from_name(client=SimpleNamespace(base_url="https://example.invalid"),
+                             step_name="some_step", version=version)
+
+    def test_picks_newest_version_whatever_the_server_order(self):
+        cases = [
+            (["0.9.0", "0.10.0", "0.2.0"], "0.10.0"),  # as strings, 0.9.0 would win
+            (["0.10.0", "0.9.9", "0.10.1", "0.9.10"], "0.10.1"),
+            (["0.10.2", "1.0.0", "0.9.5"], "1.0.0"),
+        ]
+        for versions, newest in cases:
+            with self.subTest(versions=versions):
+                self.assertEqual(self._pick(versions).version, newest)
+
+    def test_skips_dev_and_pre_release_versions(self):
+        versions = ["0.10.0", "0.11.0.dev3", "0.11.0-dev", "0.11.0-dev.abc123", "0.11.0rc1", "dev", "0.9.0"]
+        self.assertEqual(self._pick(versions).version, "0.10.0")
+
+    def test_no_released_version_is_an_error(self):
+        with self.assertRaises(NameError):
+            self._pick(["0.11.0.dev3", "latest"])
+
+    def test_explicit_version_is_taken_as_is(self):
+        self.assertEqual(self._pick(["0.11.0.dev3"], version="0.11.0.dev3").version, "0.11.0.dev3")
 
 if __name__ == '__main__':
     unittest.main()
