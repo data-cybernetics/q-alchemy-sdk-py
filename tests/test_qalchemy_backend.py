@@ -6,6 +6,7 @@ Q_ALCHEMY_API_KEY and the deployed simulator ProCon; they skip otherwise.
 
 import os
 import unittest
+from pathlib import Path
 
 from dotenv import load_dotenv
 from qiskit import QuantumCircuit, transpile
@@ -16,7 +17,7 @@ from q_alchemy import QAlchemyBackend, QAlchemyProvider
 from q_alchemy.simulator import SparseSimulator
 from q_alchemy.qalchemy_backend import _counts_to_hex, QALCHEMY_BASIS_GATES
 
-load_dotenv("../.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 def _offline_backend(**kwargs) -> QAlchemyBackend:

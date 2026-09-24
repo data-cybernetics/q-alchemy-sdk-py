@@ -1,8 +1,10 @@
+from pathlib import Path
 import unittest
 from textwrap import dedent
 
 from dotenv import load_dotenv
 import math
+import matplotlib.pyplot as plt
 import numpy as np
 import pennylane as qml
 from qiskit import QuantumCircuit
@@ -11,7 +13,7 @@ from scipy.sparse import coo_matrix, coo_array, csr_matrix, vstack
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams, pennylane_batch_initialize
 
-load_dotenv("../.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 class TestPennyLaneIntegration(unittest.TestCase):
 
@@ -25,7 +27,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
     def test_fixed_complex(self):
 
-        with open("data/test.qasm", "r") as f:
+        with open(Path(__file__).parent / "data" / "test.qasm", "r") as f:
             qasm = f.read()
 
         qc = QuantumCircuit.from_qasm_str(qasm)
@@ -173,7 +175,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-11)  # phase. Also a little small?
         fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
-        fig.show()
+        plt.close(fig)
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
         #     fig.show()
@@ -202,7 +204,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-11)  # phase. Also a little small?
         fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
-        fig.show()
+        plt.close(fig)
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
         #     fig.show()
@@ -233,7 +235,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
             self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane)) ** 2, 1e-13)
             self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-11)  # phase. Also a little small?
         fig, ax = qml.draw_mpl(circuit_pennylane)(circ_list[0])
-        fig.show()
+        plt.close(fig)
         # for ops in ops_list: #too much RAM
         #     fig, ax = qml.draw_mpl(circuit_pennylane)(ops)
         #     fig.show()

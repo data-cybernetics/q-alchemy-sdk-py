@@ -1,6 +1,7 @@
 import math
 import random
 import unittest
+from pathlib import Path
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -16,7 +17,7 @@ from q_alchemy.qiskit_integration import (
 )
 from dotenv import load_dotenv
 
-load_dotenv("../.env")
+load_dotenv(Path(__file__).parent.parent / ".env")
 
 class TestQiskitIntegration(unittest.TestCase):
 
@@ -57,7 +58,7 @@ class TestQiskitIntegration(unittest.TestCase):
 
     def test_fixed_complex(self):
 
-        with open("data/test.qasm", "r") as f:
+        with open(Path(__file__).parent / "data" / "test.qasm", "r") as f:
             qasm = f.read()
 
         qc = QuantumCircuit.from_qasm_str(qasm)
