@@ -40,24 +40,17 @@ exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
 pinexq-client = false # we need this even for transitive dependencies
-q-alchemy-visualization = false # private index artifacts may not expose a reliable upload timestamp
+q-alchemy-visualization = false # first-party releases bypass the global seven-day delay
 
 # Keep the examples extra CPU-only. PyPI's Linux PyTorch wheels pull the
 # CUDA/NVIDIA runtime stack into uv.lock even when GPU support is not used.
 [tool.uv.sources]
 torch = { index = "pytorch-cpu" }
-q-alchemy-visualization = { index = "qalchemy" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
-
-[[tool.uv.index]]
-name = "qalchemy"
-url = "https://devops.data-cybernetics.net/api/packages/qalchemy/pypi/simple/"
-explicit = true
-authenticate = "always"
 
 [dependency-groups]
 dev = [

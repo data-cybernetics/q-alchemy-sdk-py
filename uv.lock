@@ -2684,7 +2684,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pylatexenc", marker = "extra == 'examples'" },
     { name = "python-dotenv", marker = "extra == 'examples'", specifier = ">=1.2.1" },
-    { name = "q-alchemy-visualization", marker = "extra == 'visualization'", specifier = ">=0.1.0", index = "https://devops.data-cybernetics.net/api/packages/qalchemy/pypi/simple/" },
+    { name = "q-alchemy-visualization", marker = "extra == 'visualization'", specifier = ">=0.1.0" },
     { name = "qiskit", marker = "extra == 'examples'", specifier = ">=2.3.0" },
     { name = "qiskit", extras = ["qasm3-import"], marker = "extra == 'qiskit'", specifier = ">=2.3.0" },
     { name = "qiskit-aer", marker = "extra == 'examples'" },
@@ -2719,10 +2719,10 @@ dev = [
 [[package]]
 name = "q-alchemy-visualization"
 version = "0.1.0"
-source = { registry = "https://devops.data-cybernetics.net/api/packages/qalchemy/pypi/simple/" }
-sdist = { url = "https://devops.data-cybernetics.net/api/packages/qalchemy/pypi/files/q-alchemy-visualization/0.1.0/q_alchemy_visualization-0.1.0.tar.gz", hash = "sha256:d40e8ef7f7b449fcd551f34a7509c5ea410ab34d56399c2e8e7f1691d05a0c19" }
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/ee/82232b3f24d351f55cc3983bc650d95b3d1a3eba05cd95377299a704066f/q_alchemy_visualization-0.1.0.tar.gz", hash = "sha256:f1b57558fdd3152e422a356c1129767744616b954fb6ee43273648208babbe9c", size = 16774, upload-time = "2026-09-25T20:19:55.409Z" }
 wheels = [
-    { url = "https://devops.data-cybernetics.net/api/packages/qalchemy/pypi/files/q-alchemy-visualization/0.1.0/q_alchemy_visualization-0.1.0-py3-none-any.whl", hash = "sha256:3369f9c99235d0e007d15f559b5c25c4e3732709572adbc42453939a67f8ab5d" },
+    { url = "https://files.pythonhosted.org/packages/af/a4/0604b00486bf951c639e929ab8a60185bc2eb5ef3ca4a4bfc9ec673667d0/q_alchemy_visualization-0.1.0-py3-none-any.whl", hash = "sha256:54bd8ab5192b16bf690eb0e1a59c1fd5877e9d3d5b5a96729c764433db766bf4", size = 15689, upload-time = "2026-09-25T20:19:53.921Z" },
 ]
 
 [[package]]
