@@ -11,6 +11,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
+from q_alchemy.utils import nonnegative_integer
+
 SCHEMA_VERSION = 3
 
 _SENSITIVE_KEYS = {
@@ -139,8 +141,7 @@ class State:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.num_qubits < 0:
-            raise ValueError("num_qubits must be non-negative")
+        nonnegative_integer(self.num_qubits, "num_qubits")
         if self.indices is None:
             if len(self.amplitudes) != 1 << self.num_qubits:
                 raise ValueError("dense amplitude count does not match num_qubits")
@@ -151,6 +152,8 @@ class State:
                 raise ValueError("sparse indices/amplitudes length mismatch")
             if len(set(self.indices)) != len(self.indices):
                 raise ValueError("sparse state indices must be unique")
+            for index in self.indices:
+                nonnegative_integer(index, "sparse index")
             limit = 1 << self.num_qubits
             if any(index < 0 or index >= limit for index in self.indices):
                 raise ValueError("sparse state index is outside the state dimension")
@@ -174,7 +177,7 @@ class State:
             if size == 0 or size & (size - 1):
                 raise ValueError("dense state length must be a non-zero power of two")
             num_qubits = size.bit_length() - 1
-        return cls(int(num_qubits), values, None, dict(metadata or {}))
+        return cls(nonnegative_integer(num_qubits, "num_qubits"), values, None, dict(metadata or {}))
 
     @classmethod
     def sparse(
@@ -186,9 +189,9 @@ class State:
         metadata: Mapping[str, Any] | None = None,
     ) -> "State":
         return cls(
-            int(num_qubits),
+            nonnegative_integer(num_qubits, "num_qubits"),
             tuple(complex(value) for value in amplitudes),
-            tuple(int(index) for index in indices),
+            tuple(nonnegative_integer(index, "sparse index") for index in indices),
             dict(metadata or {}),
         )
 
@@ -213,13 +216,16 @@ class State:
                 raise ValueError("dense state must not contain sparse indices")
             return cls.dense(
                 amplitudes,
-                num_qubits=int(data["num_qubits"]),
+                num_qubits=data["num_qubits"],
                 metadata=metadata,
             )
         if representation == "sparse":
             return cls.sparse(
-                num_qubits=int(data["num_qubits"]),
-                indices=tuple(int(value) for value in data.get("indices", ())),
+                num_qubits=data["num_qubits"],
+                indices=tuple(
+                    int(value) if isinstance(value, str) and value.isascii() and value.isdecimal() else value
+                    for value in data.get("indices", ())
+                ),
                 amplitudes=amplitudes,
                 metadata=metadata,
             )
@@ -375,8 +381,8 @@ class BasisMeasurement:
             raise ValueError("basis measurement must contain at least one qubit")
         if len(set(self.qubits)) != len(self.qubits):
             raise ValueError("basis-measurement qubits must be unique")
-        if any(qubit < 0 for qubit in self.qubits):
-            raise ValueError("basis-measurement qubits must be non-negative")
+        for qubit in self.qubits:
+            nonnegative_integer(qubit, "basis-measurement qubit")
         _validated_metadata(self.metadata, path=f"basis_measurement[{self.label}].metadata")
 
     def to_dict(self) -> dict[str, Any]:
@@ -392,7 +398,7 @@ class BasisMeasurement:
     def from_dict(cls, data: Mapping[str, Any]) -> "BasisMeasurement":
         return cls(
             str(data["label"]),
-            tuple(int(qubit) for qubit in data["qubits"]),
+            tuple(data["qubits"]),
             dict(data.get("metadata", {})),
         )
 
@@ -472,6 +478,8 @@ class QuantumExperiment:
         if self.evolution is None and self.evolution_qargs is not None:
             raise ValueError("evolution_qargs requires an evolution circuit")
         if self.evolution_qargs is not None:
+            for qubit in self.evolution_qargs:
+                nonnegative_integer(qubit, "evolution qubit")
             if not self.evolution_qargs:
                 raise ValueError("evolution_qargs must not be empty")
             if len(set(self.evolution_qargs)) != len(self.evolution_qargs):
@@ -520,7 +528,7 @@ class QuantumExperiment:
         return cls(
             target=State.from_dict(data["target"]),
             evolution=(Circuit.from_dict(evolution_data) if evolution_data is not None else None),
-            evolution_qargs=(tuple(int(value) for value in qargs) if qargs is not None else None),
+            evolution_qargs=(tuple(qargs) if qargs is not None else None),
             measurement_plan=MeasurementPlan.from_dict(data.get("measurement_plan", {})),
             metadata=dict(data.get("metadata", {})),
         )
@@ -657,7 +665,8 @@ class ExecutionPlan:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if self.shots <= 0:
+        nonnegative_integer(self.shots, "shots")
+        if self.shots == 0:
             raise ValueError("shots must be positive")
         _check_no_secrets(self.preparation_options, path="preparation_options")
         _validated_metadata(self.preparation_options, path="preparation_options")
@@ -707,7 +716,7 @@ class ExecutionPlan:
                 else None
             ),
             preparation_options=dict(data.get("preparation_options", {})),
-            shots=int(data.get("shots", 4096)),
+            shots=data.get("shots", 4096),
             metadata=dict(data.get("metadata", {})),
         )
 

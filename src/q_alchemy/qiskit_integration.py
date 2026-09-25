@@ -9,8 +9,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import datetime
-import hashlib
 from typing import List
 
 import numpy as np
@@ -62,9 +60,11 @@ class QAlchemyInitialize(Instruction):
             See ``OptParams`` for the rest.
         """
         if issparse(params):
+            params = params.copy()
             num_qubits = int(np.ceil(np.log2(params.shape[0]*params.shape[1])))
         elif isinstance(params, (Statevector, List, np.ndarray)):
-            params = np.asarray(params, dtype=complex).tolist()
+            # Own the input without expanding every amplitude into a Python object.
+            params = np.array(params, dtype=complex, copy=True)
             num_qubits = int(np.ceil(np.log2(len(params))))
         else:
             raise TypeError("params type not recognized")
@@ -85,10 +85,6 @@ class QAlchemyInitialize(Instruction):
             label = "QAl"
 
         super().__init__("q-alchemy", num_qubits, 0, params=params, label=label)
-        if self.opt_params.assign_data_hash:
-            self.param_hash = hashlib.md5(np.asarray(self.params).tobytes()).hexdigest()
-        else:
-            self.param_hash = datetime.datetime.utcnow().timestamp()
 
     @property
     def client(self):

@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 from dataclasses import dataclass, field, fields
 from datetime import datetime
@@ -62,6 +63,7 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
 from q_alchemy.initialize import allow_deletion, create_client, delete_job_with_data, find_processing_step
+from q_alchemy.utils import nonnegative_integer
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
@@ -77,6 +79,17 @@ _OUTPUT_ALIAS: dict[str, str] = {
     "sparse_statevector": "sparse_statevector.json",
     "tomography": "tomography.json",
 }
+
+LOG = logging.getLogger(__name__)
+
+
+def _check_dense_limit(num_qubits: int, max_dense_qubits: int) -> None:
+    nonnegative_integer(max_dense_qubits, "max_dense_qubits")
+    if num_qubits > max_dense_qubits:
+        raise ValueError(
+            f"Dense export requires {num_qubits} qubits, exceeding max_dense_qubits="
+            f"{max_dense_qubits}; use the sparse result or explicitly raise the limit."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -231,8 +244,13 @@ class SparseStatevectorResult:
 
         return convert_sparse_coo_to_arrow(self.to_coo())
 
-    def to_dense(self) -> np.ndarray:
-        """Materialize the full dense statevector (``2**num_qubits`` complex)."""
+    def to_dense(self, *, max_dense_qubits: int = 26) -> np.ndarray:
+        """Materialize the dense vector, rejecting sizes above the explicit limit.
+
+        The default permits at most 26 qubits (1 GiB of complex128 amplitudes).
+        Raise the limit only when the caller has sufficient memory.
+        """
+        _check_dense_limit(self.num_qubits, max_dense_qubits)
         vector = np.zeros(2 ** self.num_qubits, dtype=complex)
         vector[self.qiskit_indices()] = self.amplitudes
         return vector
@@ -537,10 +555,16 @@ class SparseSimulator:
         )
         try:
             job.wait_for_state(JobStates.completed, polling_interval_s=0.25, timeout_s=timeout)
-            return self._download_return(job, _OUTPUT_ALIAS[capability])
-        finally:
-            if self.params.remove_data:
+            result = self._download_return(job, _OUTPUT_ALIAS[capability])
+        except BaseException:
+            LOG.warning("Simulator execution or result retrieval failed; the PineXQ Job and WorkData were preserved")
+            raise
+        if self.params.remove_data:
+            try:
                 delete_job_with_data(job)
+            except Exception:
+                LOG.warning("Simulator result retrieved, but cleanup failed; returning the result", exc_info=True)
+        return result
 
     def _prepare_input(
         self, circuit: Circuit, input_form: InputForm

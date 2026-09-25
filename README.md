@@ -214,6 +214,19 @@ The fields you are most likely to touch:
 | `remove_data` | `True` | Delete the job and its uploaded data once the result is fetched. |
 | `job_completion_timeout_sec` | `300` | How long to wait for the job before giving up. |
 
+`q_alchemy_as_qasm_parallel(state, option_sets, max_workers=4)` compares option
+sets concurrently. Results follow the order of `option_sets`; a failed worker
+raises an exception instead of returning an incomplete list. Input serialization
+is shared, and `max_workers` bounds concurrent jobs. Already-running jobs finish
+their normal cleanup if another worker fails. A supplied HTTP client remains
+caller-owned. Processing-step lookups are cached per client for five minutes;
+create a new client when changing accounts.
+
+`QAlchemyInitialize` owns a copy of the input amplitudes, so later changes to the
+caller's array cannot change the pending initialization. Dense inputs remain
+NumPy arrays internally. Upload hashing is controlled by `assign_data_hash`;
+the instruction no longer computes the unused `param_hash` attribute.
+
 `InitializationMethods` lives in `q_alchemy.initialize`:
 
 - `AUTO` (default) runs several Tucker candidates (iterative and hierarchical,
@@ -262,6 +275,10 @@ Two interactions worth knowing:
   `extra_kwargs={"basis_gates": [...]}`.
 
 ### Running experiments with Quantum I/O
+
+State widths, sparse indices, qubit selections and shot counts require integers;
+booleans and fractional values are rejected locally. Sparse indices in JSON
+remain decimal strings so large basis indices retain their full precision.
 
 Quantum I/O uses typed Python objects throughout the public SDK. Users construct
 `State`, `Circuit`, `MeasurementPlan`, `QuantumExperiment`, `Runtime`, and
@@ -696,6 +713,10 @@ export IBM_QUANTUM_INSTANCE=...          # optional
 
 ### Verifying preparation circuits with the sparse simulator
 
+Simulator jobs and their WorkData are preserved on execution, timeout or result
+download failure for diagnosis. After a successful download, `remove_data=True`
+requests cleanup; a cleanup failure logs a warning and still returns the result.
+
 Q-Alchemy also hosts a **sparse state-vector simulator** so you can verify that a
 preparation circuit really produces your target state. The typical loop is
 **prepare → simulate → verify**:
@@ -766,6 +787,12 @@ result = backend.run(qc, save_statevector=True).result()
 print(result.data(0)["statevector"])
 # [0.70710678+0.j 0.        +0.j 0.        +0.j 0.70710678+0.j]   -> length 2**n
 ```
+
+Dense exports default to `max_dense_qubits=26` (up to 1 GiB of amplitudes).
+Larger requests fail before submission. `SparseStatevectorResult.to_dense()`
+enforces the same default; pass a larger `max_dense_qubits` explicitly only when
+sufficient memory is available. Backend `run()` options apply only to that job;
+use `backend.set_options()` to change defaults for future jobs.
 
 `save_sparse_statevector` is Q-Alchemy's own, and it is the one that scales. It
 returns **only the amplitudes the circuit actually populates**, so nothing of
