@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
+from types import ModuleType
+from unittest.mock import patch
 
 from q_alchemy import EvidenceCollectionConfig, FeasibilityRequest, SolutionCriteria
 
@@ -109,14 +112,19 @@ def test_h2_notebook_uses_estimator_options_for_direct_observables():
     notebook_path = EXAMPLE.with_name("feasibility_h2_dynamics.ipynb")
     notebook = json.loads(notebook_path.read_text())
     namespace: dict[str, object] = {}
+    display_module = ModuleType("IPython.display")
+    display_module.display = lambda *_args, **_kwargs: None
 
-    for cell in notebook["cells"]:
-        if cell.get("cell_type") != "code":
-            continue
-        source = "".join(cell.get("source", ()))
-        if "with FeasibilityService() as service:" in source:
-            break
-        exec(compile(source, str(notebook_path), "exec"), namespace)
+    # The test inspects request construction, not notebook presentation. Keep
+    # IPython out of the minimal installed-wheel test environment.
+    with patch.dict(sys.modules, {"IPython.display": display_module}):
+        for cell in notebook["cells"]:
+            if cell.get("cell_type") != "code":
+                continue
+            source = "".join(cell.get("source", ()))
+            if "with FeasibilityService() as service:" in source:
+                break
+            exec(compile(source, str(notebook_path), "exec"), namespace)
 
     experiment = namespace["experiment"]
     request = namespace["request"]
