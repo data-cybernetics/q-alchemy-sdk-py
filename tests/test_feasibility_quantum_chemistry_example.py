@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 from q_alchemy import EvidenceCollectionConfig, FeasibilityRequest, SolutionCriteria
@@ -18,7 +19,7 @@ NOISY_OPTIONS = {
         "format": "qiskit-aer-noise-model-v1",
         "data": {"errors": []},
     },
-    "run_options": {"seed_simulator": 7},
+    "estimator_options": {"seed_simulator": 7},
 }
 
 
@@ -34,7 +35,10 @@ def test_simulator_backend_options_round_trip():
 
     payload = value.to_dict()
     assert payload["evidence_collection"]["backend_options"] == {"noise_model": NOISY_OPTIONS["noise_model"]}
-    assert payload["evidence_collection"]["execution_options"] == {"transpile": True, "run_options": NOISY_OPTIONS["run_options"]}
+    assert payload["evidence_collection"]["execution_options"] == {
+        "transpile": True,
+        "estimator_options": NOISY_OPTIONS["estimator_options"],
+    }
     assert FeasibilityRequest.from_dict(payload) == value
     assert FeasibilityRequest.from_json(value.to_json()) == value
 
@@ -80,7 +84,10 @@ def test_missing_ibm_token_selects_noisy_aer_simulator():
     assert config.backend == "aer_simulator"
     assert config.least_busy is False
     assert config.backend_options == {"noise_model": NOISY_OPTIONS["noise_model"]}
-    assert config.execution_options == {"transpile": True, "run_options": NOISY_OPTIONS["run_options"]}
+    assert config.execution_options == {
+        "transpile": True,
+        "estimator_options": NOISY_OPTIONS["estimator_options"],
+    }
     assert credentials is None
     assert "noisy simulator" in description
 
@@ -96,3 +103,28 @@ def test_example_keeps_diagnostic_observables_out_of_estimator_training():
         f"occupation-{qubit}" for qubit in range(example.NUM_QUBITS)
     }
     assert plan.observable_plan_metadata["purpose"] == "direct-observable-diagnostics"
+
+
+def test_h2_notebook_uses_estimator_options_for_direct_observables():
+    notebook_path = EXAMPLE.with_name("feasibility_h2_dynamics.ipynb")
+    notebook = json.loads(notebook_path.read_text())
+    namespace: dict[str, object] = {}
+
+    for cell in notebook["cells"]:
+        if cell.get("cell_type") != "code":
+            continue
+        source = "".join(cell.get("source", ()))
+        if "with FeasibilityService() as service:" in source:
+            break
+        exec(compile(source, str(notebook_path), "exec"), namespace)
+
+    experiment = namespace["experiment"]
+    request = namespace["request"]
+    assert experiment.measurement_plan.observables
+    assert experiment.measurement_plan.training == ()
+    assert experiment.measurement_plan.validation == ()
+    assert request.evidence_collection.execution_options == {
+        "transpile": True,
+        "transpile_options": {"optimization_level": 1},
+        "estimator_options": {"seed_simulator": 20260918},
+    }

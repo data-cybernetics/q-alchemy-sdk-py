@@ -134,7 +134,10 @@ def noisy_simulator_backend_options() -> dict[str, object]:
             "data": noise_model.to_dict(),
         },
         "transpile_options": {"optimization_level": 1},
-        "run_options": {"seed_simulator": 20260904},
+        # This experiment requests Pauli expectation values, so Quantum I/O
+        # executes Qiskit's Estimator. Estimator seeds belong here rather than
+        # in backend_run_options/run_options, which configure count execution.
+        "estimator_options": {"seed_simulator": 20260904},
     }
 
 
@@ -274,7 +277,5 @@ def main() -> None:
         print("--------")
         for warning in report.warnings:
             print(f"- {warning}")
-''
-
 if __name__ == "__main__":
     main()

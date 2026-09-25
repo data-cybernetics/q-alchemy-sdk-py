@@ -498,7 +498,7 @@ evidence = EvidenceCollectionConfig(
     execution_options={
         "transpile": True,
         "transpile_options": {"optimization_level": 3},
-        "run_options": {"seed_simulator": 7},
+        "estimator_options": {"seed_simulator": 7},
     },
 )
 ```
@@ -506,6 +506,8 @@ evidence = EvidenceCollectionConfig(
 Use `execution_options={"transpile": False}` only for circuits already compatible
 with the selected backend. Legacy execution keys inside `backend_options` are
 moved into `execution_options`; conflicting values are rejected locally.
+Use `estimator_options` for Pauli-observable execution. `backend_run_options`
+(and its legacy alias `run_options`) applies to basis-measurement/count execution.
 Retired resource-sweep and attribution controls are no longer constructor
 parameters. Their keys in old request JSON are ignored, matching the service.
 `classical_first=False` is rejected locally; use `quantum_execution=COMPARE`
