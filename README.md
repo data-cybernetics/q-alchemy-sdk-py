@@ -44,6 +44,11 @@ it after cloning is simply
 uv sync --locked
 ```
 
+The SDK requires `pinexq-client>=2.0.0,<3` for PineXQ JobManagement API 10.0.
+This client recognizes the server's `TenantId` and `IsMaterialized` fields.
+API-version and schema warnings are no longer suppressed by the SDK; a future
+mismatch remains visible. `Q_ALCHEMY_API_VERSION_WARNING` is no longer needed.
+
 Again, for qiskit- or PennyLane-integrations, please add the groups
 ```bash
 uv sync --locked --extra qiskit --extra pennylane
