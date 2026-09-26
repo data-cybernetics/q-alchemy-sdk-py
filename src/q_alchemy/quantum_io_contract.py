@@ -274,7 +274,19 @@ class Circuit:
             from qiskit.qasm3 import dumps
         except ImportError as exc:  # pragma: no cover - optional dependency
             raise RuntimeError("Circuit.from_qiskit requires qiskit>=2.3") from exc
-        return cls.qasm3(dumps(circuit), metadata=metadata)
+        # Qiskit's QASM 3 exporter omits circuit.global_phase. Preserve it for
+        # operator-mode compression and subsequent controlled-subroutine use.
+        try:
+            phase = float(circuit.global_phase)
+        except (TypeError, ValueError):
+            raise ValueError("Circuit.from_qiskit requires a bound global phase") from None
+        if not math.isfinite(phase):
+            raise ValueError("circuit global phase must be finite")
+        if phase == 0:
+            return cls.qasm3(dumps(circuit), metadata=metadata)
+        exported = circuit.copy()
+        exported.global_phase = 0
+        return cls.qasm3(dumps(exported) + f"gphase({phase!r});\n", metadata=metadata)
 
     def to_qiskit(self) -> Any:
         try:

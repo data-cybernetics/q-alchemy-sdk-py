@@ -87,6 +87,14 @@ from .feasibility import (
     FeasibilityParams,
     FeasibilityService,
 )
+from .circuit_compression import (
+    CircuitCompressionExecutionError,
+    CircuitCompressionJob,
+    CircuitCompressionParams,
+    CircuitCompressionReport,
+    CircuitCompressionRequest,
+    CircuitCompressionService,
+)
 
 try: # should fail silently if user has not installed optional dependencies
     from .qiskit_integration import QAlchemyInitialize

@@ -1,8 +1,8 @@
 # Q-Alchemy Python SDK
 
 This is the Python SDK for using the data cybernetics [Q-Alchemy](https://www.q-alchemy.com) API.
-It provides state preparation, hosted sparse simulation, and provider-neutral Quantum I/O
-execution through PineXQ. The state-preparation API helps quantum computing researchers put
+It provides state preparation, hosted sparse simulation, circuit compression, feasibility
+assessment, and provider-neutral Quantum I/O execution through PineXQ. The state-preparation API helps quantum computing researchers put
 classical data into a quantum computer (the loading/encoding problem, sometimes described as a
 form of QRAM).
 
@@ -278,6 +278,109 @@ Two interactions worth knowing:
 - **Under `AUTO`, `basis_gates` on `OptParams` only affects the final
   transpilation.** Candidates are compared on `u`/`cx` cost unless you also pass
   `extra_kwargs={"basis_gates": [...]}`.
+
+### Compressing circuits through PineXQ
+
+`CircuitCompressionService` calls the `compress_circuit` ProcessingStep from
+`q-alchemy-circuit-compressor-pinexq`. The SDK accepts a native Qiskit circuit, the
+existing SDK `Circuit` type, or a schema-1 `quantum-circuit` envelope (including
+`feasibility_report.raw["quantum_circuit"]`). It returns a typed report with the
+compressed circuit, exactness semantics, input/baseline/output metrics, accepted
+regions, and optional diagnostics. The local SDK does not install or run the
+compression engine or a simulator.
+
+```python
+from qiskit import QuantumCircuit
+from q_alchemy import CircuitCompressionRequest, CircuitCompressionService
+
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.cx(0, 1)
+
+with CircuitCompressionService() as service:
+    report = service.compress(
+        circuit, CircuitCompressionRequest(options={"collect_report": True})
+    ).result()
+
+print(report.format_summary())
+compressed = report.to_qiskit()
+```
+
+The default assumes the complete circuit starts in `|0...0>`
+(`equivalence="reachable_subspace"`). For a subroutine with arbitrary input states,
+use `CircuitCompressionRequest(options={"equivalence": "operator"})`.
+`report.exact` applies to that declared equivalence; it does not imply that a
+reachable-subspace result preserves every possible input. Qiskit input conversion
+and output transport preserve the top-level global phase, which matters for
+subsequent controlled-subroutine use. Bind symbolic global phases before export.
+
+Compression option names and resource limits are validated by the deployed core.
+Omitting options sends `{}` and retains its defaults. The SDK adds no duplicate
+memory or synthesis ceilings. Transport admission checks are owned by the PineXQ
+adapter; region indices in the report refer to its normalized baseline circuit.
+
+`CircuitCompressionParams` follows the other service clients: `api_key` defaults
+to `Q_ALCHEMY_API_KEY` (then `PINEXQ_API_KEY`), and `host` defaults to
+`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="0.1.1"` to pin a
+deployed step, or omit it to discover the visible version. Successful result
+retrieval removes SDK-created jobs and WorkData by default. Set `remove_data=False`
+to retain them. A failure or malformed report preserves the job for diagnosis;
+`CircuitCompressionExecutionError` exposes the remote error and its original
+exception. Repeating `job.result()` retries retrieval, or returns the cached report
+and retries any unfinished cleanup. `job.raw_job` remains available until deletion.
+
+`job_completion_timeout_sec` (default 300) and `job.result(timeout=...)` only limit
+the client's wait. They do not cancel the job or set a server computation deadline.
+Use the service context manager to close SDK-owned HTTP connections; injected
+clients remain owned by the caller.
+
+Install the `qiskit` extra for native circuit conversion. Portable usage needs no
+Qiskit: pass `Circuit.qasm3(program)` and consume `report.circuit.payload` or
+`report.to_dict()`. See [the runnable example](examples/circuit_compression_service.py).
+
+For the 12-qubit chemistry workload, run:
+
+```bash
+python examples/circuit_compression_quantum_chemistry.py
+```
+
+[This example](examples/circuit_compression_quantum_chemistry.py) reuses
+`build_experiment()` from `feasibility_quantum_chemistry.py`. It builds the full
+Hartree--Fock preparation plus correlated evolution circuit (71 one-qubit gates
+and 34 CX gates), submits it directly to the compression service, and prints the
+input/baseline/compressed metrics and two-qubit gate reduction. The complete
+circuit starts in `|0...0>`, so default reachable-subspace compression is used.
+It requires the SDK's `qiskit` extra and a Q-Alchemy API key; it does not run the
+Feasibility workflow, select a quantum backend, or require IBM credentials.
+
+#### Live circuit-compression tests
+
+`tests/test_circuit_compression.py` uses mocked PineXQ transport. Its optional
+ProCon check invokes a locally installed adapter; it does not contact PineXQ.
+
+The separate live suite submits **two real jobs** to the deployed service. With
+`Q_ALCHEMY_API_KEY` (or `PINEXQ_API_KEY`) already exported and the SDK's `qiskit`
+extra installed, run:
+
+```bash
+Q_ALCHEMY_RUN_LIVE_CIRCUIT_COMPRESSION=1 \
+  pytest -v -s tests/test_circuit_compression_live_integration.py
+```
+
+Optionally set `Q_ALCHEMY_CIRCUIT_COMPRESSION_STEP_VERSION=0.1.1` to pin the
+ProcessingStep, and `Q_ALCHEMY_HOST` to select a different PineXQ host. Both a key
+and the explicit live-test flag are required; otherwise these tests skip.
+
+The first test sends a two-qubit circuit with two CX gates, checks that compression
+reduces its two-qubit gate count below both the input and the O0 baseline, and
+compares the returned statevector with the original. The current compressor
+reduces this example from two CX gates to one. The second test checks operator
+equivalence and global phase, including reuse as a controlled subroutine. Both
+exercise report retrieval, cached results and cleanup of their own jobs/WorkData.
+The small local statevector/operator calculations verify the results; compression
+itself runs on PineXQ. Successful jobs are removed, while remote execution or
+retrieval failures preserve their jobs and data for diagnosis.
 
 ### Running experiments with Quantum I/O
 
