@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
 from dataclasses import dataclass, field, fields
 from datetime import datetime
@@ -62,6 +63,7 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
 from q_alchemy.initialize import allow_deletion, create_client, delete_job_with_data, find_processing_step
+from q_alchemy.utils import nonnegative_integer
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
@@ -78,6 +80,17 @@ _OUTPUT_ALIAS: dict[str, str] = {
     "tomography": "tomography.json",
 }
 
+LOG = logging.getLogger(__name__)
+
+
+def _check_dense_limit(num_qubits: int, max_dense_qubits: int) -> None:
+    nonnegative_integer(max_dense_qubits, "max_dense_qubits")
+    if num_qubits > max_dense_qubits:
+        raise ValueError(
+            f"Dense export requires {num_qubits} qubits, exceeding max_dense_qubits="
+            f"{max_dense_qubits}; use the sparse result or explicitly raise the limit."
+        )
+
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -91,11 +104,12 @@ class SimulatorParams:
     """
 
     api_key: str = field(
-        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY")
+        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+        repr=False,
     )
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
-    added_headers: dict[str, str] = field(default_factory=dict)
+    added_headers: dict[str, str] = field(default_factory=dict, repr=False)
     job_completion_timeout_sec: int | None = field(default=300)
     job_tags: list[str] = field(default_factory=list)
     remove_data: bool = field(default=True)
@@ -230,8 +244,13 @@ class SparseStatevectorResult:
 
         return convert_sparse_coo_to_arrow(self.to_coo())
 
-    def to_dense(self) -> np.ndarray:
-        """Materialize the full dense statevector (``2**num_qubits`` complex)."""
+    def to_dense(self, *, max_dense_qubits: int = 26) -> np.ndarray:
+        """Materialize the dense vector, rejecting sizes above the explicit limit.
+
+        The default permits at most 26 qubits (1 GiB of complex128 amplitudes).
+        Raise the limit only when the caller has sufficient memory.
+        """
+        _check_dense_limit(self.num_qubits, max_dense_qubits)
         vector = np.zeros(2 ** self.num_qubits, dtype=complex)
         vector[self.qiskit_indices()] = self.amplitudes
         return vector
@@ -342,9 +361,27 @@ class SparseSimulator:
             )
         # create_client only reads api_key/added_headers/schema/host/timeout, all
         # of which SimulatorParams provides.
+        self._owns_client = client is None
         self.client = client if client is not None else create_client(self.params)
         self._grants: list[str] | None = None  # cached UserGrants
         self._tier: str | None = None          # cached resolved tier
+
+    def close(self) -> None:
+        """Release the HTTP connection pool created by this simulator client.
+
+        A client passed in by the caller is left open: the simulator does not
+        own it. Calling this more than once is safe.
+        """
+
+        if self._owns_client and self.client is not None:
+            self.client.close()
+            self._owns_client = False
+
+    def __enter__(self) -> "SparseSimulator":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
 
     # -- plan / tier --------------------------------------------------------- #
     def user_grants(self) -> list[str]:
@@ -518,10 +555,16 @@ class SparseSimulator:
         )
         try:
             job.wait_for_state(JobStates.completed, polling_interval_s=0.25, timeout_s=timeout)
-            return self._download_return(job, _OUTPUT_ALIAS[capability])
-        finally:
-            if self.params.remove_data:
+            result = self._download_return(job, _OUTPUT_ALIAS[capability])
+        except BaseException:
+            LOG.warning("Simulator execution or result retrieval failed; the PineXQ Job and WorkData were preserved")
+            raise
+        if self.params.remove_data:
+            try:
                 delete_job_with_data(job)
+            except Exception:
+                LOG.warning("Simulator result retrieved, but cleanup failed; returning the result", exc_info=True)
+        return result
 
     def _prepare_input(
         self, circuit: Circuit, input_form: InputForm
@@ -596,7 +639,8 @@ class SparseSimulator:
 def simulate_counts(circuit: Circuit, params: SimulatorParams | dict | None = None, **kwargs) -> CountsResult:
     """One-shot :meth:`SparseSimulator.counts` (see it for keyword options)."""
     run_kwargs = _split_run_kwargs(kwargs, SparseSimulator.counts)
-    return SparseSimulator(params, **kwargs).counts(circuit, **run_kwargs)
+    with SparseSimulator(params, **kwargs) as simulator:
+        return simulator.counts(circuit, **run_kwargs)
 
 
 def simulate_sparse_statevector(
@@ -604,7 +648,8 @@ def simulate_sparse_statevector(
 ) -> SparseStatevectorResult:
     """One-shot :meth:`SparseSimulator.sparse_statevector`."""
     run_kwargs = _split_run_kwargs(kwargs, SparseSimulator.sparse_statevector)
-    return SparseSimulator(params, **kwargs).sparse_statevector(circuit, **run_kwargs)
+    with SparseSimulator(params, **kwargs) as simulator:
+        return simulator.sparse_statevector(circuit, **run_kwargs)
 
 
 def simulate_tomography(
@@ -612,7 +657,8 @@ def simulate_tomography(
 ) -> TomographyResult:
     """One-shot :meth:`SparseSimulator.tomography`."""
     run_kwargs = _split_run_kwargs(kwargs, SparseSimulator.tomography)
-    return SparseSimulator(params, **kwargs).tomography(circuit, **run_kwargs)
+    with SparseSimulator(params, **kwargs) as simulator:
+        return simulator.tomography(circuit, **run_kwargs)
 
 
 def _split_run_kwargs(kwargs: dict, method) -> dict:

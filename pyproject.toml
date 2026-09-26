@@ -15,17 +15,18 @@ build-backend = "pdm.backend"
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.3.1"
+version = "0.4.0"
 description = ""
 authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
 ]
 dependencies = [
-    "pydantic>=2.6.4",
+    "pydantic>=2.13.4",
     "httpx<1.0.0,>=0.25.0",
     "tenacity>=8.2.3",
-    "pinexq-client>=1.3.0",
-    "numpy>=1.26",
+    # PineXQ API 10.0 models include TenantId and IsMaterialized.
+    "pinexq-client>=2.0.0,<3",
+    "numpy>=2.0.0",
     "packaging>=20",
     "scipy>=1.11",
     "tqdm",
@@ -39,6 +40,17 @@ exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
 pinexq-client = false # we need this even for transitive dependencies
+q-alchemy-visualization = false # first-party releases bypass the global seven-day delay
+
+# Keep the examples extra CPU-only. PyPI's Linux PyTorch wheels pull the
+# CUDA/NVIDIA runtime stack into uv.lock even when GPU support is not used.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [dependency-groups]
 dev = [
@@ -49,24 +61,31 @@ dev = [
     "notebook>=7.4.5",
     "pip>=25.2",
     "scipy-stubs>=1.16.1.1",
-    "qiskit[qasm3-import]",
+    "qiskit[qasm3-import]>=2.3.0",
     "qiskit-addon-utils>=0.3.1",
     "matplotlib>=3.10.8",
+    "scikit-learn",
+    "pennylane>=0.45.1",
+    "pennylane-qiskit>=0.45.0",
+    "pandas",
 ]
 
 [project.optional-dependencies]
+visualization = [
+    "q-alchemy-visualization>=0.1.0",
+]
 qiskit = [
-    "qiskit[qasm3-import]>=2.1.0",
+    "qiskit[qasm3-import]>=2.3.0",
 ]
 pennylane = [
-    "pennylane>=0.42.0",
-    "pennylane-qiskit>=0.43.0",
+    "pennylane>=0.45.1",
+    "pennylane-qiskit>=0.45.0",
     "openqasm3[parser]",
 ]
 examples = [
-    "qiskit>=2.1.0",
-    "pennylane>=0.42.0",
-    "pennylane-qiskit>=0.43",
+    "qiskit>=2.3.0",
+    "pennylane>=0.45.1",
+    "pennylane-qiskit>=0.45.0",
     "qutip",
     "pylatexenc",
     "qiskit_experiments",
@@ -77,9 +96,8 @@ examples = [
     "scikit-learn",
     "torch>=2.11.0",
     "python-dotenv>=1.2.1",
-    "qiskit-ibm-runtime>=0.45.1",
+    "qiskit-ibm-runtime>=0.45.0",
 ]
 
 [project.license]
 text = "Apache"
-

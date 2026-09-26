@@ -6,14 +6,14 @@ import hashlib
 import inspect
 import io
 import os
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from enum import StrEnum
-from time import sleep
 from typing import List, Tuple, Dict, Optional
 
-from threading import Thread, Lock
-from tqdm import tqdm
+from threading import Lock
 
 import httpx
 import numpy as np
@@ -29,7 +29,7 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
-from q_alchemy.utils import is_power_of_two
+from q_alchemy.utils import is_power_of_two, nonnegative_integer
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
@@ -49,10 +49,13 @@ class OptParams:
     remove_data: bool = field(default=True)
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
-    api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
+    api_key: str | None = field(
+        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+        repr=False,
+    )
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
-    added_headers: Dict[str, str] = field(default_factory=dict)
+    added_headers: Dict[str, str] = field(default_factory=dict, repr=False)
     # Never sent to the service; kept so existing callers passing them do not break.
     # BAA_LOW_RANK takes its schemes through extra_kwargs as iso_scheme/unitary_scheme.
     isometry_scheme: str = field(default="ccd")
@@ -74,6 +77,12 @@ class OptParams:
 
 
 def create_client(opt_params: OptParams):
+    if not opt_params.api_key:
+        raise ValueError(
+            "A Q-Alchemy API key is required. Set Q_ALCHEMY_API_KEY or "
+            "PINEXQ_API_KEY, or pass api_key=... in OptParams."
+        )
+
     headers = {"x-api-key": opt_params.api_key}
     headers.update(opt_params.added_headers)
 
@@ -101,10 +110,13 @@ def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
 
 
 def encode_statevector(state_vector: pa.Table) -> str:
+    return base64.b64encode(_serialize_statevector(state_vector)).decode("ascii")
+
+
+def _serialize_statevector(state_vector: pa.Table) -> bytes:
     buffer = io.BytesIO()
     pq.write_table(state_vector, buffer)
-    buffer.seek(0)
-    return base64.encodebytes(buffer.read()).decode("utf-8").replace("\n", "")
+    return buffer.getvalue()
 
 
 def allow_deletion(wd_link: WorkDataLink) -> None:
@@ -125,11 +137,14 @@ def allow_deletion(wd_link: WorkDataLink) -> None:
 
 
 def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
-    # Convert to buffer to get hash and later possibly upload
-    buffer = io.BytesIO()
-    pq.write_table(state_vector, buffer)
-    buffer.seek(0)
-    param_hash = hash_state_vector(buffer, opt_params)
+    return _upload_statevector_payload(client, _serialize_statevector(state_vector), opt_params)
+
+
+def _upload_statevector_payload(client: httpx.Client, payload: bytes, opt_params: OptParams) -> WorkDataLink:
+    param_hash = (
+        hashlib.md5(payload).hexdigest()
+        if opt_params.assign_data_hash else datetime.now(UTC).timestamp()
+    )
 
     sequence_wd_tags = [
         f"Hash={param_hash}",
@@ -138,30 +153,31 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
     sequence_wd_tags += opt_params.job_tags
     wd_root = enter_jma(client).work_data_root_link.navigate()
 
-    existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
-        Filter=WorkDataFilterParameter(
-            TagsByAnd=sequence_wd_tags,
-            NameContains=None,
-            ShowHidden=None,
-            MediaTypeContains=None,
-            TagsByOr=None,
-            IsKind=None,
-            CreatedBefore=None,
-            CreatedAfter=None,
-            IsDeletable=None,
-            IsUsed=None,
-            ProducerProcessingStepUrl=None,
-        ),
-        SortBy=None,
-        IncludeRemainingTags=None,
-        Pagination=None,
-    ))
+    existing_wd_query = None
+    if opt_params.assign_data_hash:
+        existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
+            Filter=WorkDataFilterParameter(
+                TagsByAnd=sequence_wd_tags,
+                NameContains=None,
+                ShowHidden=None,
+                MediaTypeContains=None,
+                TagsByOr=None,
+                IsKind=None,
+                CreatedBefore=None,
+                CreatedAfter=None,
+                IsDeletable=None,
+                IsUsed=None,
+                ProducerProcessingStepUrl=None,
+            ),
+            SortBy=None,
+            IncludeRemainingTags=None,
+            Pagination=None,
+        ))
 
-    if existing_wd_query.total_entities == 0:
-        wd_root = enter_jma(client).work_data_root_link.navigate()
+    if existing_wd_query is None or existing_wd_query.total_entities == 0:
         wd_link = wd_root.upload_action.execute(UploadParameters(
             filename=f"{param_hash}.parquet",
-            binary=buffer.read(),
+            binary=payload,
             mediatype=MediaTypes.OCTET_STREAM,
             json=None,
         ))
@@ -234,6 +250,7 @@ class TimeAwareCache:
         """
         self._store = {}  # Internal storage for (timestamp, value) tuples
         self.ttl = ttl_seconds
+        self.lock = Lock()
 
     def get(self, key: str) -> Optional[object]:
         """
@@ -246,7 +263,7 @@ class TimeAwareCache:
         item = self._store.get(key)
         if item:
             timestamp, value = item
-            if time.time() - timestamp < self.ttl:
+            if time.monotonic() - timestamp < self.ttl:
                 return value
 
             # Entry has expired; remove it
@@ -261,9 +278,9 @@ class TimeAwareCache:
         Args: key (str): The key under which to store the value.
               value (object): The value to cache.
         """
-        self._store[key] = (time.time(), value)
+        self._store[key] = (time.monotonic(), value)
 
-step_cache = TimeAwareCache(ttl_seconds=300)
+_step_cache_lock = Lock()
 
 def _release_version(version: str) -> Optional[Version]:
     """The version as a `Version` if it is a final release, else None (dev, pre-release or unparseable)."""
@@ -324,14 +341,21 @@ def from_name(
     return ProcessingStep.from_hco(processing_step_hco)
 
 def find_processing_step(client, processing_name):
+    # ProcessingStep objects retain their HTTP client. Keep the cache on that
+    # client so accounts cannot share lookups and a global cache cannot retain
+    # closed clients. Callers should use a new client when changing accounts.
+    with _step_cache_lock:
+        cache = getattr(client, "_qalchemy_step_cache", None)
+        if cache is None:
+            cache = TimeAwareCache(ttl_seconds=300)
+            client._qalchemy_step_cache = cache
     step_key = str(client.base_url) + '/' + processing_name
-    step = step_cache.get(step_key)
-
-    if step is None:
-        step = from_name(client=client, step_name=processing_name, version=None)
-        step_cache.set(step_key, step)
-
-    return step
+    with cache.lock:
+        step = cache.get(step_key)
+        if step is None:
+            step = from_name(client=client, step_name=processing_name, version=None)
+            cache.set(step_key, step)
+        return step
 
 def configure_job(
     client: httpx.Client,
@@ -499,26 +523,52 @@ def q_alchemy_as_qasm(
 ) -> str | Tuple[str, dict]:
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm(state_vector, opt_params, client, return_summary)
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
-    # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
+
+def _q_alchemy_as_qasm(
+        state_vector: List[complex] | np.ndarray | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> str | Tuple[str, dict]:
+    payload, num_qubits = _prepare_statevector(state_vector)
+    return _run_prepared_statevector(payload, num_qubits, opt_params, client, return_summary)
+
+
+def _prepare_statevector(state_vector) -> tuple[bytes, int]:
+    """Validate and serialize once, including when several options share a state."""
     data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
-    data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
-
-    # Now we decide if we use inline state-vectors
-    # (saves hussle and resources) or if we use the
-    # work-data approach:
-    # currently, all states <= 16 qubits are going inline.
-    num_qubits = np.log2(data_matrix.shape[1])
     if not is_power_of_two(data_matrix):
         raise ValueError(
             f"The state vector is not a power of two. "
             f"The length of the state vector is {data_matrix.shape[1]}."
         )
+    return (
+        _serialize_statevector(convert_sparse_coo_to_arrow(data_matrix)),
+        data_matrix.shape[1].bit_length() - 1,
+    )
+
+
+def _run_prepared_statevector(
+    payload: bytes,
+    num_qubits: int,
+    opt_params: OptParams,
+    client: httpx.Client,
+    return_summary: bool,
+    inline_payload: str | None = None,
+) -> str | Tuple[str, dict]:
     if num_qubits > USE_INLINE_STATE_NUM_QUBITS or opt_params.use_research_function is not None:
-        statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
+        statevector_data = _upload_statevector_payload(client, payload, opt_params)
     else:
-        statevector_data = encode_statevector(data_matrix_pyarrow)
+        statevector_data = inline_payload if inline_payload is not None else base64.b64encode(payload).decode("ascii")
 
     job_timeout = (
         opt_params.job_completion_timeout_sec
@@ -541,25 +591,46 @@ def q_alchemy_as_qasm(
 
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse.sparray,
-                                opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
-    """Run QAlchemy with different sets of opt_params in parallel."""
-    threads = []
-    result = []
-    for opt in opt_params:
-        def func(_opt):
-            sp_qasm = q_alchemy_as_qasm(state_vector, _opt, client, return_summary)
-            result.append(sp_qasm)
+                                opt_params: List[dict | OptParams], client: httpx.Client | None = None,
+                                return_summary=False, *, max_workers: int = 4):
+    """Run option sets concurrently, preserving order and propagating failures.
 
-        job = Thread(target=func, args=(opt,))
-        job.start()
-        sleep(0.05)  # be easy on the API
-        threads.append(job)
+    At most ``max_workers`` jobs run concurrently. Serialization is shared, but
+    each job retains its own upload/cleanup lifecycle. A supplied client remains
+    caller-owned; otherwise each worker opens and closes its own client.
+    """
+    if nonnegative_integer(max_workers, "max_workers") == 0:
+        raise ValueError("max_workers must be positive")
+    options = [deepcopy(populate_opt_params(opt)) for opt in opt_params]
+    if not options:
+        return []
+    payload, num_qubits = _prepare_statevector(state_vector)
+    inline_payload = (
+        base64.b64encode(payload).decode("ascii")
+        if num_qubits <= USE_INLINE_STATE_NUM_QUBITS
+        and any(opt.use_research_function is None for opt in options)
+        else None
+    )
 
-    # print(f"Waiting for {len(threads)} jobs to finish.")
-    for x in tqdm(threads):
-        x.join()
+    def run(opt):
+        worker_client = client if client is not None else create_client(opt)
+        try:
+            return _run_prepared_statevector(
+                payload, num_qubits, opt, worker_client, return_summary, inline_payload
+            )
+        finally:
+            if client is None:
+                worker_client.close()
 
-    return result
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(options))) as executor:
+        futures = [executor.submit(run, opt) for opt in options]
+        try:
+            return [future.result() for future in futures]
+        except BaseException:
+            # Running jobs finish their normal cleanup; queued work need not run.
+            for future in futures:
+                future.cancel()
+            raise
 
 
 def q_alchemy_as_qasm_parallel_states(
@@ -576,8 +647,24 @@ def q_alchemy_as_qasm_parallel_states(
     """
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm_parallel_states(
+            state_vector, opt_params, client, return_summary
+        )
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
+
+def _q_alchemy_as_qasm_parallel_states(
+        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> list[str] | tuple[list[str], list[dict]]:
     # cast/reshape state_vector into an (m x 2**n) coo_matrix, where m is the number of states
     if sparse.issparse(state_vector): # state_vector is a sparse matrix/array, and thus 2d.
         num_states = state_vector.shape[0]

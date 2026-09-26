@@ -1,5 +1,6 @@
 from pathlib import Path
 import unittest
+from pathlib import Path
 from textwrap import dedent
 
 from dotenv import load_dotenv
@@ -14,14 +15,91 @@ from scipy.sparse import coo_matrix, coo_array, csr_matrix, vstack
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams, pennylane_batch_initialize
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-# The qasm3 import tests run locally; everything else prepares states on the live API.
 requires_api_key = unittest.skipUnless(
-    os.getenv("Q_ALCHEMY_API_KEY"), "no Q_ALCHEMY_API_KEY: skipping live PennyLane tests")
+    os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+    "no Q_ALCHEMY_API_KEY/PINEXQ_API_KEY: skipping live PennyLane integration test",
+)
 
 
 class TestPennyLaneIntegration(unittest.TestCase):
+
+    def test_qasm3_parser_current_support(self):
+        qasm3_program = """
+        OPENQASM 3.0;
+
+        qubit q0;
+        qubit q1;
+
+        h q0;
+        cx q0, q1;
+        """
+
+        dev = qml.device("default.qubit", wires=2)
+
+        loaded = qml.from_qasm3(
+            qasm3_program,
+            {
+                "q0": 1,
+                "q1": 0,
+            },
+        )
+
+        @qml.qnode(dev)
+        def circuit():
+            loaded()
+            return qml.state()
+
+        state = circuit()
+
+        expected = np.array(
+            [
+                1 / np.sqrt(2),
+                0,
+                0,
+                1 / np.sqrt(2),
+            ],
+            dtype=complex,
+        )
+
+        assert np.allclose(state, expected, atol=1e-12)
+
+    def test_qasm3_global_phase(self):
+        phase = 0.37
+
+        qasm3_program = """
+        OPENQASM 3.0;
+        qubit q0;
+        rx(0.5) q0;
+        """
+
+        loaded = qml.from_qasm3(
+            qasm3_program,
+            {"q0": 0},
+        )
+
+        dev = qml.device("default.qubit", wires=1)
+
+        @qml.qnode(dev)
+        def circuit():
+            qml.GlobalPhase(phase)
+            loaded()
+            return qml.state()
+
+        state = circuit()
+
+        base_state = np.array(
+            [
+                np.cos(0.25),
+                -1j * np.sin(0.25),
+            ],
+            dtype=complex,
+        )
+
+        expected = np.exp(-1j * phase) * base_state
+
+        assert np.allclose(state, expected, atol=1e-12)
 
     def setUp(self):
         # This method will be called before each test
@@ -34,7 +112,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
     @requires_api_key
     def test_fixed_complex(self):
 
-        with open(Path(__file__).parent / "data" / "test.qasm", "r") as f:
+        with (Path(__file__).parent / "data" / "test.qasm").open("r") as f:
             qasm = f.read()
 
         qc = QuantumCircuit.from_qasm_str(qasm)
@@ -138,6 +216,7 @@ class TestPennyLaneIntegration(unittest.TestCase):
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
 
     @unittest.expectedFailure #from_qasm3 doesn't support include or qubit registers?
+    @requires_api_key
     def test_qasm3(self):
 
         n_qubits = 4
@@ -162,7 +241,6 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
         self.assertLessEqual(1 - abs(np.vdot(state_vector, state_pennylane))**2, 1e-13)
         self.assertLessEqual(np.linalg.norm(state_vector - state_pennylane), 1e-12) #phase
-
 
     @requires_api_key
     def test_batch_complex(self):

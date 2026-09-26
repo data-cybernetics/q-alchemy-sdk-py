@@ -1,6 +1,6 @@
 """Use the hosted Q-Alchemy simulator as a Qiskit BackendV2 (and from PennyLane).
 
-Run it with an API key available (e.g. Q_ALCHEMY_API_KEY in ../.env):
+Run it with an API key available (e.g. Q_ALCHEMY_API_KEY in the repository .env):
 
     python examples/qiskit_backend.py
 
@@ -14,14 +14,15 @@ pennylane + the PennyLane-Qiskit plugin (`[pennylane]` or `[examples]`).
 """
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from qiskit import QuantumCircuit, transpile
 
 from q_alchemy import QAlchemyBackend, QAlchemyProvider
 
-load_dotenv("../.env")
-assert os.getenv("Q_ALCHEMY_API_KEY"), "Set Q_ALCHEMY_API_KEY (e.g. in ../.env)"
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+assert os.getenv("Q_ALCHEMY_API_KEY"), "Set Q_ALCHEMY_API_KEY (e.g. in the repository .env)"
 
 
 def qiskit_demo() -> None:
