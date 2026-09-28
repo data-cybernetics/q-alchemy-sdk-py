@@ -82,8 +82,12 @@ class BatchOptionsTestCase(unittest.TestCase):
             pennylane_batch_initialize([STATE], wires=WIRES, **hyperparameters)
         return batch.call_args.args[1]
 
-    def test_default_basis_is_kept(self):
-        self.assertEqual(self._submitted_opt_params().basis_gates, ["id", "rx", "ry", "rz", "cx"])
+    def test_default_basis_matches_the_single_state_operations(self):
+        """The batch defaulted to ["id", "rx", "ry", "rz", "cx"] while single operations
+        got ["u", "cx"], so the same state came out in different gates."""
+        single = opt_params_of(QAlchemyStatePreparation(STATE, wires=WIRES)).basis_gates
+        self.assertEqual(self._submitted_opt_params().basis_gates, single)
+        self.assertEqual(single, OptParams().basis_gates)
 
     def test_options_apply_with_or_without_opt_params(self):
         """Keywords other than opt_params used to be ignored."""

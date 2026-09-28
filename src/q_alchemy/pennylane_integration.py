@@ -34,7 +34,7 @@ RTOL = 1e-9
 SOURCE_TAG = "Source=PennyLane-Integration"
 
 
-def _opt_params_from(kwargs: dict, default: OptParams | None = None) -> OptParams:
+def _opt_params_from(kwargs: dict) -> OptParams:
     """The OptParams for a PennyLane operation: opt_params=, overridden by any other keyword.
 
     This used to be OptParams.from_dict(kwargs), which dropped every keyword that
@@ -46,7 +46,7 @@ def _opt_params_from(kwargs: dict, default: OptParams | None = None) -> OptParam
     """
     options = dict(kwargs)
     base = options.pop("opt_params", None)
-    return populate_opt_params(base if base is not None else default, **options)
+    return populate_opt_params(base, **options)
 
 
 def _tagged(opt_params: OptParams) -> OptParams:
@@ -238,7 +238,9 @@ class QAlchemyStatePreparation(Operation):
     # noinspection PyMethodOverriding
     @staticmethod
     def compute_decomposition(state_vector, wires, **hyperparameters):  # pylint: disable=arguments-differ
-        opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
+        # Always set by __init__. The fallback that stood here named a gate set
+        # nothing ever received, and was copied from as if it were the default.
+        opt_params = hyperparameters["opt_params"]
         shape = qml.math.shape(state_vector)
         if len(shape) != 1 and not (issparse(state_vector) and shape[0] == 1):
             raise ValueError(
@@ -297,7 +299,10 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
     Returns:
         list: List of quantum functions preparing requested states.
     """
-    opt_params = _opt_params_from(hyperparameters, default=OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
+    # The SDK-wide default basis, as for every other entry point. This used to be
+    # ["id", "rx", "ry", "rz", "cx"], the default before October 2024, copied from a dead
+    # fallback, so a batch and a single state came out in different gates.
+    opt_params = _opt_params_from(hyperparameters)
     if opt_params.use_qasm3:
         warnings.warn("QASM3 not fully supported by pennylane_integration!")
     qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(state_vectors, opt_params, return_summary=True)
