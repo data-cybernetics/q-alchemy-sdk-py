@@ -41,8 +41,6 @@ class InitializationMethods(StrEnum):
     AUTO = "auto"
     HIERARCHICAL_TUCKER = "hierarchical_tucker"
     ITERATIVE_TUCKER = "iterative_tucker"
-    SWAP_PIVOT = "swap_pivot"
-    BAA_LOW_RANK = "baa_low_rank"
 
 @dataclass
 class OptParams:
@@ -56,10 +54,6 @@ class OptParams:
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
     added_headers: Dict[str, str] = field(default_factory=dict, repr=False)
-    # Never sent to the service; kept so existing callers passing them do not break.
-    # BAA_LOW_RANK takes its schemes through extra_kwargs as iso_scheme/unitary_scheme.
-    isometry_scheme: str = field(default="ccd")
-    unitary_scheme: str = field(default="qsd")
     job_completion_timeout_sec: int | None = field(default=300)
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     assign_data_hash: bool = field(default=True)

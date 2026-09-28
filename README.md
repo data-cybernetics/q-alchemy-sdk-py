@@ -211,7 +211,7 @@ The fields you are most likely to touch:
 | Field | Default | Meaning |
 |---|---|---|
 | `max_fidelity_loss` | `0.0` | How much fidelity you are willing to give up for a shallower circuit. `0.0` asks for an exact preparation. |
-| `basis_gates` | `["u", "cx"]` | Gate set the returned circuit is transpiled to. |
+| `basis_gates` | `["u", "cx"]` | Gate set used for the returned circuit; under `AUTO`, also used to compare candidates. |
 | `api_key` | `$Q_ALCHEMY_API_KEY` | Your Q-Alchemy API key. Keep it safe! |
 | `initialization_method` | `InitializationMethods.AUTO` | Which algorithm builds the circuit (see below). |
 | `extra_kwargs` | `{}` | Method-specific options, as a dict (see below). |
@@ -239,8 +239,6 @@ the instruction no longer computes the unused `param_hash` attribute.
   circuit. Trivial inputs such as single-qubit and single-basis states take an
   exact fast path.
 - `ITERATIVE_TUCKER` and `HIERARCHICAL_TUCKER` pin one Tucker variant.
-- `SWAP_PIVOT` is suited to very sparse states.
-- `BAA_LOW_RANK` uses the BAA low-rank initializer; it is limited to 12 qubits.
 
 #### Method-specific options (`extra_kwargs`)
 
@@ -264,20 +262,18 @@ opt_params = OptParams(
 
 | Method | Accepted `extra_kwargs` keys |
 |---|---|
-| `AUTO` | `cost_function` (`"cx_then_depth"` default, `"depth_then_cx"`, `"two_qubit_then_depth"`, `"cx+depth"`, `"cx"`, `"depth"`), `basis_gates` (gate set used to *compare* candidates, default `["u", "cx"]`), `transpile_optimization_level` (1), `seed_transpiler` (0), `dominant_basis_fast_path` (`True`), `fidelity_tolerance`, `geometric_entanglement`, `check_normalization` (`True`) |
+| `AUTO` | `cost_function` (`"two_qubit_then_depth"` default, `"cx_then_depth"`, `"depth_then_cx"`, `"cx+depth"`, `"cx"`, `"depth"`), `transpile_optimization_level` (1), `seed_transpiler` (0), `dominant_basis_fast_path` (`True`), `fidelity_tolerance`, `geometric_entanglement`, `check_normalization` (`True`) |
 | `ITERATIVE_TUCKER` | `max_iterations` (≤ 0 picks one from the qubit count), `factors_size` (0 = automatic), `max_stepup` (0), `fallback` (`True`), `perturbation` (`None`), `geometric_entanglement` (0.0), `check_normalization` (`True`), `barriers` (`False`; debugging only, hurts transpilation) |
 | `HIERARCHICAL_TUCKER` | `geometric_entanglement`, `check_normalization` |
-| `SWAP_PIVOT` | `aux` |
-| `BAA_LOW_RANK` | `strategy` (`"greedy"`), `use_low_rank` (`True`), `max_combination_size`, `iso_scheme`, `unitary_scheme` |
 
 Two interactions worth knowing:
 
 - **Set the fidelity with `max_fidelity_loss` on `OptParams`, not in
   `extra_kwargs`.** Every method accepts `max_fidelity_loss` in `extra_kwargs`
   too, but if you put it there it silently overrides the top-level value.
-- **Under `AUTO`, `basis_gates` on `OptParams` only affects the final
-  transpilation.** Candidates are compared on `u`/`cx` cost unless you also pass
-  `extra_kwargs={"basis_gates": [...]}`.
+- **Under `AUTO`, `basis_gates` on `OptParams` is the authoritative gate set.**
+  The hosted QAlchemy initializer uses it both when comparing candidates and for
+  the returned circuit. Do not duplicate `basis_gates` in `extra_kwargs`.
 
 ### Compressing circuits through PineXQ
 

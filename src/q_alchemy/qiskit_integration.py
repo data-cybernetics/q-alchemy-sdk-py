@@ -47,7 +47,8 @@ class QAlchemyInitialize(Instruction):
                 Default ``0.0``, an exact preparation.
 
             basis_gates: list of str
-                Gate set the returned circuit is transpiled to. Default ``["u", "cx"]``.
+                Gate set used for the returned circuit. Under ``AUTO`` it is also
+                the gate set used to compare candidate circuits. Default ``["u", "cx"]``.
 
             initialization_method: InitializationMethods
                 Which algorithm builds the circuit. Default ``InitializationMethods.AUTO``.
