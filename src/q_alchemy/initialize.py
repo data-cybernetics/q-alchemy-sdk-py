@@ -380,6 +380,26 @@ def configure_job(
     )
     return job
 
+def _failed_states_to_none(result_list: list[dict], qasm_list: list[str | None]) -> list[str | None]:
+    """Replace the circuit of every state that failed in a batch with None.
+
+    A batch job completes even when some of its states fail: each state carries
+    its own summary, and a failed one has a status other than "OK" and no
+    circuit. The server writes null for that circuit; "" is accepted too, since
+    that is what the server's batch generator yields internally. Normalising
+    here means callers only ever test for None, and never hand a placeholder to
+    a QASM parser, where it fails far from the status that explains it.
+    """
+    circuits = []
+    for index, (summary, qasm) in enumerate(zip(result_list, qasm_list, strict=True)):
+        if qasm is None or qasm == "" or not summary["status"].startswith("OK"):
+            LOG.warning("Q-Alchemy could not prepare state %d of the batch: %s", index, summary["status"])
+            circuits.append(None)
+        else:
+            circuits.append(qasm)
+    return circuits
+
+
 def extract_result(job: Job):
     # the inline job returns [str, dict], while the dataslot job returns dict only...
     # and the batch job returns None!
@@ -404,7 +424,7 @@ def extract_result(job: Job):
                 qasm_list = json.loads(qasm_str)
             else:
                 raise IOError("Q-Alchemy API call failed for unknown reasons.")
-            return result_list, qasm_list
+            return result_list, _failed_states_to_none(result_list, qasm_list)
         case [qasm, result_summary]:
             if result_summary["status"].startswith("OK"):
                 return result_summary, qasm
@@ -568,11 +588,14 @@ def q_alchemy_as_qasm_parallel_states(
         client: httpx.Client | None = None,
         return_summary=False,
         **kwargs
-) -> list[str] | tuple[list[str], list[dict]]:
+) -> list[str | None] | tuple[list[str | None], list[dict]]:
     """Run QAlchemy on a set of states.
 
     Note that the circuit's global phase is included both in the return summary and in the QASM;
     in the latter, if the circuit is a QASM2, the gphase is included as a comment.
+
+    A state that could not be prepared does not fail the batch: its circuit is None and its
+    summary's "status" gives the reason. Both lists stay aligned with the input states.
     """
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)

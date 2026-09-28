@@ -279,18 +279,21 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
         **hyperparameters ():
 
     Returns:
-        list: List of quantum functions preparing requested states.
+        list: List of quantum functions preparing requested states. A state that could not be
+            prepared is None, and the rest of the batch is still returned; the reason is logged
+            as a warning.
     """
     opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
     if opt_params.use_qasm3:
         warnings.warn("QASM3 not fully supported by pennylane_integration!")
     qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(state_vectors, opt_params, return_summary=True)
     if opt_params.use_qasm3: # Currently Pennylane cannot `include`!
-        qasm_list = ["\n".join(
+        qasm_list = [None if qasm is None else "\n".join(
             [line for line in qasm.split("\n") if not line.startswith('include ')]
         ) for qasm in qasm_list] # ... but also does not support qubit registers?
         # Reorder the wires, as the original qasm code assumes qubit 0 is the least significant bit.
-        return [qml.from_qasm3(qasm, {f"q{i}": wire for i, wire in enumerate(wires[::-1])}) for qasm in qasm_list]
+        return [None if qasm is None else qml.from_qasm3(qasm, {f"q{i}": wire for i, wire in enumerate(wires[::-1])})
+                for qasm in qasm_list]
     else: #unfortunately, we can't do the "wires thing" in the parser. We instead have to make some closures. Ugh.
         def circuit_generator(qasm, summary):
             loaded_circuit = qml.from_qasm(qasm)
@@ -302,7 +305,8 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
                     qml.apply(op)
                 # no return value??
             return circuit_pennylane # a callable quantum function
-        return [circuit_generator(qasm, summary) for qasm, summary in zip(qasm_list, summary_list)]
+        return [None if qasm is None else circuit_generator(qasm, summary)
+                for qasm, summary in zip(qasm_list, summary_list)]
 
     return ops_list
 
