@@ -6,7 +6,8 @@ import hashlib
 import inspect
 import io
 import os
-from dataclasses import dataclass, field
+import difflib
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, UTC
 from enum import StrEnum
 from time import sleep
@@ -176,17 +177,31 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
 
 
 def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) -> OptParams:
+    """Build the OptParams for one call, with any keyword arguments overriding its fields.
+
+    An unknown keyword raises TypeError. It used to be dropped, so a misspelt
+    max_fidelity_loss ran with the default of 0.0, an exact and much deeper
+    circuit, with no sign of why. A dict of opt_params already raised for the
+    same typo.
+
+    The overrides go on a copy. Setting them on the caller's OptParams carried
+    one call's overrides into every later call that reused the object.
+    """
     if opt_params is None:
         opt_params = OptParams()
-    elif isinstance(opt_params, OptParams):
-        opt_params = opt_params
-    else:
+    elif not isinstance(opt_params, OptParams):
         opt_params = OptParams(**opt_params)
 
-    for attr in kwargs:
-        if hasattr(opt_params, attr):
-            setattr(opt_params, attr, kwargs[attr])
-    return opt_params
+    known = {f.name for f in fields(OptParams)}
+    unknown = sorted(set(kwargs) - known)
+    if unknown:
+        hints = [
+            f"'{name}' (did you mean '{match[0]}'?)" if (match := difflib.get_close_matches(name, known, n=1))
+            else f"'{name}'"
+            for name in unknown
+        ]
+        raise TypeError(f"Unknown OptParams option(s): {', '.join(hints)}.")
+    return replace(opt_params, **kwargs)
 
 
 def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str,
@@ -409,7 +424,7 @@ def extract_result(job: Job):
             if result_summary["status"].startswith("OK"):
                 return result_summary, qasm
             else:
-                raise IOError("Q-Alchemy API call failed for unknown reasons.")
+                raise IOError(f"Q-Alchemy API call failed. Reason: {result_summary['status']}.")
         case dict():
             result_summary = res
             if result_summary["status"].startswith("OK"):
@@ -542,15 +557,27 @@ def q_alchemy_as_qasm(
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse.sparray,
                                 opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
-    """Run QAlchemy with different sets of opt_params in parallel."""
-    threads = []
-    result = []
-    for opt in opt_params:
-        def func(_opt):
-            sp_qasm = q_alchemy_as_qasm(state_vector, _opt, client, return_summary)
-            result.append(sp_qasm)
+    """Run QAlchemy with different sets of opt_params in parallel.
 
-        job = Thread(target=func, args=(opt,))
+    Results come back in the order of opt_params. If any job fails, the failure of
+    the earliest failed entry is raised once every job has finished, noting which
+    entry it was.
+    """
+    threads = []
+    # Stored by index: appending as each thread finished returned the results in
+    # completion order, and a failed job only printed a thread traceback, which
+    # left the list short with nothing raised.
+    results = [None] * len(opt_params)
+    errors: dict[int, BaseException] = {}
+
+    def func(index, _opt):
+        try:
+            results[index] = q_alchemy_as_qasm(state_vector, _opt, client, return_summary)
+        except BaseException as ex:
+            errors[index] = ex
+
+    for index, opt in enumerate(opt_params):
+        job = Thread(target=func, args=(index, opt))
         job.start()
         sleep(0.05)  # be easy on the API
         threads.append(job)
@@ -559,7 +586,12 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse
     for x in tqdm(threads):
         x.join()
 
-    return result
+    if errors:
+        index = min(errors)
+        error = errors[index]
+        error.add_note(f"Raised by opt_params[{index}]; {len(errors)} of {len(opt_params)} jobs failed.")
+        raise error
+    return results
 
 
 def q_alchemy_as_qasm_parallel_states(

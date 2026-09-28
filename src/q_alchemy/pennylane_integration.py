@@ -304,6 +304,4 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
             return circuit_pennylane # a callable quantum function
         return [circuit_generator(qasm, summary) for qasm, summary in zip(qasm_list, summary_list)]
 
-    return ops_list
-
 

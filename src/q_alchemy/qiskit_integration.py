@@ -116,14 +116,9 @@ def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np
         # avoid expanding sparse matrices!
         params = [(sv if issparse(sv) else np.asarray(sv, dtype=complex)) for sv in state_vectors]
         num_states = len(params)
-        if issparse(params[0]):
-            num_qubits = int(np.ceil(np.log2(params[0].size))) # size = shape[0] * shape[1]
-        else:
-            num_qubits = int(np.ceil(np.log2(len(params[0]))))
     elif issparse(state_vectors):
         params = state_vectors
         num_states = params.shape[0]
-        num_qubits = int(np.ceil(np.log2(params.shape[1])))
     else:
         raise TypeError(f"state_vectors has unexpected type: {type(state_vectors)}")
         
@@ -145,7 +140,7 @@ def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np
     #     param_hash = datetime.datetime.utcnow().timestamp()
 
     qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(
-        state_vector=params, opt_params=opt_params, num_qubits=num_qubits, client=None, return_summary=True)
+        state_vector=params, opt_params=opt_params, client=None, return_summary=True)
     if opt_params.use_qasm3:
         qcs = [qasm3.loads(qasm) for qasm in qasm_list]
     else:
