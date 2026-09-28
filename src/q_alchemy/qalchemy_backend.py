@@ -145,6 +145,12 @@ class QAlchemyBackend(BackendV2):
         self._target = self._build_target(self._num_qubits)
         # Reuse a passed-in client, or build one from params + kwargs.
         if isinstance(params, SparseSimulator):
+            # A ready simulator's options are fixed; options passed alongside it
+            # used to be dropped without a word.
+            if sim_kwargs:
+                raise TypeError(
+                    f"Options {sorted(sim_kwargs)} cannot be applied to a SparseSimulator passed as params; "
+                    "pass them to the SparseSimulator instead.")
             self._simulator = params
         else:
             self._simulator = SparseSimulator(params, **sim_kwargs)

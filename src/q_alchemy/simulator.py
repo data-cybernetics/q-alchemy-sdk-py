@@ -46,7 +46,7 @@ from __future__ import annotations
 import io
 import json
 import os
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Literal, Sequence
 
@@ -62,6 +62,7 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
 from q_alchemy.initialize import allow_deletion, create_client, delete_job_with_data, find_processing_step
+from q_alchemy.utils import reject_unknown_options
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
 InputForm = Literal["auto", "qasm_string", "qasm_file", "qpy"]
@@ -116,14 +117,20 @@ class SimulatorParams:
 
 
 def _populate_params(params: "SimulatorParams | dict | None", **kwargs) -> SimulatorParams:
+    """The SimulatorParams for one simulator, with keyword arguments overriding its fields.
+
+    An unknown option, in the dict or as a keyword, raises TypeError. It used to
+    be dropped, so e.g. job_completion_timeout=60 ran with the default timeout.
+    Overrides go on a copy; they used to be set on the caller's SimulatorParams.
+    """
+    known = [f.name for f in fields(SimulatorParams)]
     if params is None:
         params = SimulatorParams()
     elif isinstance(params, dict):
-        params = SimulatorParams.from_dict(params)
-    for attr, value in kwargs.items():
-        if hasattr(params, attr):
-            setattr(params, attr, value)
-    return params
+        reject_unknown_options("SimulatorParams", params, known)
+        params = SimulatorParams(**params)
+    reject_unknown_options("SimulatorParams", kwargs, known)
+    return replace(params, **kwargs)
 
 
 # --------------------------------------------------------------------------- #
@@ -624,5 +631,12 @@ def _split_run_kwargs(kwargs: dict, method) -> dict:
     import inspect
 
     run_names = set(inspect.signature(method).parameters) - {"self", "circuit"}
+    # Checked here, against both kinds, so a misspelt run option (shot=100) is
+    # reported with the right suggestion rather than dropped: it used to fall
+    # through to the params, which ignored it, and the run used 1024 shots.
+    constructor_names = set(inspect.signature(SparseSimulator.__init__).parameters) - {"self", "params", "kwargs"}
+    reject_unknown_options(
+        f"{method.__name__}", kwargs,
+        run_names | constructor_names | {f.name for f in fields(SimulatorParams)})
     run_kwargs = {k: kwargs.pop(k) for k in list(kwargs) if k in run_names}
     return run_kwargs

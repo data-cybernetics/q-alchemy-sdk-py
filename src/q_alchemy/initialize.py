@@ -6,7 +6,6 @@ import hashlib
 import inspect
 import io
 import os
-import difflib
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, UTC
 from enum import StrEnum
@@ -30,7 +29,7 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
-from q_alchemy.utils import is_power_of_two
+from q_alchemy.utils import is_power_of_two, reject_unknown_options
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
@@ -192,15 +191,7 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
     elif not isinstance(opt_params, OptParams):
         opt_params = OptParams(**opt_params)
 
-    known = {f.name for f in fields(OptParams)}
-    unknown = sorted(set(kwargs) - known)
-    if unknown:
-        hints = [
-            f"'{name}' (did you mean '{match[0]}'?)" if (match := difflib.get_close_matches(name, known, n=1))
-            else f"'{name}'"
-            for name in unknown
-        ]
-        raise TypeError(f"Unknown OptParams option(s): {', '.join(hints)}.")
+    reject_unknown_options("OptParams", kwargs, (f.name for f in fields(OptParams)))
     return replace(opt_params, **kwargs)
 
 
