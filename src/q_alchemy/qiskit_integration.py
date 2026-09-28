@@ -100,7 +100,7 @@ class QAlchemyInitialize(Instruction):
 
 def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np.ndarray | sparray] | sparray,
                          labels: list[str] = [],
-                         opt_params: dict | OptParams | None = None) -> list[Gate]:
+                         opt_params: dict | OptParams | None = None) -> list[Gate | None]:
     """
     Submit a batch of state vectors to QAlchemy, and return a list of initialization Gates.
 
@@ -110,7 +110,9 @@ def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np
         opt_params (dict | OptParams | None): Optional parameters; see OptParams for details.
 
     Returns:
-        list[Gate]: A list of labeled initialization circuits, one for each state.
+        list[Gate | None]: A list of labeled initialization circuits, one for each state. A state that
+            could not be prepared is None, and the rest of the batch is still returned; the reason is
+            logged as a warning.
     """
     if isinstance(state_vectors, List):
         # avoid expanding sparse matrices!
@@ -146,11 +148,14 @@ def qiskit_batch_initialize(state_vectors: list[Statevector | List[complex] | np
 
     qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(
         state_vector=params, opt_params=opt_params, num_qubits=num_qubits, client=None, return_summary=True)
-    if opt_params.use_qasm3:
-        qcs = [qasm3.loads(qasm) for qasm in qasm_list]
-    else:
-        qcs = [QuantumCircuit.from_qasm_str(qasm) for qasm in qasm_list]
-        for qc, summary in zip(qcs, summary_list):
+    def to_gate(qasm: str | None, summary: dict, label: str) -> Gate | None:
+        if qasm is None:  # this state failed; its summary says why
+            return None
+        if opt_params.use_qasm3:
+            qc = qasm3.loads(qasm)
+        else:
+            qc = QuantumCircuit.from_qasm_str(qasm)
             qc.global_phase = summary["global_phase"]
-    gates = [qc.to_gate(label=label) for qc, label in zip(qcs, labels)]
-    return gates
+        return qc.to_gate(label=label)
+
+    return [to_gate(qasm, summary, label) for qasm, summary, label in zip(qasm_list, summary_list, labels)]
