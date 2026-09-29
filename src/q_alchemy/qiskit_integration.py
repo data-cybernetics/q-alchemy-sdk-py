@@ -47,8 +47,12 @@ class QAlchemyInitialize(Instruction):
                 Default ``0.0``, an exact preparation.
 
             basis_gates: list of str
-                Gate set used for the returned circuit. Under ``AUTO`` it is also
-                the gate set used to compare candidate circuits. Default ``["u", "cx"]``.
+                Gate names used to transpile the returned circuit for all three
+                methods, without physical placement or routing. Under ``AUTO``
+                this basis also governs candidate comparison. Explicit Hierarchical
+                and Iterative requests receive final ProCon transpilation at
+                optimization level 1. Default ``["u", "cx"]``. The SDK accepts
+                gate names, not backend or Target objects.
 
             initialization_method: InitializationMethods
                 Which algorithm builds the circuit. Default ``InitializationMethods.AUTO``.

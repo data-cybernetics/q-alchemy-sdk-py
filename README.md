@@ -206,12 +206,32 @@ Every entry point (`q_alchemy_as_qasm`, `QAlchemyInitialize`,
 also accepts them as keyword arguments. The state itself can be a list, a numpy
 array, a scipy sparse array or, for Qiskit, a `Statevector`.
 
+Dense inputs are checked for sparsity once before serialization. The SDK uses
+QTucker's blockwise, early-exit density rule: a vector is sent as sparse when its
+number of nonzero amplitudes is at most `ceil(0.1 * vector_length)`. Unlike
+QTucker's numerical thresholding, the transport check counts exact nonzeros and
+never discards tiny amplitudes or renormalizes the state. This keeps transport
+lossless and leaves the approximation budget with QTucker.
+
+- Dense vectors use NumPy `.npy` serialization (`numpy_load` for inline input).
+- Sparse vectors use Parquet with basis indices and complex amplitudes. Inputs
+  already supplied as SciPy sparse matrices/arrays skip the density check and
+  remain sparse, even when fully populated.
+- Mixed batches are split into at most two service jobs, one per representation;
+  returned circuits and summaries follow the original input order. Each job uses
+  the usual cleanup policy and timeout. If either job fails, the call raises.
+  Uniform batches still use one job; parallel option sets share one serialization.
+
+The updated ProCon preserves these dense/sparse paths into QTucker. Both formats
+are supported by older services too, but avoiding server-side conversions requires
+the updated ProCon deployment. No private QTucker dependency is added to the SDK.
+
 The fields you are most likely to touch:
 
 | Field | Default | Meaning |
 |---|---|---|
 | `max_fidelity_loss` | `0.0` | How much fidelity you are willing to give up for a shallower circuit. `0.0` asks for an exact preparation. |
-| `basis_gates` | `["u", "cx"]` | Gate set used for the returned circuit; under `AUTO`, also used to compare candidates. |
+| `basis_gates` | `["u", "cx"]` | Gate names used to transpile the returned circuit for all three methods; under `AUTO`, also used to compare candidates. |
 | `api_key` | `$Q_ALCHEMY_API_KEY` | Your Q-Alchemy API key. Keep it safe! |
 | `initialization_method` | `InitializationMethods.AUTO` | Which algorithm builds the circuit (see below). |
 | `extra_kwargs` | `{}` | Method-specific options, as a dict (see below). |
@@ -269,11 +289,37 @@ opt_params = OptParams(
 Two interactions worth knowing:
 
 - **Set the fidelity with `max_fidelity_loss` on `OptParams`, not in
-  `extra_kwargs`.** Every method accepts `max_fidelity_loss` in `extra_kwargs`
-  too, but if you put it there it silently overrides the top-level value.
-- **Under `AUTO`, `basis_gates` on `OptParams` is the authoritative gate set.**
-  The hosted QAlchemy initializer uses it both when comparing candidates and for
-  the returned circuit. Do not duplicate `basis_gates` in `extra_kwargs`.
+  `extra_kwargs`.** The service rejects a conflicting duplicate instead of
+  silently replacing the top-level budget. An equivalent duplicate is accepted.
+- **Set the gate basis with `OptParams.basis_gates` for all three methods.**
+  Under `AUTO`, the hosted QAlchemy initializer also uses it when comparing
+  candidates. Do not duplicate `basis_gates` in `extra_kwargs`.
+
+All three initialization methods return logical circuits transpiled to the
+supplied gate basis, without physical placement or routing. Under `AUTO`, QTucker
+transpiles candidates to that basis before comparison and returns the selected
+circuit. For explicit `HIERARCHICAL_TUCKER` and `ITERATIVE_TUCKER` requests, the
+ProCon transpiles the synthesized circuit to that basis at optimization level 1.
+This applies to single requests and batches; reported circuit costs precede
+physical placement and routing.
+
+The SDK accepts gate names through `OptParams.basis_gates`, not Qiskit backend or
+Target objects. To use a backend's gate basis, supply its supported unitary gate
+names explicitly. Compile the complete application for the actual backend later.
+For AUTO's optional `transpile_options`, QTucker ignores physical layout,
+coupling-map and scheduling settings and rejects lossy transpilation
+(`approximation_degree` must be `1.0`).
+
+Request `return_summary=True` from `q_alchemy_as_qasm` or
+`q_alchemy_as_qasm_parallel_states` to inspect the preparation outcome:
+`status="OK"` means execution completed; `fidelity_requirement_met=False`
+means AUTO returned its best-effort circuit without meeting the requested budget.
+The decision is supplied by QTucker. It is `None` for pinned methods and may be
+absent in older services. `fidelity_loss` remains an unsimulated estimate;
+`fidelity_loss_source` identifies its source and `selection_reason` explains the
+AUTO outcome. These fields pass through unchanged. Batch functions always return
+lists, including a one-state batch. A synthesis failure stops a batch with the
+original error and the failing state's zero-based index.
 
 ### Compressing circuits through PineXQ
 
