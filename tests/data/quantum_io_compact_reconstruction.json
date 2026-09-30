@@ -1,0 +1,531 @@
+{
+  "report": {
+    "kind": "experiment-report",
+    "report": {
+      "distribution_errors": {},
+      "estimate": {
+        "estimator": "qtucker-state-estimation:fit_with_restarts",
+        "metadata": {
+          "blocks": [
+            [
+              0,
+              1
+            ]
+          ],
+          "compression_summary": {
+            "compression_ratio_vs_dense": 0.8,
+            "core_complex_params": 1,
+            "dense_complex_amplitudes": 4,
+            "factor_complex_params": 4,
+            "n_qubits": 2,
+            "num_blocks": 1,
+            "ranks": [
+              1
+            ],
+            "total_complex_params": 5
+          },
+          "device": "cpu",
+          "fit_history": {
+            "best_epoch": 3,
+            "fit_selection_loss": 2976.854259639868,
+            "restart_index": 0,
+            "restart_seed": 7,
+            "restart_selection_losses": [
+              2976.854259639868
+            ]
+          },
+          "held_out_measurements_used_in_fit": false,
+          "n_qubits": 2,
+          "n_restarts": 1,
+          "ranks": [
+            1
+          ],
+          "training_labels": [
+            "qtucker-training-00000",
+            "qtucker-training-00001",
+            "qtucker-training-00002",
+            "qtucker-training-00003",
+            "qtucker-training-00004",
+            "qtucker-training-00005",
+            "qtucker-training-00006"
+          ]
+        },
+        "sparse_state": {
+          "amplitudes": [
+            [
+              -0.6086127704419088,
+              0.0697446889423559
+            ]
+          ],
+          "indices": [
+            "3"
+          ],
+          "metadata": {
+            "amplitude_queries": 2,
+            "max_entries": 1,
+            "renormalized": false,
+            "requested_support_size": 2,
+            "returned_probability": 0.3752738259806415,
+            "support": "target",
+            "support_covers_all_basis_states": false,
+            "support_probability": 0.5465740210274743,
+            "threshold": 0,
+            "truncated": true
+          },
+          "num_qubits": 2
+        },
+        "statevector_materialized": false,
+        "target_fidelity": 0.31948931237937334,
+        "target_infidelity": 0.6805106876206266
+      },
+      "execution": {
+        "basis_distributions": [],
+        "metadata": {
+          "acquisition_engine": "q-alchemy-sparse-direct",
+          "acquisition_provenance": {
+            "fingerprint": "88fa876c7800ab2e528dcc8c3e4a9a2b92d9cfadc7aa51c4d3131a0205b9e8f9",
+            "requested_shots": 4096,
+            "version": 1
+          },
+          "reference_quality": "exact-within-floating-point",
+          "requested_shots": 4096,
+          "sampling_performed": false,
+          "simulation": {
+            "exact": true,
+            "metadata": {
+              "amplitude_capping_events": 0,
+              "amplitude_capping_max_discarded_norm_squared": 0,
+              "amplitude_capping_occurred": false,
+              "amplitude_capping_peak_nnz_before_cap": 0,
+              "amplitude_capping_total_discarded_norm_squared": 0,
+              "approximation_diagnostics": {
+                "amplitude_capping_events": 0,
+                "amplitude_capping_max_discarded_norm_squared": 0,
+                "amplitude_capping_occurred": false,
+                "amplitude_capping_peak_nnz_before_cap": 0,
+                "amplitude_capping_total_discarded_norm_squared": 0,
+                "epsilon_pruning_amplitudes": 0,
+                "epsilon_pruning_events": 0,
+                "epsilon_pruning_occurred": false,
+                "epsilon_pruning_total_discarded_norm_squared": 0,
+                "final_epsilon_discarded_norm_squared": 0,
+                "final_epsilon_pruned_amplitudes": 0,
+                "final_epsilon_pruning_occurred": false,
+                "final_sparse_epsilon": 0,
+                "sparse_epsilon": 0
+              },
+              "backend": "sparse_simulator",
+              "backend_version": null,
+              "dense_reference_max_qubits": null,
+              "epsilon_pruning_amplitudes": 0,
+              "epsilon_pruning_events": 0,
+              "epsilon_pruning_occurred": false,
+              "epsilon_pruning_total_discarded_norm_squared": 0,
+              "execution_configuration": {
+                "final_sparse_epsilon": 0,
+                "max_nnz": "auto",
+                "max_nnz_memory_reserve_fraction": 0.1,
+                "max_nnz_memory_reserve_max_gib": 2,
+                "optimization_level": 0,
+                "save_sparse_statevector": true,
+                "save_statevector": false,
+                "sparse_epsilon": 0,
+                "sparse_index_convention": "little_endian",
+                "sparse_index_format": "hex"
+              },
+              "final_epsilon_discarded_norm_squared": 0,
+              "final_epsilon_pruned_amplitudes": 0,
+              "final_epsilon_pruning_occurred": false,
+              "final_sparse_epsilon": 0,
+              "max_nnz": 4,
+              "max_nnz_available_memory_bytes": 51144065024,
+              "max_nnz_estimated_peak_memory_bytes": 384,
+              "max_nnz_hilbert_dimension": 4,
+              "max_nnz_hilbert_dimension_limited": true,
+              "max_nnz_memory_reserve_bytes": 2147483648,
+              "max_nnz_memory_reserve_fraction": 0.1,
+              "max_nnz_memory_reserve_max_bytes": 2147483648,
+              "max_nnz_mode": "auto",
+              "max_nnz_peak_amplitude_capacity": 4,
+              "max_nnz_peak_bytes_per_nnz": 96,
+              "max_nnz_runtime_active": false,
+              "max_nnz_simulator_budget_bytes": 48996581376,
+              "max_nnz_sparse_amplitude_bytes": 32,
+              "method": "sparse",
+              "nnz": 2,
+              "reference_quality": "exact-within-floating-point",
+              "resource_diagnostics": {
+                "max_nnz": 4,
+                "max_nnz_available_memory_bytes": 51144065024,
+                "max_nnz_estimated_peak_memory_bytes": 384,
+                "max_nnz_hilbert_dimension": 4,
+                "max_nnz_hilbert_dimension_limited": true,
+                "max_nnz_memory_reserve_bytes": 2147483648,
+                "max_nnz_memory_reserve_fraction": 0.1,
+                "max_nnz_memory_reserve_max_bytes": 2147483648,
+                "max_nnz_mode": "auto",
+                "max_nnz_peak_amplitude_capacity": 4,
+                "max_nnz_peak_bytes_per_nnz": 96,
+                "max_nnz_runtime_active": false,
+                "max_nnz_simulator_budget_bytes": 48996581376,
+                "max_nnz_sparse_amplitude_bytes": 32,
+                "nnz": 2
+              },
+              "run_options": {
+                "final_sparse_epsilon": 0,
+                "max_nnz": "auto",
+                "max_nnz_memory_reserve_fraction": 0.1,
+                "max_nnz_memory_reserve_max_gib": 2,
+                "optimization_level": 0,
+                "save_sparse_statevector": true,
+                "save_statevector": false,
+                "sparse_epsilon": 0,
+                "sparse_index_convention": "little_endian",
+                "sparse_index_format": "hex"
+              },
+              "sparse_epsilon": 0,
+              "transpiled_basis_gates": [
+                "u",
+                "p",
+                "rx",
+                "ry",
+                "rz",
+                "x",
+                "y",
+                "z",
+                "h",
+                "cx",
+                "cy",
+                "cz",
+                "swap",
+                "ccx",
+                "cswap",
+                "measure",
+                "reset"
+              ]
+            },
+            "nnz": 2,
+            "reference_quality": "exact-within-floating-point",
+            "simulator": "q-alchemy-simulator:SparseAerBackend",
+            "sparse_state_available": true,
+            "statevector_materialized": false
+          },
+          "stderr_floor": 1e-12,
+          "warnings": []
+        },
+        "observations": {
+          "metadata": {},
+          "observations": [
+            {
+              "label": "qtucker-training-00000",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 0
+            },
+            {
+              "label": "qtucker-training-00001",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 0
+            },
+            {
+              "label": "qtucker-training-00002",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 2.220446049250313e-16
+            },
+            {
+              "label": "qtucker-training-00003",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 0
+            },
+            {
+              "label": "qtucker-training-00004",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 0
+            },
+            {
+              "label": "qtucker-training-00005",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 2.220446049250313e-16
+            },
+            {
+              "label": "qtucker-training-00006",
+              "metadata": {
+                "evaluation": "q-alchemy-sparse-statevector",
+                "stderr_kind": "numerical-floor"
+              },
+              "shots": null,
+              "stderr": 1e-12,
+              "value": 1
+            }
+          ],
+          "source": "q-alchemy-simulator:SparseAerBackend"
+        },
+        "source": "q-alchemy-simulator:SparseAerBackend",
+        "source_kind": "ideal-simulator"
+      },
+      "experiment": {
+        "evolution_present": false,
+        "measurement_plan": {
+          "basis_measurements": [],
+          "metadata": {},
+          "observable_plan": {
+            "metadata": {
+              "generated_training_observables": 7,
+              "generated_validation_observables": 0,
+              "training_generator": "qtucker.state_estimation.make_default_reconstruction_observables",
+              "validation_generator": null,
+              "validation_paulis": null
+            },
+            "training": [
+              "qtucker-training-00000",
+              "qtucker-training-00001",
+              "qtucker-training-00002",
+              "qtucker-training-00003",
+              "qtucker-training-00004",
+              "qtucker-training-00005",
+              "qtucker-training-00006"
+            ],
+            "validation": []
+          }
+        },
+        "metadata": {},
+        "target_num_qubits": 2
+      },
+      "experiment_circuit": {
+        "evolution_present": false,
+        "evolution_qargs": null,
+        "metadata": {
+          "composer": "qiskit",
+          "input_identity": "42bc76074e9d109e31cdeec52537a271bb63c51dcf7d3bf03f1a28625a5e5c15"
+        },
+        "metrics": {
+          "cx_count": 1,
+          "depth": 2,
+          "operation_counts": {
+            "cx": 1,
+            "u": 1
+          },
+          "size": 2,
+          "two_qubit_count": 1
+        },
+        "num_qubits": 2
+      },
+      "generated_at": "2026-09-30T20:15:45.520044+00:00",
+      "held_out_verification_error": null,
+      "mode": "ideal-simulation",
+      "observable_error": null,
+      "preparation": {
+        "claimed_fidelity_loss": 0,
+        "found": null,
+        "metadata": {
+          "basis_gates": [
+            "u",
+            "cx"
+          ],
+          "opt_params": {},
+          "requested_method": "hierarchical_tucker"
+        },
+        "method": "hierarchical_tucker",
+        "metrics": {
+          "cx_count": 1,
+          "depth": 2,
+          "operation_counts": {
+            "cx": 1,
+            "u": 1
+          },
+          "size": 2,
+          "two_qubit_count": 1
+        },
+        "num_qubits": 2
+      },
+      "preparation_preflight": {
+        "claim_contradicted": false,
+        "generated_at": "2026-09-30T20:15:44.715837+00:00",
+        "observable_plan": null,
+        "preparation": {
+          "claimed_fidelity_loss": 0,
+          "found": null,
+          "metadata": {
+            "basis_gates": [
+              "u",
+              "cx"
+            ],
+            "opt_params": {},
+            "requested_method": "hierarchical_tucker"
+          },
+          "method": "hierarchical_tucker",
+          "metrics": {
+            "cx_count": 1,
+            "depth": 2,
+            "operation_counts": {
+              "cx": 1,
+              "u": 1
+            },
+            "size": 2,
+            "two_qubit_count": 1
+          },
+          "num_qubits": 2
+        },
+        "preparation_approximation_infidelity": 2.220446049250313e-16,
+        "simulation": {
+          "exact": true,
+          "metadata": {
+            "amplitude_capping_events": 0,
+            "amplitude_capping_max_discarded_norm_squared": 0,
+            "amplitude_capping_occurred": false,
+            "amplitude_capping_peak_nnz_before_cap": 0,
+            "amplitude_capping_total_discarded_norm_squared": 0,
+            "approximation_diagnostics": {
+              "amplitude_capping_events": 0,
+              "amplitude_capping_max_discarded_norm_squared": 0,
+              "amplitude_capping_occurred": false,
+              "amplitude_capping_peak_nnz_before_cap": 0,
+              "amplitude_capping_total_discarded_norm_squared": 0,
+              "epsilon_pruning_amplitudes": 0,
+              "epsilon_pruning_events": 0,
+              "epsilon_pruning_occurred": false,
+              "epsilon_pruning_total_discarded_norm_squared": 0,
+              "final_epsilon_discarded_norm_squared": 0,
+              "final_epsilon_pruned_amplitudes": 0,
+              "final_epsilon_pruning_occurred": false,
+              "final_sparse_epsilon": 0,
+              "sparse_epsilon": 0
+            },
+            "backend": "sparse_simulator",
+            "backend_version": null,
+            "dense_reference_max_qubits": null,
+            "epsilon_pruning_amplitudes": 0,
+            "epsilon_pruning_events": 0,
+            "epsilon_pruning_occurred": false,
+            "epsilon_pruning_total_discarded_norm_squared": 0,
+            "execution_configuration": {
+              "final_sparse_epsilon": 0,
+              "max_nnz": "auto",
+              "max_nnz_memory_reserve_fraction": 0.1,
+              "max_nnz_memory_reserve_max_gib": 2,
+              "optimization_level": 0,
+              "save_sparse_statevector": true,
+              "save_statevector": false,
+              "sparse_epsilon": 0,
+              "sparse_index_convention": "little_endian",
+              "sparse_index_format": "hex"
+            },
+            "final_epsilon_discarded_norm_squared": 0,
+            "final_epsilon_pruned_amplitudes": 0,
+            "final_epsilon_pruning_occurred": false,
+            "final_sparse_epsilon": 0,
+            "max_nnz": 4,
+            "max_nnz_available_memory_bytes": 51144065024,
+            "max_nnz_estimated_peak_memory_bytes": 384,
+            "max_nnz_hilbert_dimension": 4,
+            "max_nnz_hilbert_dimension_limited": true,
+            "max_nnz_memory_reserve_bytes": 2147483648,
+            "max_nnz_memory_reserve_fraction": 0.1,
+            "max_nnz_memory_reserve_max_bytes": 2147483648,
+            "max_nnz_mode": "auto",
+            "max_nnz_peak_amplitude_capacity": 4,
+            "max_nnz_peak_bytes_per_nnz": 96,
+            "max_nnz_runtime_active": false,
+            "max_nnz_simulator_budget_bytes": 48996581376,
+            "max_nnz_sparse_amplitude_bytes": 32,
+            "method": "sparse",
+            "nnz": 2,
+            "reference_quality": "exact-within-floating-point",
+            "resource_diagnostics": {
+              "max_nnz": 4,
+              "max_nnz_available_memory_bytes": 51144065024,
+              "max_nnz_estimated_peak_memory_bytes": 384,
+              "max_nnz_hilbert_dimension": 4,
+              "max_nnz_hilbert_dimension_limited": true,
+              "max_nnz_memory_reserve_bytes": 2147483648,
+              "max_nnz_memory_reserve_fraction": 0.1,
+              "max_nnz_memory_reserve_max_bytes": 2147483648,
+              "max_nnz_mode": "auto",
+              "max_nnz_peak_amplitude_capacity": 4,
+              "max_nnz_peak_bytes_per_nnz": 96,
+              "max_nnz_runtime_active": false,
+              "max_nnz_simulator_budget_bytes": 48996581376,
+              "max_nnz_sparse_amplitude_bytes": 32,
+              "nnz": 2
+            },
+            "run_options": {
+              "final_sparse_epsilon": 0,
+              "max_nnz": "auto",
+              "max_nnz_memory_reserve_fraction": 0.1,
+              "max_nnz_memory_reserve_max_gib": 2,
+              "optimization_level": 0,
+              "save_sparse_statevector": true,
+              "save_statevector": false,
+              "sparse_epsilon": 0,
+              "sparse_index_convention": "little_endian",
+              "sparse_index_format": "hex"
+            },
+            "sparse_epsilon": 0,
+            "transpiled_basis_gates": [
+              "u",
+              "p",
+              "rx",
+              "ry",
+              "rz",
+              "x",
+              "y",
+              "z",
+              "h",
+              "cx",
+              "cy",
+              "cz",
+              "swap",
+              "ccx",
+              "cswap",
+              "measure",
+              "reset"
+            ]
+          },
+          "nnz": 2,
+          "reference_quality": "exact-within-floating-point",
+          "simulator": "q-alchemy-simulator:SparseAerBackend",
+          "sparse_state_available": true,
+          "statevector_materialized": false
+        },
+        "simulation_status": "available",
+        "target_to_prepared_fidelity": 0.9999999999999998,
+        "warnings": []
+      },
+      "reference": null,
+      "warnings": [
+        "Execution data are available without an ideal reference; direct ideal-vs-execution comparisons are unavailable."
+      ]
+    },
+    "schema_version": 3
+  },
+  "summary": "STATE PREPARATION (target vs prepared state)\n--------------------------------------------\nTarget qubits:             2\nMethod:                    hierarchical_tucker\nClaimed fidelity loss (initializer): 0\nPreparation simulation:  q-alchemy-simulator:SparseAerBackend (exact-within-floating-point)\nTarget-to-prepared fidelity: 1\nPreparation infidelity: 2.22045e-16\nPreparation circuit:      CX count=1, two-qubit count=1, depth=2, size=2, operations=cx=1, u=1\n\nFULL EXPERIMENT CIRCUIT (P + U)\n-------------------------------\nEvolution U present:       no\nComplete circuit:         CX count=1, two-qubit count=1, depth=2, size=2, operations=cx=1, u=1\n\nFINAL OUTPUT COMPARISON (ideal/reference P + U vs acquisition P + U)\n--------------------------------------------------------------------\nReference:                 not requested\nAcquisition:               q-alchemy-simulator:SparseAerBackend (ideal-simulator)\n\nSTATE ESTIMATION / HELD-OUT VERIFICATION\n----------------------------------------\nEstimator:                 qtucker-state-estimation:fit_with_restarts\nTarget-to-estimated fidelity: 0.319489\nReturned sparse amplitudes: 1\nReturned support probability: 0.375274\n\nWARNINGS\n--------\n- Execution data are available without an ideal reference; direct ideal-vs-execution comparisons are unavailable."
+}

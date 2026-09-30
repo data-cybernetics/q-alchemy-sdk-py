@@ -642,6 +642,24 @@ class TestServiceSubmission(unittest.TestCase):
             self.service.run({"kind": "quantum-experiment"})
         self.assertEqual(self.uploads, [])
 
+    def test_compact_reconstruction_is_forwarded_without_client_policy(self):
+        experiment = QuantumExperiment(
+            State.sparse(num_qubits=2, indices=[0], amplitudes=[1]),
+            measurement_plan=MeasurementPlan.qtucker_reconstruction(block_size=2, rank=1),
+        )
+        plan = ExecutionPlan(
+            preparation_method="iterative_tucker",
+            preparation_options={"max_iterations": 1, "max_fidelity_loss": 1e-3},
+            acquisition=Runtime.qalchemy_sparse(),
+            estimator=Runtime.qtucker(block_size=2, rank=1),
+            estimation_output={"support": "target", "target_fidelity": True},
+        )
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob):
+            self.service.run(experiment, plan)
+        self.assertEqual(self.uploads[0][1], experiment.to_dict())
+        self.assertEqual(self.uploads[1][1], plan.to_dict())
+        self.assertEqual(len(self.uploads), 2)
+
     def test_default_run_uses_local_simulator_and_no_credentials(self):
         with patch("q_alchemy.quantum_io.Job", _FakePineJob):
             job = self.service.run(_bell_experiment(), shots=256)

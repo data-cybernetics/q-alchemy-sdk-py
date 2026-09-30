@@ -603,6 +603,75 @@ print(report.execution.source_kind)      # qpu
 For advanced workflows, construct a typed `ExecutionPlan` explicitly. `Runtime.resource`
 selects PineXQ runtime resources without exposing credentials in the experiment contract.
 
+#### Compact sparse reconstruction
+
+SDK 0.5.0 can submit preparation, reconstruction-observable generation,
+acquisition, fitting, and sparse model export in one Quantum I/O job. Requires
+deployed `q-alchemy-quantum-io-pinexq` 0.8.0 with Quantum I/O core 0.11.0.
+
+```python
+from q_alchemy import (
+    ExecutionPlan, MeasurementPlan, QuantumExperiment, QuantumIOParams,
+    QuantumIOService, Runtime, State,
+)
+
+target = State.sparse(num_qubits=2, indices=[0, 3], amplitudes=[2**-.5, 2**-.5])
+experiment = QuantumExperiment(
+    target,
+    measurement_plan=MeasurementPlan.qtucker_reconstruction(block_size=2, rank=1),
+)
+plan = ExecutionPlan(
+    preparation_method="iterative_tucker",
+    preparation_options={"basis_gates": ["u", "cx"], "max_fidelity_loss": 1e-3},
+    acquisition=Runtime.qalchemy_sparse(),
+    estimator=Runtime.qtucker(
+        block_size=2, rank=1, n_restarts=4,
+        fit_config={"epochs": 600, "learning_rate": .03, "stderr_floor": .01,
+                    "seed": 123, "verbose": False},
+    ),
+    estimation_output={"support": "target", "target_fidelity": True},
+)
+with QuantumIOService(QuantumIOParams(step_version="0.8.0")) as service:
+    report = service.run(experiment, plan).result()
+print(report.format_summary())
+report.estimate.sparse_state.save_npz("reconstructed.npz")
+```
+
+`preparation_method` accepts `auto` (default), `hierarchical_tucker`, and
+`iterative_tucker`. QTucker/core own initialization and logical basis
+compilation; the SDK forwards the request. Inspect preparation `found`,
+claimed fidelity loss, and preflight diagnostics when using options such as
+`fallback=False`.
+
+`qtucker_reconstruction` uses the complete native training family. Defaults
+allow training-only fitting; `validation=True` requests an independent disjoint
+validation family (optionally `validation_edges` and `validation_paulis`).
+No held-out RMSE is claimed when validation is absent.
+
+Direct `Runtime.qalchemy_sparse()` acquisition evaluates expectations without
+sampling, uses zero pruning by default, reuses matching preflight/reference
+simulation, and reports capping/pruning/exactness. Its configurable
+`stderr_floor` (default 1e-12) is a numerical fitting floor, not sampling
+uncertainty or a bound on approximation bias. The plan's positive `shots`
+value is recorded but unused for sampling.
+
+Sparse export queries the implicit fitted QTucker model without dense
+materialization. `estimation_output` also accepts explicit
+`support="indices", indices=[...]`, `threshold` (default 0), and
+`max_entries` (default None). It does not renormalize the subset:
+`sparse_state.norm_squared` and metadata `support_probability` /
+`returned_probability` reveal retained mass. Zero survivors are valid.
+`target_fidelity` uses the entire original input target support **before**
+filtering/capping, so export options cannot inflate it. It compares the input
+target with a pure fitted surrogate, rather than certifying a noisy mixed state
+or an evolved target. Existing reference-to-estimated surrogate metrics remain
+separate. Both wire JSON and NPZ preserve basis indices above 64 bits.
+Leave `materialize_statevector_max_qubits` unset to keep fitting output implicit.
+
+Molecule/CISD construction stays local. Supply its sparse amplitudes as the
+target; the hosted workflow replaces manual QASM/observable/fit handoffs.
+The SDK requires no private Quantum I/O or QTucker package locally.
+
 ### Choosing classical or quantum execution with feasibility
 
 The feasibility API is a separate hosted service. The SDK is only its remote client: it
@@ -633,8 +702,8 @@ print(report.format_summary())
 `FeasibilityReport.format_summary()` mirrors the canonical human-readable formatter in
 `q-alchemy-feasibility`, including classical and quantum status, resource/quality
 criteria, backend/model evidence, recommendation, and next-evidence requests.
-The SDK formatter is aligned with Feasibility 0.6.48, the PineXQ adapter 0.2.9, and
-Quantum I/O 0.10.3. Serialized core reports and their canonical summaries are kept
+The SDK formatter is aligned with Feasibility 0.6.50, the PineXQ adapter 0.2.11, and
+Quantum I/O 0.11.0. Serialized core reports and their canonical summaries are kept
 as regression fixtures so later core changes can be checked without installing
 the server runtime in the SDK environment.
 

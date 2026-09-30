@@ -425,9 +425,10 @@ class MeasurementPlan:
     basis_measurements: tuple[BasisMeasurement, ...] = ()
     observable_plan_metadata: Mapping[str, Any] = field(default_factory=dict)
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    reconstruction: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        if bool(self.training) != bool(self.validation):
+        if self.validation and not self.training:
             raise ValueError(
                 "portable observable plans require both fitting and held-out observable sets"
             )
@@ -442,11 +443,23 @@ class MeasurementPlan:
             self.observable_plan_metadata, path="measurement_plan.observable_plan_metadata"
         )
         _validated_metadata(self.metadata, path="measurement_plan.metadata")
+        if self.reconstruction is not None:
+            if self.training or self.validation:
+                raise ValueError("reconstruction cannot be combined with explicit training/validation observables")
+            _check_no_secrets(self.reconstruction)
+            _validated_metadata(self.reconstruction, path="measurement_plan.reconstruction")
+
+    @classmethod
+    def qtucker_reconstruction(cls, *, validation: bool = False, **config: Any) -> "MeasurementPlan":
+        """Request native QTucker training observables and optional independent validation."""
+        if not isinstance(validation, bool):
+            raise ValueError("validation must be a boolean")
+        return cls(reconstruction={"validation": validation, **config})
 
 
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "observables": [item.to_dict() for item in self.observables],
             "training": [item.to_dict() for item in self.training],
             "validation": [item.to_dict() for item in self.validation],
@@ -457,6 +470,9 @@ class MeasurementPlan:
             "basis_measurements": [item.to_dict() for item in self.basis_measurements],
             "metadata": _validated_metadata(self.metadata, path="measurement_plan.metadata"),
         }
+        if self.reconstruction is not None:
+            payload["reconstruction"] = _validated_metadata(self.reconstruction, path="measurement_plan.reconstruction")
+        return payload
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "MeasurementPlan":
@@ -473,6 +489,7 @@ class MeasurementPlan:
             ),
             observable_plan_metadata=dict(data.get("observable_plan_metadata", {})),
             metadata=dict(data.get("metadata", {})),
+            reconstruction=(dict(data["reconstruction"]) if data.get("reconstruction") is not None else None),
         )
 
 
@@ -675,6 +692,8 @@ class ExecutionPlan:
     preparation_options: Mapping[str, Any] = field(default_factory=dict)
     shots: int = 4096
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    preparation_method: str = "auto"
+    estimation_output: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         nonnegative_integer(self.shots, "shots")
@@ -683,9 +702,40 @@ class ExecutionPlan:
         _check_no_secrets(self.preparation_options, path="preparation_options")
         _validated_metadata(self.preparation_options, path="preparation_options")
         _validated_metadata(self.metadata, path="execution_plan.metadata")
+        if not isinstance(self.preparation_method, str) or self.preparation_method not in {"auto", "hierarchical_tucker", "iterative_tucker"}:
+            raise ValueError("unsupported preparation_method")
+        _check_no_secrets(self.estimation_output)
+        _validated_metadata(self.estimation_output, path="estimation_output")
+        if self.estimation_output and self.estimator is None:
+            raise ValueError("estimation_output requires an estimator")
+        output = self.estimation_output
+        unknown = set(output) - {"support", "indices", "target_fidelity", "threshold", "max_entries"}
+        if unknown:
+            raise ValueError(f"unsupported estimation_output keys: {sorted(unknown)}")
+        support = output.get("support", "target")
+        if not isinstance(support, str) or support not in {"target", "indices"}:
+            raise ValueError("estimation_output.support must be target or indices")
+        if not isinstance(output.get("target_fidelity", False), bool):
+            raise ValueError("estimation_output.target_fidelity must be a boolean")
+        threshold = output.get("threshold", 0.0)
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not math.isfinite(threshold) or threshold < 0:
+            raise ValueError("estimation_output.threshold must be finite and non-negative")
+        limit = output.get("max_entries")
+        if limit is not None and (isinstance(limit, bool) or not isinstance(limit, int) or limit < 0):
+            raise ValueError("estimation_output.max_entries must be a non-negative integer or None")
+        if support == "indices":
+            indices = output.get("indices")
+            if not isinstance(indices, (list, tuple)):
+                raise ValueError("explicit estimation support requires indices")
+            for index in indices:
+                nonnegative_integer(index, "estimation support index")
+            if len(set(indices)) != len(indices):
+                raise ValueError("estimation support indices must be unique")
+        elif "indices" in output:
+            raise ValueError("indices require estimation_output.support='indices'")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": SCHEMA_VERSION,
             "kind": "execution-plan",
             "preparation_simulator": (
@@ -702,10 +752,23 @@ class ExecutionPlan:
             "shots": self.shots,
             "metadata": _validated_metadata(self.metadata, path="execution_plan.metadata"),
         }
+        if self.preparation_method != "auto":
+            payload["preparation_method"] = self.preparation_method
+        if self.estimation_output:
+            payload["estimation_output"] = _validated_metadata(self.estimation_output, path="estimation_output")
+            if "indices" in payload["estimation_output"]:
+                payload["estimation_output"]["indices"] = [str(i) for i in self.estimation_output["indices"]]
+        return payload
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExecutionPlan":
         _require_schema(data, kind="execution-plan")
+        output = dict(data.get("estimation_output", {}))
+        if isinstance(output.get("indices"), (list, tuple)):
+            output["indices"] = [
+                int(i) if isinstance(i, str) and i.isascii() and i.isdecimal() else i
+                for i in output["indices"]
+            ]
         return cls(
             preparation_simulator=(
                 Runtime.from_dict(data["preparation_simulator"])
@@ -728,6 +791,8 @@ class ExecutionPlan:
                 else None
             ),
             preparation_options=dict(data.get("preparation_options", {})),
+            preparation_method=str(data.get("preparation_method", "auto")),
+            estimation_output=output,
             shots=data.get("shots", 4096),
             metadata=dict(data.get("metadata", {})),
         )
@@ -1284,10 +1349,82 @@ class DistributionMetrics:
 
 
 @dataclass(frozen=True)
+class SparseStateEstimate:
+    """Amplitudes on a requested support, possibly incomplete and unnormalized.
+
+    Decimal-string indices on the wire preserve basis indices above 64 bits.
+    An empty extraction is valid. Metadata records probability mass and capping.
+    """
+    num_qubits: int
+    indices: tuple[int, ...]
+    amplitudes: tuple[complex, ...]
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        nonnegative_integer(self.num_qubits, "num_qubits")
+        if len(self.indices) != len(self.amplitudes) or len(set(self.indices)) != len(self.indices):
+            raise ValueError("sparse estimate indices/amplitudes must match and be unique")
+        for index in self.indices:
+            nonnegative_integer(index, "estimation support index")
+            if index >= 1 << self.num_qubits:
+                raise ValueError("sparse estimate index out of range")
+        for amplitude in self.amplitudes:
+            _complex_to_data(amplitude)
+        _validated_metadata(self.metadata, path="sparse_estimate.metadata")
+
+    @property
+    def nnz(self) -> int:
+        return len(self.indices)
+
+    @property
+    def norm_squared(self) -> float:
+        return float(sum(abs(a) ** 2 for a in self.amplitudes))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"num_qubits": self.num_qubits, "indices": [str(i) for i in self.indices],
+                "amplitudes": [_complex_to_data(a) for a in self.amplitudes],
+                "metadata": _validated_metadata(self.metadata, path="sparse_estimate.metadata")}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "SparseStateEstimate":
+        return cls(num_qubits=data["num_qubits"],
+                   indices=tuple(int(i) if isinstance(i, str) and i.isascii() and i.isdecimal() else i
+                                 for i in data["indices"]),
+                   amplitudes=tuple(_complex_from_data(a) for a in data["amplitudes"]),
+                   metadata=dict(data.get("metadata", {})))
+
+    def save_npz(self, path: Any) -> None:
+        """Save the unnormalized subset without pickle or 64-bit index truncation."""
+        import numpy as np
+
+        np.savez_compressed(
+            path, num_qubits=np.asarray(self.num_qubits),
+            indices=np.asarray([str(i) for i in self.indices], dtype=str),
+            amplitudes=np.asarray(self.amplitudes, dtype=np.complex128),
+            metadata_json=np.asarray(json.dumps(
+                _validated_metadata(self.metadata, path="sparse_estimate.metadata"),
+                sort_keys=True, allow_nan=False,
+            )),
+        )
+
+
+
+@dataclass(frozen=True)
 class StateEstimateSummary:
     estimator: str
     statevector_materialized: bool
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    sparse_state: SparseStateEstimate | None = None
+    target_fidelity: float | None = None
+    target_infidelity: float | None = None
+
+    def __post_init__(self) -> None:
+        for value in (self.target_fidelity, self.target_infidelity):
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, (int, float))
+                or not math.isfinite(value) or not 0.0 <= value <= 1.0
+            ):
+                raise ValueError("target fidelity/infidelity must be finite and between zero and one")
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "StateEstimateSummary":
@@ -1295,14 +1432,23 @@ class StateEstimateSummary:
             estimator=str(data["estimator"]),
             statevector_materialized=bool(data.get("statevector_materialized", False)),
             metadata=dict(data.get("metadata", {})),
+            sparse_state=(SparseStateEstimate.from_dict(data["sparse_state"]) if data.get("sparse_state") is not None else None),
+            target_fidelity=(float(data["target_fidelity"]) if data.get("target_fidelity") is not None else None),
+            target_infidelity=(float(data["target_infidelity"]) if data.get("target_infidelity") is not None else None),
         )
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "estimator": self.estimator,
             "statevector_materialized": self.statevector_materialized,
             "metadata": _validated_metadata(self.metadata, path="estimate.metadata"),
         }
+        if self.sparse_state is not None:
+            result["sparse_state"] = self.sparse_state.to_dict()
+        if self.target_fidelity is not None:
+            result["target_fidelity"] = self.target_fidelity
+            result["target_infidelity"] = self.target_infidelity
+        return result
 
 
 
@@ -1461,6 +1607,8 @@ def _format_experiment_report_summary(report: "ExperimentReport") -> str:
             f"Reference:                 {simulation.simulator} "
             f"({simulation.reference_quality})"
         )
+    elif report.reference is None:
+        lines.append("Reference:                 not requested")
     else:
         lines.append("Reference:                 not available")
 
@@ -1541,7 +1689,8 @@ def _format_experiment_report_summary(report: "ExperimentReport") -> str:
             ]
         )
 
-    if report.estimate is not None or report.held_out_verification_error is not None:
+    if (report.estimate is not None or report.held_out_verification_error is not None
+            or report.reference_to_estimated_surrogate_fidelity is not None):
         lines.extend(
             [
                 "",
@@ -1551,7 +1700,14 @@ def _format_experiment_report_summary(report: "ExperimentReport") -> str:
         )
         if report.estimate is not None:
             lines.append(f"Estimator:                 {report.estimate.estimator}")
-            fidelity = _estimate_fidelity(report.estimate.metadata)
+            if report.estimate.target_fidelity is not None:
+                lines.append("Target-to-estimated fidelity: " + _format_summary_number(report.estimate.target_fidelity))
+            if report.estimate.sparse_state is not None:
+                sparse = report.estimate.sparse_state
+                lines.append(f"Returned sparse amplitudes: {sparse.nnz}")
+                lines.append("Returned support probability: " + _format_summary_number(sparse.norm_squared))
+            fidelity = (_estimate_fidelity(report.estimate.metadata)
+                        if report.estimate.target_fidelity is None else None)
             if fidelity is not None:
                 lines.append(
                     "Target-to-estimated fidelity: "
@@ -1563,6 +1719,11 @@ def _format_experiment_report_summary(report: "ExperimentReport") -> str:
             lines.append(
                 "Held-out max abs. error:   "
                 f"{_format_summary_number(held_out.max_absolute_error)}"
+            )
+        if report.reference_to_estimated_surrogate_fidelity is not None:
+            lines.append(
+                "Reference-to-estimated fidelity: "
+                + _format_summary_number(report.reference_to_estimated_surrogate_fidelity)
             )
 
     if report.warnings:
@@ -1592,6 +1753,8 @@ class ExperimentReport:
     distribution_errors: Mapping[str, DistributionMetrics] = field(default_factory=dict)
     estimate: StateEstimateSummary | None = None
     held_out_verification_error: ErrorMetrics | None = None
+    reference_to_estimated_surrogate_fidelity: float | None = None
+    reference_to_estimated_surrogate_infidelity: float | None = None
     warnings: tuple[str, ...] = ()
 
     @classmethod
@@ -1643,6 +1806,8 @@ class ExperimentReport:
                 else None
             ),
             warnings=tuple(str(item) for item in data.get("warnings", ())),
+            reference_to_estimated_surrogate_fidelity=(float(data["reference_to_estimated_surrogate_fidelity"]) if data.get("reference_to_estimated_surrogate_fidelity") is not None else None),
+            reference_to_estimated_surrogate_infidelity=(float(data["reference_to_estimated_surrogate_infidelity"]) if data.get("reference_to_estimated_surrogate_infidelity") is not None else None),
         )
 
     def _report_dict(self) -> dict[str, Any]:
@@ -1673,6 +1838,10 @@ class ExperimentReport:
             ),
             "warnings": list(self.warnings),
         }
+        if self.reference_to_estimated_surrogate_fidelity is not None:
+            payload["reference_to_estimated_surrogate_fidelity"] = self.reference_to_estimated_surrogate_fidelity
+        if self.reference_to_estimated_surrogate_infidelity is not None:
+            payload["reference_to_estimated_surrogate_infidelity"] = self.reference_to_estimated_surrogate_infidelity
 
     def to_dict(self) -> dict[str, Any]:
         return {

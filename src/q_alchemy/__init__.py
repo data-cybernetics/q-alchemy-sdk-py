@@ -51,6 +51,7 @@ from .quantum_io_contract import (
     SimulationSummary,
     State,
     StateEstimateSummary,
+    SparseStateEstimate,
 )
 
 from .quantum_io import (
