@@ -660,6 +660,28 @@ class TestServiceSubmission(unittest.TestCase):
         self.assertEqual(self.uploads[1][1], plan.to_dict())
         self.assertEqual(len(self.uploads), 2)
 
+    def test_aer_device_model_is_forwarded_without_ibm_credentials(self):
+        plan = ExecutionPlan(acquisition=Runtime.resource(
+            "noisy-backend-simulator", provider="aer", backend="aer_simulator",
+            backend_options={"noise_model": {
+                "format": "qiskit-aer-noise-model-v1", "data": {"errors": []},
+            }},
+        ))
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob):
+            self.service.run(_bell_experiment(), plan)
+        self.assertEqual([name for name, _ in self.uploads],
+                         [EXPERIMENT_INPUT_ALIAS, EXECUTION_PLAN_INPUT_ALIAS])
+        self.assertEqual(self.uploads[1][1], plan.to_dict())
+        self.assertTrue(all(not secret for _, secret in self.upload_secret_flags))
+
+    def test_aer_is_not_accepted_as_a_qpu_provider(self):
+        plan = ExecutionPlan(acquisition=Runtime.resource(
+            "quantum-backend", provider="aer", backend="aer_simulator",
+        ))
+        with self.assertRaisesRegex(ValueError, "credential handling"):
+            self.service.run(_bell_experiment(), plan)
+        self.assertEqual(self.uploads, [])
+
     def test_default_run_uses_local_simulator_and_no_credentials(self):
         with patch("q_alchemy.quantum_io.Job", _FakePineJob):
             job = self.service.run(_bell_experiment(), shots=256)

@@ -6,6 +6,8 @@ private runtime package. JSON serialization remains an internal transport detail
 
 from __future__ import annotations
 
+from .quantum_io_compression_contract import CircuitCompressionConfig, CircuitCompressionMetrics, CircuitCompressionSummary
+
 import json
 import math
 from dataclasses import dataclass, field
@@ -694,11 +696,15 @@ class ExecutionPlan:
     metadata: Mapping[str, Any] = field(default_factory=dict)
     preparation_method: str = "auto"
     estimation_output: Mapping[str, Any] = field(default_factory=dict)
+    circuit_compression: CircuitCompressionConfig = field(default_factory=CircuitCompressionConfig)
 
     def __post_init__(self) -> None:
         nonnegative_integer(self.shots, "shots")
         if self.shots == 0:
             raise ValueError("shots must be positive")
+        if not isinstance(self.circuit_compression, CircuitCompressionConfig):
+            raise ValueError("circuit_compression must be a CircuitCompressionConfig")
+        _check_no_secrets(self.circuit_compression.options, path="circuit_compression.options")
         _check_no_secrets(self.preparation_options, path="preparation_options")
         _validated_metadata(self.preparation_options, path="preparation_options")
         _validated_metadata(self.metadata, path="execution_plan.metadata")
@@ -752,6 +758,8 @@ class ExecutionPlan:
             "shots": self.shots,
             "metadata": _validated_metadata(self.metadata, path="execution_plan.metadata"),
         }
+        if self.circuit_compression.enabled or self.circuit_compression.options:
+            payload["circuit_compression"] = self.circuit_compression.to_dict()
         if self.preparation_method != "auto":
             payload["preparation_method"] = self.preparation_method
         if self.estimation_output:
@@ -791,6 +799,7 @@ class ExecutionPlan:
                 else None
             ),
             preparation_options=dict(data.get("preparation_options", {})),
+            circuit_compression=CircuitCompressionConfig.from_dict(data.get("circuit_compression", {})),
             preparation_method=str(data.get("preparation_method", "auto")),
             estimation_output=output,
             shots=data.get("shots", 4096),
@@ -1586,6 +1595,8 @@ def _format_experiment_report_summary(report: "ExperimentReport") -> str:
     if report.experiment_circuit.evolution_qargs is not None:
         lines.append(f"Evolution qubits:         {report.experiment_circuit.evolution_qargs}")
     lines.append(f"Complete circuit:         {_format_circuit_metrics(report.experiment_circuit.metrics)}")
+    if report.circuit_compression is not None:
+        lines.extend(["", report.circuit_compression.format_summary()])
 
     lines.extend(
         [
@@ -1756,6 +1767,7 @@ class ExperimentReport:
     reference_to_estimated_surrogate_fidelity: float | None = None
     reference_to_estimated_surrogate_infidelity: float | None = None
     warnings: tuple[str, ...] = ()
+    circuit_compression: CircuitCompressionSummary | None = None
 
     @classmethod
     def _from_report_data(cls, data: Mapping[str, Any]) -> "ExperimentReport":
@@ -1771,6 +1783,7 @@ class ExperimentReport:
             experiment=ExperimentSummary.from_dict(data["experiment"]),
             preparation=PreparationSummary.from_dict(data["preparation"]),
             experiment_circuit=ExperimentCircuitSummary.from_dict(data["experiment_circuit"]),
+            circuit_compression=(CircuitCompressionSummary.from_dict(data["circuit_compression"]) if data.get("circuit_compression") is not None else None),
             preparation_preflight=(
                 PreparationPreflightSummary.from_dict(preflight)
                 if isinstance(preflight, Mapping)
@@ -1817,6 +1830,7 @@ class ExperimentReport:
             "experiment": self.experiment.to_dict(),
             "preparation": self.preparation.to_dict(),
             "experiment_circuit": self.experiment_circuit.to_dict(),
+            **({"circuit_compression": self.circuit_compression.to_dict()} if self.circuit_compression is not None else {}),
             "preparation_preflight": (
                 self.preparation_preflight.to_dict()
                 if self.preparation_preflight is not None

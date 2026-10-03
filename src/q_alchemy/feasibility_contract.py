@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .quantum_io_compression_contract import CircuitCompressionConfig as QuantumIOCircuitCompressionConfig
+
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -204,44 +206,16 @@ class ClassicalResources:
 
 
 @dataclass(frozen=True)
-class CircuitCompressionConfig:
-    """Exact compression settings for the complete logical experiment circuit."""
+class CircuitCompressionConfig(QuantumIOCircuitCompressionConfig):
+    """Feasibility enables Quantum I/O full-circuit compression by default."""
 
     enabled: bool = True
-    options: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.enabled, bool):
-            raise ValueError("circuit_compression.enabled must be a bool")
-        if not isinstance(self.options, Mapping):
-            raise ValueError("circuit_compression.options must be a mapping")
-        normalized = dict(self.options)
-        if "equivalence" in normalized:
-            if normalized["equivalence"] != "reachable_subspace":
-                raise ValueError(
-                    "feasibility full-circuit compression requires "
-                    "equivalence='reachable_subspace'"
-                )
-            normalized.pop("equivalence")
-        if "collect_report" in normalized:
-            if normalized["collect_report"] is not True:
-                raise ValueError(
-                    "feasibility owns collect_report and requires it to be true"
-                )
-            normalized.pop("collect_report")
-        object.__setattr__(self, "options", normalized)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"enabled": self.enabled, "options": dict(self.options)}
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CircuitCompressionConfig":
         if not isinstance(data, Mapping):
             raise ValueError("circuit_compression must be an object")
-        return cls(
-            enabled=data.get("enabled", True),
-            options=data.get("options", {}),
-        )
+        return super().from_dict({"enabled": True, **data})
 
 
 @dataclass(frozen=True)

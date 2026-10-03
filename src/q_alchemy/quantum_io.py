@@ -33,6 +33,9 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 from q_alchemy.initialize import create_client, find_processing_step, from_name
 from q_alchemy.quantum_io_contract import (
+    CircuitCompressionConfig,
+    CircuitCompressionMetrics,
+    CircuitCompressionSummary,
     ExecutionPlan,
     ExperimentReport,
     QuantumExperiment,
@@ -55,6 +58,9 @@ NOISY_BACKEND_SIMULATOR_RESOURCE = "noisy-backend-simulator"
 LOG = logging.getLogger(__name__)
 
 __all__ = [
+    "CircuitCompressionConfig",
+    "CircuitCompressionMetrics",
+    "CircuitCompressionSummary",
     "IBMQuantumCredentials",
     "QuantumBackend",
     "QuantumIOJob",
@@ -762,7 +768,12 @@ def _quantum_backend_provider(plan: ExecutionPlan) -> str | None:
         raise ValueError(
             f"{acquisition.resource_name} execution requires acquisition.config.provider"
         )
-    return provider.strip().lower()
+    provider_id = provider.strip().lower()
+    # Aer resolves a local simulator from portable options on the service.
+    # Only IBM-backed resources require the separate Secret credentials input.
+    if acquisition.resource_name == NOISY_BACKEND_SIMULATOR_RESOURCE and provider_id == "aer":
+        return None
+    return provider_id
 
 
 def _coerce_ibm_credentials(

@@ -426,6 +426,13 @@ retrieval failures preserve their jobs and data for diagnosis.
 
 ### Running experiments with Quantum I/O
 
+For a complete molecular example, run
+[the 20-qubit CO reconstruction notebook](examples/quantum_io_co_reconstruction.ipynb).
+It includes the original sparse CISD target and offers direct ideal simulation,
+Aer simulation with an imported IBM device noise model, or an IBM QPU, followed
+by reconstruction and sparse-result export in one service request.
+
+
 State widths, sparse indices, qubit selections and shot counts require integers;
 booleans and fractional values are rejected locally. Sparse indices in JSON
 remain decimal strings so large basis indices retain their full precision.
@@ -1105,3 +1112,25 @@ Carsten Blank
 ## License
 
 The q-alchemy-sdk-py is free and open source, released under the Apache License, Version 2.0.
+
+### Optional Quantum I/O circuit compression
+
+With the Quantum I/O 0.12.0 service, enable full logical P+U compression through
+the execution plan. The public SDK transports these settings and requires no
+private compressor or Quantum I/O runtime installation:
+
+```python
+from dataclasses import replace
+from q_alchemy.quantum_io import CircuitCompressionConfig, local_simulator_execution_plan
+
+plan = replace(local_simulator_execution_plan(),
+               circuit_compression=CircuitCompressionConfig(enabled=True))
+# report = service.run(experiment, plan).result()
+# print(report.circuit_compression)
+# print(report.format_summary())
+```
+
+Quantum I/O compression defaults to disabled; Feasibility keeps its enabled
+default. Reports include exactness semantics and input/output metrics, and older
+reports remain readable. Preparation claim diagnostics still describe original P.
+Compression settings require the updated service; deploy it before enabling them.
