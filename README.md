@@ -44,7 +44,11 @@ it after cloning is simply
 uv sync --locked
 ```
 
-The SDK requires `pinexq-client>=2.0.0,<3` for PineXQ JobManagement API 10.0.
+The SDK requires `pinexq-client>=2.1.0,<3`. Client 2.1.0 expects PineXQ
+JobManagement API 10.1. The client checks its protocol major/minor against the
+server and warns when they differ; the SDK preserves these warnings. A server
+still running API 10.0 therefore produces a mismatch warning with client 2.1.0.
+Client package versions and API protocol versions are separate.
 This client recognizes the server's `TenantId` and `IsMaterialized` fields.
 API-version and schema warnings are no longer suppressed by the SDK; a future
 mismatch remains visible. `Q_ALCHEMY_API_VERSION_WARNING` is no longer needed.

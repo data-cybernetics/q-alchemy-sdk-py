@@ -24,8 +24,8 @@ dependencies = [
     "pydantic>=2.13.4",
     "httpx<1.0.0,>=0.25.0",
     "tenacity>=8.2.3",
-    # PineXQ API 10.0 models include TenantId and IsMaterialized.
-    "pinexq-client>=2.0.0,<3",
+    # PineXQ client 2.1 targets JobManagement API 10.1.
+    "pinexq-client>=2.1.0,<3",
     "numpy>=2.0.0",
     "packaging>=20",
     "scipy>=1.11",
