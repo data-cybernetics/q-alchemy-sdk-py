@@ -18,9 +18,12 @@ from q_alchemy.qiskit_integration import (
 )
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-@unittest.skipUnless(os.getenv("Q_ALCHEMY_API_KEY"), "no Q_ALCHEMY_API_KEY: skipping live Qiskit tests")
+@unittest.skipUnless(
+    os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+    "no Q_ALCHEMY_API_KEY/PINEXQ_API_KEY: skipping live Qiskit integration tests",
+)
 class TestQiskitIntegration(unittest.TestCase):
 
     def setUp(self):
@@ -60,7 +63,7 @@ class TestQiskitIntegration(unittest.TestCase):
 
     def test_fixed_complex(self):
 
-        with open(Path(__file__).parent / "data" / "test.qasm", "r") as f:
+        with (Path(__file__).parent / "data" / "test.qasm").open("r") as f:
             qasm = f.read()
 
         qc = QuantumCircuit.from_qasm_str(qasm)

@@ -54,7 +54,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install the wheel with all extras
         run: |
-          uv pip install "$(ls dist/*.whl)[qiskit,pennylane]"
+          uv pip install "$(ls dist/*.whl)[visualization,qiskit,pennylane]"
           uv pip check
       - name: Import every module
         run: |

@@ -86,6 +86,30 @@ qasm_again = q_alchemy_as_qasm(sv.to_coo())   # round-trip: simulate -> prepare
 
 ---
 
+## State upload representation
+
+Dense inputs are checked for sparsity once before serialization. The SDK uses
+QTucker's blockwise, early-exit density rule: a vector is sent as sparse when its
+number of nonzero amplitudes is at most `ceil(0.1 * vector_length)`. Unlike
+QTucker's numerical thresholding, the transport check counts exact nonzeros and
+never discards tiny amplitudes or renormalizes the state. This keeps transport
+lossless and leaves the approximation budget with QTucker.
+
+- Dense vectors use NumPy `.npy` serialization (`numpy_load` for inline input).
+- Sparse vectors use Parquet with basis indices and complex amplitudes. Inputs
+  already supplied as SciPy sparse matrices/arrays skip the density check and
+  remain sparse, even when fully populated.
+- Mixed batches are split into at most two service jobs, one per representation;
+  returned circuits and summaries follow the original input order. Each job uses
+  the usual cleanup policy and timeout. If either job fails, the call raises.
+  Uniform batches still use one job; parallel option sets share one serialization.
+
+The updated ProCon preserves these dense/sparse paths into QTucker. Both formats
+are supported by older services too, but avoiding server-side conversions requires
+the updated ProCon deployment. No private QTucker dependency is added to the SDK.
+
+---
+
 ## Plans & limits — the free tier is strongly limited
 
 State preparation runs on Q-Alchemy's servers, so usage is bounded by your plan
