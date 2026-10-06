@@ -1177,3 +1177,7 @@ instead of silently changing the request. Zero remains a valid explicit memory
 budget. These checks are local and require no private Feasibility dependency.
 Server-side workflow fixes are delivered by Feasibility PineXQ 0.2.17; the SDK
 continues to display the returned resource and quality conclusions separately.
+
+### Workflow review release 0.5.3
+
+Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports now validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.

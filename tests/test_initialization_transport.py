@@ -86,7 +86,7 @@ def test_single_inline_and_upload_routes_carry_correct_format(monkeypatch, use_s
     monkeypatch.setattr(init, '_upload_statevector_payload', upload_payload)
     monkeypatch.setattr(init, 'run_job', Mock(return_value=({'status': 'OK'}, 'qasm')))
     if upload:
-        monkeypatch.setattr(init, 'USE_INLINE_STATE_NUM_QUBITS', 0)
+        monkeypatch.setattr(init, 'MAX_INLINE_STATE_BYTES', 0)
     assert init.q_alchemy_as_qasm(state, client=Mock()) == 'qasm'
     options = configure.call_args.kwargs
     assert options['statevector_type'] == ('parquet' if use_sparse else 'numpy_load')
@@ -125,7 +125,7 @@ def test_mixed_batches_group_and_restore_original_order(monkeypatch):
         return decode(init._serialize_statevector(data))
     monkeypatch.setattr(init, 'upload_statevector', upload)
     monkeypatch.setattr(init, 'configure_job', lambda **kwargs: kwargs)
-    def run(job, options, timeout):
+    def run(job, options, timeout, *, expected_states=1):
         state = job['statevector_data']
         matrix = state.toarray() if sparse.issparse(state) else state
         labels = []

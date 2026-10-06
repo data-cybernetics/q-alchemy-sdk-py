@@ -77,6 +77,36 @@ class CircuitCompressionRequest:
         return cls.from_dict(json.loads(payload))
 
 
+def _validate_metrics(metrics):
+    if not isinstance(metrics, Mapping):
+        raise ValueError("compression metrics must be an object")
+    for key in ("operations", "one_qubit_operations", "two_qubit_operations", "cx", "depth", "two_qubit_depth"):
+        if type(metrics.get(key)) is not int or metrics[key] < 0:
+            raise ValueError(f"compression metric {key} must be a nonnegative integer")
+    counts = metrics.get("counts")
+    if not isinstance(counts, Mapping) or any(not isinstance(k, str) or not k or type(v) is not int or v < 0 for k, v in counts.items()):
+        raise ValueError("compression counts must map operation names to nonnegative integers")
+
+
+def _validate_region(region):
+    for name in ("operation_indices", "qubits", "layer_span"):
+        values = region.get(name)
+        if not isinstance(values, (list, tuple)) or not values or any(type(v) is not int or v < 0 for v in values):
+            raise ValueError(f"compression region {name} must contain nonnegative integers")
+    if len(region["layer_span"]) != 2 or region["layer_span"][0] > region["layer_span"][1]:
+        raise ValueError("compression region layer_span must be an ordered pair")
+    if type(region.get("input_dimension")) is not int or region["input_dimension"] < 1:
+        raise ValueError("compression region input_dimension must be positive")
+    for name in ("validation_residual", "global_phase"):
+        value = region.get(name)
+        if type(value) not in (int, float) or (name == "validation_residual" and value < 0):
+            raise ValueError(f"compression region {name} must be numeric")
+    if region.get("equivalence") not in ("operator", "reachable_subspace"):
+        raise ValueError("invalid compression region equivalence")
+    for name in ("original_metrics", "compressed_metrics"):
+        _validate_metrics(region.get(name))
+
+
 @dataclass(frozen=True)
 class CircuitCompressionReport:
     """Server-reported exactness, metrics and a portable compressed circuit.
@@ -105,9 +135,15 @@ class CircuitCompressionReport:
         for stage in ("input", "baseline", "compressed"):
             if not isinstance(self.raw["metrics"].get(stage), Mapping):
                 raise ValueError(f"compression metrics must include {stage}")
+            _validate_metrics(self.raw["metrics"][stage])
         regions = self.raw.get("regions")
         if not isinstance(regions, (list, tuple)) or any(not isinstance(region, Mapping) for region in regions):
             raise ValueError("compression report regions must be an array of objects")
+        for region in regions:
+            _validate_region(region)
+        semantics = {"operator": "all_inputs", "reachable_subspace": "canonical_zero_state"}
+        if semantics.get(self.raw["equivalence"]) != self.raw["input_semantics"]:
+            raise ValueError("compression equivalence and input_semantics are inconsistent")
         if self.raw.get("report") is not None and not isinstance(self.raw["report"], Mapping):
             raise ValueError("compression diagnostics must be an object or null")
         object.__setattr__(self, "raw", _json_value(self.raw, path="compression report"))

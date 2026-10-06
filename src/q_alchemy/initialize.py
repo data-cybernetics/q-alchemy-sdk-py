@@ -34,7 +34,13 @@ from q_alchemy.utils import is_power_of_two, nonnegative_integer
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
-USE_INLINE_STATE_NUM_QUBITS = 16
+USE_INLINE_STATE_NUM_QUBITS = 16  # compatibility constant
+MAX_INLINE_STATE_BYTES = 1_048_576
+
+
+def _fits_inline(payload: bytes) -> bool:
+    """Bound base64 transport bytes, independent of logical qubit width."""
+    return 4 * ((len(payload) + 2) // 3) <= MAX_INLINE_STATE_BYTES
 
 LOG = logging.getLogger(__name__)
 
@@ -498,27 +504,59 @@ def clean_up_job(job: Job, opt_params: OptParams) -> None:
         delete_job_with_data(job)
 
 
-def run_job(job: Job, opt_params: OptParams, timeout_s: float):
-    """Wait for the job, extract its result, and clean up whether or not it succeeded.
+def _validate_initialization_result(result, expected_states):
+    summaries, circuits = result
+    if expected_states == 1 and isinstance(summaries, dict) and isinstance(circuits, str):
+        summaries, circuits = [summaries], [circuits]
+    if (not isinstance(summaries, list) or not isinstance(circuits, list)
+            or len(summaries) != expected_states or len(circuits) != expected_states):
+        raise ValueError("State-preparation service returned an unexpected batch size or format")
+    for summary, circuit in zip(summaries, circuits):
+        if (not isinstance(summary, dict) or not str(summary.get("status", "")).startswith("OK")
+                or not isinstance(circuit, str) or not circuit.strip()):
+            raise ValueError("State-preparation service returned an invalid result")
 
-    A failed job (e.g. an option the chosen method rejects) must not leak the job
-    and its uploaded state when remove_data is set. On that path a clean-up error
-    is only logged, so it cannot mask the reason the job failed.
+
+def run_job(job: Job, opt_params: OptParams, timeout_s: float, *, expected_states: int = 1):
+    """Retrieve and validate before cleanup; preserve recoverable failures.
+
+    A wait timeout does not cancel execution. On failure the original exception
+    exposes ``initialization_job`` for diagnosis/retry with this function.
+    Successful results remain cached on that job when cleanup needs a retry.
     """
     try:
-        job.wait_for_state(
-            state=JobStates.completed,
-            polling_interval_s=0.25,
-            timeout_s=timeout_s
-        )
-        result = extract_result(job)
-    except BaseException:
+        result = vars(job).get("_qalchemy_initialization_result")
+        if result is None:
+            job.wait_for_state(state=JobStates.completed, polling_interval_s=0.25, timeout_s=timeout_s)
+            result = extract_result(job)
+            _validate_initialization_result(result, expected_states)
+            job._qalchemy_initialization_result = result
+    except BaseException as exc:
+        exc.initialization_job = job
+        # URL remains usable with Job.from_url after an SDK-owned client closes.
+        try:
+            exc.initialization_job_url = job.self_link().get_url()
+        except Exception:
+            pass
+        try:
+            terminal_failure = job.get_state() in (JobStates.error, JobStates.canceled)
+        except Exception:
+            terminal_failure = False
+        if terminal_failure:
+            try:
+                clean_up_job(job, opt_params)
+            except Exception:
+                LOG.warning("Could not clean up the failed Q-Alchemy job.", exc_info=True)
+        else:
+            LOG.warning("Initialization job and data preserved for diagnosis and retry.")
+        raise
+    if not vars(job).get("_qalchemy_initialization_cleaned", False):
         try:
             clean_up_job(job, opt_params)
+            if opt_params.remove_data:
+                job._qalchemy_initialization_cleaned = True
         except Exception:
-            LOG.warning("Could not clean up the failed Q-Alchemy job.", exc_info=True)
-        raise
-    clean_up_job(job, opt_params)
+            LOG.warning("Initialization succeeded but cleanup failed; result retained.", exc_info=True)
     return result
 
 
@@ -612,7 +650,7 @@ def _run_prepared_statevector(
     return_summary: bool,
     inline_payload: str | None = None,
 ) -> str | Tuple[str, dict]:
-    if num_qubits > USE_INLINE_STATE_NUM_QUBITS or opt_params.use_research_function is not None:
+    if not _fits_inline(payload) or opt_params.use_research_function is not None:
         statevector_data = _upload_statevector_payload(client, payload, opt_params)
     else:
         statevector_data = inline_payload if inline_payload is not None else base64.b64encode(payload).decode("ascii")
@@ -655,7 +693,7 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse
     payload, num_qubits = _prepare_statevector(state_vector)
     inline_payload = (
         base64.b64encode(payload).decode("ascii")
-        if num_qubits <= USE_INLINE_STATE_NUM_QUBITS
+        if _fits_inline(payload)
         and any(opt.use_research_function is None for opt in options)
         else None
     )
@@ -784,7 +822,7 @@ def _run_state_batch(matrix, opt_params, client):
         num_states=num_states
     )
 
-    result_summary_list, qasm_list = run_job(job, opt_params, job_timeout)
+    result_summary_list, qasm_list = run_job(job, opt_params, job_timeout, expected_states=num_states)
 
     # One uploaded state uses the single-state service, whose response is a
     # string and dict. Preserve this batch API's list contract for every size.

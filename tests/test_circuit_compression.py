@@ -274,3 +274,22 @@ assert report.circuit.payload.startswith("OPENQASM")
 assert CircuitCompressionRequest().to_dict()["options"] == {}
 '''
     subprocess.run([sys.executable, "-c", script], input=json.dumps(REPORT), text=True, check=True)
+
+
+@pytest.mark.parametrize("corruption", ["negative_count", "fractional_count", "semantics", "region"])
+def test_malformed_report_retains_job_and_data(platform, corruption):
+    if corruption == "negative_count":
+        platform.payload["metrics"]["compressed"]["cx"] = -1
+    elif corruption == "fractional_count":
+        platform.payload["metrics"]["compressed"]["counts"]["x"] = .5
+    elif corruption == "semantics":
+        platform.payload["input_semantics"] = "all_inputs"
+    else:
+        platform.payload["regions"] = [{}]
+    with CircuitCompressionService(client=platform.client) as service:
+        job = service.compress(CIRCUIT)
+        with pytest.raises(CircuitCompressionExecutionError) as error:
+            job.result()
+        assert isinstance(error.value.original_exception, ValueError)
+        assert not job.removed
+        assert platform.events == []
