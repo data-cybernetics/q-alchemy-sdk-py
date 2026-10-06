@@ -247,6 +247,8 @@ def main() -> None:
             shots=20_000,
             ideal_reference=True,
             estimator=True,
+            # P and U use logical gates; compile them to this device's Target.
+            execution_options={"transpile": True},
         )
         plan = replace(
             plan,

@@ -1,3 +1,4 @@
+import warnings
 import logging
 import time
 import base64
@@ -95,6 +96,7 @@ def create_client(opt_params: OptParams):
 
 
 def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
+    warnings.warn("hash_state_vector is deprecated; the SDK manages upload identities internally", DeprecationWarning, stacklevel=2)
     if opt_params.assign_data_hash:
         param_hash = hashlib.md5(buffer.read()).hexdigest()
         buffer.seek(0)
@@ -104,6 +106,7 @@ def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
 
 
 def encode_statevector(state_vector: pa.Table | np.ndarray) -> str:
+    warnings.warn("encode_statevector is deprecated; use the SDK state upload API", DeprecationWarning, stacklevel=2)
     return base64.b64encode(_serialize_statevector(state_vector)).decode("ascii")
 
 

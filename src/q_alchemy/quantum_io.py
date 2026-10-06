@@ -680,7 +680,7 @@ def local_simulator_execution_plan(*, shots: int = 1024) -> ExecutionPlan:
 
     return ExecutionPlan(
         acquisition=Runtime.resource(LOCAL_SIMULATOR_RESOURCE),
-        shots=int(shots),
+        shots=shots,
     )
 
 
@@ -698,7 +698,7 @@ def quantum_backend_execution_plan(
     )
     return ExecutionPlan(
         acquisition=Runtime.resource(QUANTUM_BACKEND_RESOURCE, provider=provider_id, **config),
-        shots=int(shots),
+        shots=shots,
     )
 
 
@@ -710,17 +710,25 @@ def noisy_backend_execution_plan(
     shots: int = 4096,
     ideal_reference: bool = True,
     estimator: bool = False,
+    execution_options: Mapping[str, Any] | None = None,
 ) -> ExecutionPlan:
     """Return a plan for a simulator calibrated from a real provider backend.
 
     The real backend is queried for topology/calibration only; no QPU job is
     submitted. ``ideal_reference=True`` also runs Q-Alchemy's sparse reference
-    so the report can compare ideal and noisy outputs.
+    so the report can compare ideal and noisy outputs. Pass
+    ``execution_options={"transpile": True}`` to compile logical preparation and
+    evolution circuits to the device's native gates and connectivity. Otherwise,
+    the service requires circuits already compatible with the simulator Target.
     """
 
     provider_id, config = _backend_resource_config(
         provider=provider, backend=backend, least_busy=least_busy
     )
+    if execution_options is not None:
+        if not isinstance(execution_options, Mapping):
+            raise ValueError("execution_options must be a mapping")
+        config["execution_options"] = dict(execution_options)
     return ExecutionPlan(
         reference=(Runtime.qalchemy_sparse(source="ideal-reference") if ideal_reference else None),
         acquisition=Runtime.resource(
@@ -729,7 +737,7 @@ def noisy_backend_execution_plan(
             **config,
         ),
         estimator=(Runtime.qtucker() if estimator else None),
-        shots=int(shots),
+        shots=shots,
     )
 
 
@@ -771,7 +779,7 @@ def _quantum_backend_provider(plan: ExecutionPlan) -> str | None:
     provider_id = provider.strip().lower()
     # Aer resolves a local simulator from portable options on the service.
     # Only IBM-backed resources require the separate Secret credentials input.
-    if acquisition.resource_name == NOISY_BACKEND_SIMULATOR_RESOURCE and provider_id == "aer":
+    if acquisition.resource_name == NOISY_BACKEND_SIMULATOR_RESOURCE and provider_id in {"aer", "qiskit-aer"}:
         return None
     return provider_id
 

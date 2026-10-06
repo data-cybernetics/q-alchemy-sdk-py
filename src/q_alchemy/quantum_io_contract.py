@@ -112,11 +112,25 @@ def _require_schema(data: Mapping[str, Any], *, kind: str) -> None:
         raise ValueError(f"payload is not a {kind} contract")
     if "schema_version" not in data:
         raise ValueError(f"{kind} payload is missing schema_version")
-    version = int(data["schema_version"])
+    version = data["schema_version"]
+    if isinstance(version, bool) or not isinstance(version, int):
+        raise ValueError("schema_version must be an integer")
     if version != SCHEMA_VERSION:
         raise ValueError(
             f"unsupported {kind} schema_version={version}; supported={SCHEMA_VERSION}"
         )
+
+
+def _pauli_signature(terms):
+    """Combine repeated Pauli terms without depending on labels or term order."""
+    from collections import defaultdict
+    from math import fsum
+    grouped = defaultdict(list)
+    for label, coefficient in terms:
+        grouped[label.replace(" ", "")].append(complex(coefficient))
+    combined = ((label, complex(fsum(c.real for c in values), fsum(c.imag for c in values)))
+                for label, values in sorted(grouped.items()))
+    return tuple((label, value) for label, value in combined if value != 0)
 
 
 class PortablePauliSum:
@@ -198,10 +212,18 @@ class State:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        amplitudes = []
+        nonzero = False
+        for value in self.amplitudes:
+            pair = _complex_to_data(value)
+            amplitudes.append(pair)
+            nonzero = nonzero or pair[0] != 0 or pair[1] != 0
+        if not nonzero:
+            raise ValueError("state amplitudes must have non-zero norm")
         data: dict[str, Any] = {
             "representation": self.representation,
             "num_qubits": self.num_qubits,
-            "amplitudes": [_complex_to_data(value) for value in self.amplitudes],
+            "amplitudes": amplitudes,
             "metadata": _validated_metadata(self.metadata, path="state.metadata"),
         }
         if self.indices is not None:
@@ -441,6 +463,9 @@ class MeasurementPlan:
         labels.extend(item.label for item in self.basis_measurements)
         if len(set(labels)) != len(labels):
             raise ValueError("measurement labels must be unique across the portable plan")
+        training_operators = {_pauli_signature(item.terms) for item in self.training}
+        if any(_pauli_signature(item.terms) in training_operators for item in self.validation):
+            raise ValueError("training and validation observables must have distinct operators")
         _validated_metadata(
             self.observable_plan_metadata, path="measurement_plan.observable_plan_metadata"
         )

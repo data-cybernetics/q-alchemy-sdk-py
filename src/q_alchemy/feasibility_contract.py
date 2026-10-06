@@ -18,6 +18,16 @@ if TYPE_CHECKING:
     from qiskit import QuantumCircuit
 
 
+def _boolean(value: Any, name: str) -> None:
+    if not isinstance(value, bool):
+        raise ValueError(f"{name} must be a boolean")
+
+
+def _schema_version(value: Any) -> None:
+    if type(value) is not int or value != 1:
+        raise ValueError(f"unsupported feasibility schema_version={value!r}")
+
+
 class Relation(str, Enum):
     LE = "<="
     LT = "<"
@@ -34,6 +44,7 @@ class Criterion:
     required: bool = True
 
     def __post_init__(self) -> None:
+        _boolean(self.required, "required")
         if not self.metric:
             raise ValueError("criterion metric must not be empty")
         if not isfinite(self.threshold):
@@ -63,7 +74,7 @@ class Criterion:
             relation=Relation(str(data["relation"])),
             threshold=float(data["threshold"]),
             label=(str(data["label"]) if data.get("label") is not None else None),
-            required=bool(data.get("required", True)),
+            required=data.get("required", True),
         )
 
 
@@ -164,7 +175,7 @@ class FeasibilityPolicy:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FeasibilityPolicy":
         return cls(
-            classical_first=bool(data.get("classical_first", True)),
+            classical_first=data.get("classical_first", True),
             quantum_execution=QuantumExecutionPolicy(
                 str(data.get("quantum_execution", QuantumExecutionPolicy.WHEN_NEEDED.value))
             ),
@@ -183,6 +194,12 @@ class ClassicalResources:
     accelerator: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        for name in ("total_memory_bytes", "available_memory_bytes", "cpu_cores", "gpu_memory_bytes"):
+            value = getattr(self, name)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, Integral) or value < 0):
+                raise ValueError(f"{name} must be a non-negative integer")
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "total_memory_bytes": self.total_memory_bytes,
@@ -196,10 +213,10 @@ class ClassicalResources:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ClassicalResources":
         return cls(
-            total_memory_bytes=_int_or_none(data.get("total_memory_bytes")),
-            available_memory_bytes=_int_or_none(data.get("available_memory_bytes")),
-            cpu_cores=_int_or_none(data.get("cpu_cores")),
-            gpu_memory_bytes=_int_or_none(data.get("gpu_memory_bytes")),
+            total_memory_bytes=data.get("total_memory_bytes"),
+            available_memory_bytes=data.get("available_memory_bytes"),
+            cpu_cores=data.get("cpu_cores"),
+            gpu_memory_bytes=data.get("gpu_memory_bytes"),
             accelerator=(str(data["accelerator"]) if data.get("accelerator") is not None else None),
             metadata=dict(data.get("metadata", {})),
         )
@@ -245,6 +262,7 @@ class EvidenceCollectionConfig:
     )
 
     def __post_init__(self) -> None:
+        _boolean(self.least_busy, "least_busy")
         if not isinstance(self.circuit_compression, CircuitCompressionConfig):
             raise ValueError("circuit_compression must be a CircuitCompressionConfig")
         if not isinstance(self.qtucker_observable_config, Mapping):
@@ -313,9 +331,9 @@ class EvidenceCollectionConfig:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "EvidenceCollectionConfig":
         return cls(
-            provider=str(data.get("provider", "ibm")),
-            backend=(str(data["backend"]) if data.get("backend") is not None else None),
-            least_busy=bool(data.get("least_busy", False)),
+            provider=data.get("provider", "ibm"),
+            backend=data.get("backend"),
+            least_busy=data.get("least_busy", False),
             backend_options=dict(data.get("backend_options", {})),
             shots=data.get("shots", 4096),
             preparation_options=dict(data.get("preparation_options", {})),
@@ -340,10 +358,7 @@ class FeasibilityRequest:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
-            raise ValueError(
-                f"unsupported feasibility request schema_version={self.schema_version}"
-            )
+        _schema_version(self.schema_version)
         if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, Integral) or self.max_steps <= 0:
             raise ValueError("max_steps must be a positive integer")
 
@@ -361,7 +376,8 @@ class FeasibilityRequest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FeasibilityRequest":
-        if int(data.get("schema_version", 0)) != 1 or data.get("kind") != "feasibility-request":
+        _schema_version(data.get("schema_version"))
+        if data.get("kind") != "feasibility-request":
             raise ValueError("unsupported feasibility request contract")
         resources = data.get("classical_resources")
         return cls(
@@ -952,8 +968,7 @@ class FeasibilityReport:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FeasibilityReport":
-        if int(data.get("schema_version", 0)) != 1:
-            raise ValueError("unsupported feasibility report schema")
+        _schema_version(data.get("schema_version"))
         if data.get("kind") != "feasibility-report":
             raise ValueError("payload kind must be 'feasibility-report'")
         return cls(dict(data))
@@ -1135,7 +1150,9 @@ class FeasibilityReport:
             lines.append(
                 f"  Equivalence: {compression.get('equivalence') or 'not available'}"
             )
-            input_metrics = compression.get("input_metrics")
+            input_metrics = compression.get("baseline_metrics") or compression.get("input_metrics")
+            if compression.get("baseline_metrics") is not None:
+                lines.append("  Cost comparison: compiled baseline -> compressed output")
             compressed_metrics = compression.get("compressed_metrics")
             if isinstance(input_metrics, Mapping):
                 after = (

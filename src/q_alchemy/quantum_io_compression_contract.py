@@ -104,7 +104,12 @@ class CircuitCompressionMetrics:
 
 @dataclass(frozen=True)
 class CircuitCompressionSummary:
-    """Portable record of optional full-circuit compression for one assessment."""
+    """Compression diagnostics retaining logical input and comparable baseline.
+
+    input_metrics describes the original logical gates. baseline_metrics is the
+    compressor's compiled baseline in the same basis/cost model as the output;
+    displayed savings use that baseline. Older reports without it remain readable.
+    """
 
     attempted: bool
     applied: bool
@@ -117,6 +122,7 @@ class CircuitCompressionSummary:
     accepted_regions: int = 0
     reason: str | None = None
     options: Mapping[str, Any] = field(default_factory=dict)
+    baseline_metrics: CircuitCompressionMetrics | None = None
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CircuitCompressionSummary":
@@ -124,7 +130,7 @@ class CircuitCompressionSummary:
             "attempted", "applied", "changed", "exact", "equivalence",
             "input_semantics", "accepted_regions", "reason", "options",
         ) if key in data}
-        for key in ("input_metrics", "compressed_metrics"):
+        for key in ("input_metrics", "compressed_metrics", "baseline_metrics"):
             values[key] = (CircuitCompressionMetrics.from_dict(data[key])
                            if data.get(key) is not None else None)
         return cls(**values)
@@ -137,8 +143,10 @@ class CircuitCompressionSummary:
                  f"  Circuit used: {self.circuit_used}",
                  f"  Result: {self.reason or 'not available'}",
                  f"  Equivalence: {self.equivalence or 'not available'}"]
-        if self.input_metrics is not None:
-            before = self.input_metrics
+        if self.baseline_metrics is not None:
+            lines.append("  Cost comparison: compiled baseline -> compressed output")
+        if self.baseline_metrics is not None or self.input_metrics is not None:
+            before = self.baseline_metrics or self.input_metrics
             after = self.compressed_metrics or before
             lines.extend([f"  1Q operations: {before.one_qubit_operations} -> {after.one_qubit_operations}",
                           f"  2Q operations: {before.two_qubit_operations} -> {after.two_qubit_operations}",
@@ -165,6 +173,9 @@ class CircuitCompressionSummary:
             "input_semantics": self.input_semantics,
             "input_metrics": (
                 self.input_metrics.to_dict() if self.input_metrics is not None else None
+            ),
+            "baseline_metrics": (
+                self.baseline_metrics.to_dict() if self.baseline_metrics is not None else None
             ),
             "compressed_metrics": (
                 self.compressed_metrics.to_dict()

@@ -431,10 +431,14 @@ retrieval failures preserve their jobs and data for diagnosis.
 ### Running experiments with Quantum I/O
 
 For a complete molecular example, run
-[the 20-qubit CO reconstruction notebook](examples/quantum_io_co_reconstruction.ipynb).
+[the 12-qubit LiH reconstruction notebook](examples/quantum_io_lih_reconstruction.ipynb).
 It includes the original sparse CISD target and offers direct ideal simulation,
 Aer simulation with an imported IBM device noise model, or an IBM QPU, followed
 by reconstruction and sparse-result export in one service request.
+
+For a system initialized in an arbitrary state with a bath starting in its ground
+state, see [the system–bath example](examples/quantum_io_system_bath.py). It evolves
+both groups and evaluates one observable on the system, without state reconstruction.
 
 
 State widths, sparse indices, qubit selections and shot counts require integers;
@@ -581,6 +585,7 @@ plan = noisy_backend_execution_plan(
     shots=4096,
     ideal_reference=True,
     estimator=True,
+    execution_options={"transpile": True},
 )
 report = service.run(experiment, execution_plan=plan).result()
 
@@ -593,6 +598,9 @@ print(report.held_out_verification_error)
 
 No QPU execution occurs in this workflow. IBM credentials are used only to discover the
 backend and read the device information needed to construct the calibrated simulator.
+The explicit `execution_options={"transpile": True}` compiles the logical preparation,
+evolution and measurement circuits to the selected device's native gates and
+connectivity. Omit it only when the circuits already satisfy that Target.
 `examples/quantum_io_noisy_simulation.py` demonstrates the full typed report, including
 preparation diagnostics, complete-circuit metrics, ideal reference, noisy observations,
 basis distributions, error metrics, state-estimation output, held-out verification, and
@@ -1138,3 +1146,34 @@ Quantum I/O compression defaults to disabled; Feasibility keeps its enabled
 default. Reports include exactness semantics and input/output metrics, and older
 reports remain readable. Preparation claim diagnostics still describe original P.
 Compression settings require the updated service; deploy it before enabling them.
+
+
+### Quantum I/O validation and reporting in 0.5.1
+
+Execution-plan helpers require positive integer shots; booleans and fractional
+values are rejected instead of truncated. The `qiskit-aer` provider alias, like
+`aer`, is local simulation and does not require remote-provider credentials.
+State serialization rejects zero and nonfinite amplitudes before upload, during
+the existing serialization pass. Wire schema versions must be integers, excluding
+booleans. Training and held-out Pauli operators must be distinct even when their
+labels differ.
+
+Quantum I/O and Feasibility compression summaries use `baseline_metrics` when
+available, comparing the compiled baseline with the compressed circuit. Original
+logical `input_metrics` remain available; reports from older deployments still use
+those metrics when a baseline is absent. Server-side corrections and faster
+batched inference are provided by Quantum I/O PineXQ 0.8.7 / Quantum I/O 0.12.3.
+
+The unused initialization helpers `hash_state_vector` and `encode_statevector`
+remain callable for compatibility but emit `DeprecationWarning`. Use the regular
+SDK state-upload/initialization API, which manages serialization and identity.
+
+### Feasibility request validation in 0.5.2
+
+Feasibility request schema versions must be integer `1`; boolean options and
+criterion `required` must be actual booleans, and classical resource counts must be
+non-negative integers. Strings such as `"false"` and fractional counts are rejected
+instead of silently changing the request. Zero remains a valid explicit memory
+budget. These checks are local and require no private Feasibility dependency.
+Server-side workflow fixes are delivered by Feasibility PineXQ 0.2.17; the SDK
+continues to display the returned resource and quality conclusions separately.
