@@ -60,14 +60,16 @@ def build_experiment() -> QuantumExperiment:
     )
 
 
-def main() -> None:
+def main() -> QuantumCircuit:
     plan = ExecutionPlan(
         preparation_options={"max_fidelity_loss": 0.0, "basis_gates": ["u", "cx"]},
         circuit_compression=CircuitCompressionConfig(enabled=True),
         acquisition=Runtime.qalchemy_sparse(),
     )
     with QuantumIOService() as service:
-        report = service.run(build_experiment(), plan).result(timeout=300)
+        report = service.run(
+            build_experiment(), plan, include_quantum_circuits=True,
+        ).result(timeout=300)
 
     if report.execution is None or report.execution.observations is None:
         raise RuntimeError("The service returned no observable result")
@@ -78,6 +80,13 @@ def main() -> None:
     if report.circuit_compression is not None:
         print()
         print(report.circuit_compression.format_summary())
+
+    circuit = report.quantum_circuit
+    if circuit is None:
+        raise RuntimeError("The service returned no quantum circuit")
+    print("\nCOMPRESSED PREPARATION + EVOLUTION CIRCUIT")
+    print(circuit.draw(output="text", fold=100))
+    return circuit
 
 
 if __name__ == "__main__":

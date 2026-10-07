@@ -1769,6 +1769,28 @@ def _format_experiment_report_summary(report: "ExperimentReport") -> str:
     return "\n".join(lines)
 
 
+def _portable_quantum_circuit(value: Any) -> dict[str, Any] | None:
+    """Validate the optional logical-circuit envelope without importing Qiskit."""
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise ValueError("quantum_circuit must be an object")
+    for key, expected in (
+        ("kind", "quantum-circuit"),
+        ("role", "logical-experiment-circuit"),
+        ("format", "qasm3"),
+    ):
+        if value.get(key) != expected:
+            raise ValueError(f"unsupported quantum circuit {key}")
+    version = value.get("schema_version")
+    if type(version) is not int or version != 1:
+        raise ValueError("unsupported quantum circuit schema_version")
+    qasm = value.get("qasm")
+    if not isinstance(qasm, str) or not qasm.strip():
+        raise ValueError("quantum circuit payload has no QASM 3 program")
+    return dict(value)
+
+
 @dataclass(frozen=True)
 class ExperimentReport:
     """Typed, service-safe experiment report.
@@ -1793,6 +1815,20 @@ class ExperimentReport:
     reference_to_estimated_surrogate_infidelity: float | None = None
     warnings: tuple[str, ...] = ()
     circuit_compression: CircuitCompressionSummary | None = None
+    # Optional portable QASM 3, separate from runtime-only circuit objects.
+    portable_quantum_circuit: Mapping[str, Any] | None = None
+
+    @property
+    def quantum_circuit(self) -> Any | None:
+        """Reconstruct the optional compressed logical P + U circuit with Qiskit.
+
+        No circuit is reconstructed during report parsing. The payload remains
+        available after service job cleanup and requires the Qiskit importer only
+        when this property is accessed. Hardware routing and measurement circuits
+        are not part of this export.
+        """
+        value = _portable_quantum_circuit(self.portable_quantum_circuit)
+        return None if value is None else Circuit.qasm3(value["qasm"]).to_qiskit()
 
     @classmethod
     def _from_report_data(cls, data: Mapping[str, Any]) -> "ExperimentReport":
@@ -1803,6 +1839,7 @@ class ExperimentReport:
         estimate = data.get("estimate")
         held_out = data.get("held_out_verification_error")
         return cls(
+            portable_quantum_circuit=_portable_quantum_circuit(data.get("quantum_circuit")),
             generated_at=str(data["generated_at"]),
             mode=str(data["mode"]),
             experiment=ExperimentSummary.from_dict(data["experiment"]),
@@ -1849,9 +1886,11 @@ class ExperimentReport:
         )
 
     def _report_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "generated_at": self.generated_at,
             "mode": self.mode,
+            **({"quantum_circuit": _portable_quantum_circuit(self.portable_quantum_circuit)}
+               if self.portable_quantum_circuit is not None else {}),
             "experiment": self.experiment.to_dict(),
             "preparation": self.preparation.to_dict(),
             "experiment_circuit": self.experiment_circuit.to_dict(),
@@ -1881,6 +1920,8 @@ class ExperimentReport:
             payload["reference_to_estimated_surrogate_fidelity"] = self.reference_to_estimated_surrogate_fidelity
         if self.reference_to_estimated_surrogate_infidelity is not None:
             payload["reference_to_estimated_surrogate_infidelity"] = self.reference_to_estimated_surrogate_infidelity
+
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
         return {

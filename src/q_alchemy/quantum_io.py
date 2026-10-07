@@ -396,6 +396,7 @@ class QuantumIOService:
         *,
         shots: int | None = None,
         credentials: IBMQuantumCredentials | Mapping[str, Any] | None = None,
+        include_quantum_circuits: bool = False,
     ) -> QuantumIOJob:
         """Submit a typed quantum experiment and return a :class:`QuantumIOJob`.
 
@@ -404,8 +405,13 @@ class QuantumIOService:
         carries its own ``shots``, so a conflicting ``shots`` passed alongside
         one is rejected instead of being silently discarded. Serialization to
         schema-3 JSON is entirely internal to the SDK.
+
+        Set ``include_quantum_circuits=True`` to receive the compressed logical
+        P + U circuit through ``report.quantum_circuit`` (requires Qiskit).
         """
 
+        if not isinstance(include_quantum_circuits, bool):
+            raise TypeError("include_quantum_circuits must be a bool")
         if not isinstance(experiment, QuantumExperiment):
             raise TypeError("experiment must be a QuantumExperiment")
         if execution_plan is None:
@@ -422,6 +428,8 @@ class QuantumIOService:
 
         experiment_payload = experiment.to_dict()
         plan_payload = plan.to_dict()
+        if include_quantum_circuits:
+            plan_payload["service_options"] = {"include_quantum_circuits": True}
 
         provider = _quantum_backend_provider(plan)
         ibm_credentials = None

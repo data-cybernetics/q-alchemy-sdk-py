@@ -1181,3 +1181,29 @@ continues to display the returned resource and quality conclusions separately.
 ### Workflow review release 0.5.3
 
 Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports now validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.
+
+
+### Optional logical circuit return
+
+Quantum I/O core 0.12.6, PineXQ adapter 0.8.10 and SDK 0.5.4 support
+`QuantumIOService.run(experiment, plan, include_quantum_circuits=True)`.
+The default is `False`, with no circuit export cost. The service exports the
+existing logical preparation-plus-evolution circuit **after compression**, as
+`report.quantum_circuit` in the portable report's inner JSON object. Its envelope
+uses `kind="quantum-circuit"`, `schema_version=1`,
+`role="logical-experiment-circuit"`, `format="qasm3"`, and a `qasm` program.
+It preserves global phase and excludes physical routing and measurement circuits.
+No preparation, compression or simulation is repeated to export the circuit.
+
+In the SDK, `report.quantum_circuit` reconstructs a Qiskit `QuantumCircuit` on
+access; install the SDK's Qiskit extra. Use
+`print(report.quantum_circuit.draw(output="text"))` to print it. The downloaded
+payload remains available after job cleanup. Reports without a circuit return
+`None`, and ordinary report parsing does not require Qiskit.
+
+PineXQ consumes `service_options.include_quantum_circuits` from the execution-plan
+input before parsing the core plan. This is a service option, not an
+`ExecutionPlan` field. Direct core callers can use
+`run_quantum_experiment(..., include_quantum_circuits=True)` for portable export;
+`run_quantum_experiment_report(..., include_quantum_circuits=True)` continues to
+retain runtime circuit objects locally without exporting them automatically.

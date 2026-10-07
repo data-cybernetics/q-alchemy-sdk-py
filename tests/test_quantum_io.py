@@ -637,6 +637,35 @@ class TestServiceSubmission(unittest.TestCase):
         self.service._upload_json = upload
         self.service._step = lambda name: _Step()
 
+    def test_optional_circuit_survives_result_cleanup(self):
+        from qiskit import QuantumCircuit
+        from qiskit.quantum_info import Operator
+        import numpy as np
+        from q_alchemy import Circuit
+        circuit = QuantumCircuit(2, global_phase=.37)
+        circuit.h(0)
+        circuit.cx(0, 1)
+        payload = ExperimentReport.from_dict(_report_payload()).to_dict()
+        payload["report"]["quantum_circuit"] = {
+            "schema_version": 1, "kind": "quantum-circuit",
+            "role": "logical-experiment-circuit", "format": "qasm3",
+            "qasm": Circuit.from_qiskit(circuit).payload,
+        }
+        with patch("q_alchemy.quantum_io.Job", _FakePineJob), patch(
+            "q_alchemy.quantum_io._download_json_output", return_value=payload,
+        ):
+            report = self.service.run(_bell_experiment(), include_quantum_circuits=True).result()
+        self.assertEqual(self.uploads[1][1]["service_options"], {"include_quantum_circuits": True})
+        self.assertTrue(_FakePineJob.last.deleted)
+        np.testing.assert_allclose(Operator(report.quantum_circuit).data, Operator(circuit).data, atol=1e-12)
+        self.assertEqual(report.to_dict(), payload)
+
+    def test_invalid_circuit_return_flag_never_uploads(self):
+        for value in (None, 1, "true", [], {}):
+            with self.subTest(value=value), self.assertRaisesRegex(TypeError, "bool"):
+                self.service.run(_bell_experiment(), include_quantum_circuits=value)
+        self.assertEqual(self.uploads, [])
+
     def test_run_requires_typed_experiment(self):
         with self.assertRaisesRegex(TypeError, "QuantumExperiment"):
             self.service.run({"kind": "quantum-experiment"})
