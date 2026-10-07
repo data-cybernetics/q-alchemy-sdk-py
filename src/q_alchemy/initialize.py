@@ -1,3 +1,4 @@
+import warnings
 import logging
 import time
 import base64
@@ -6,14 +7,14 @@ import hashlib
 import inspect
 import io
 import os
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from enum import StrEnum
-from time import sleep
 from typing import List, Tuple, Dict, Optional
 
-from threading import Thread, Lock
-from tqdm import tqdm
+from threading import Lock
 
 import httpx
 import numpy as np
@@ -29,11 +30,17 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
-from q_alchemy.utils import is_power_of_two
+from q_alchemy.utils import is_power_of_two, nonnegative_integer
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
-USE_INLINE_STATE_NUM_QUBITS = 16
+USE_INLINE_STATE_NUM_QUBITS = 16  # compatibility constant
+MAX_INLINE_STATE_BYTES = 1_048_576
+
+
+def _fits_inline(payload: bytes) -> bool:
+    """Bound base64 transport bytes, independent of logical qubit width."""
+    return 4 * ((len(payload) + 2) // 3) <= MAX_INLINE_STATE_BYTES
 
 LOG = logging.getLogger(__name__)
 
@@ -41,22 +48,19 @@ class InitializationMethods(StrEnum):
     AUTO = "auto"
     HIERARCHICAL_TUCKER = "hierarchical_tucker"
     ITERATIVE_TUCKER = "iterative_tucker"
-    SWAP_PIVOT = "swap_pivot"
-    BAA_LOW_RANK = "baa_low_rank"
 
 @dataclass
 class OptParams:
     remove_data: bool = field(default=True)
     max_fidelity_loss: float = field(default=0.0)
     job_tags: List[str] = field(default_factory=list)
-    api_key: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY"))
+    api_key: str | None = field(
+        default_factory=lambda: os.getenv("Q_ALCHEMY_API_KEY") or os.getenv("PINEXQ_API_KEY"),
+        repr=False,
+    )
     host: str = field(default_factory=lambda: os.getenv("Q_ALCHEMY_HOST", "jobs.api.q-alchemy.com"))
     schema: str = field(default="https")
-    added_headers: Dict[str, str] = field(default_factory=dict)
-    # Never sent to the service; kept so existing callers passing them do not break.
-    # BAA_LOW_RANK takes its schemes through extra_kwargs as iso_scheme/unitary_scheme.
-    isometry_scheme: str = field(default="ccd")
-    unitary_scheme: str = field(default="qsd")
+    added_headers: Dict[str, str] = field(default_factory=dict, repr=False)
     job_completion_timeout_sec: int | None = field(default=300)
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     assign_data_hash: bool = field(default=True)
@@ -74,6 +78,12 @@ class OptParams:
 
 
 def create_client(opt_params: OptParams):
+    if not opt_params.api_key:
+        raise ValueError(
+            "A Q-Alchemy API key is required. Set Q_ALCHEMY_API_KEY or "
+            "PINEXQ_API_KEY, or pass api_key=... in OptParams."
+        )
+
     headers = {"x-api-key": opt_params.api_key}
     headers.update(opt_params.added_headers)
 
@@ -92,6 +102,7 @@ def create_client(opt_params: OptParams):
 
 
 def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
+    warnings.warn("hash_state_vector is deprecated; the SDK manages upload identities internally", DeprecationWarning, stacklevel=2)
     if opt_params.assign_data_hash:
         param_hash = hashlib.md5(buffer.read()).hexdigest()
         buffer.seek(0)
@@ -100,11 +111,23 @@ def hash_state_vector(buffer: io.BytesIO, opt_params: OptParams):
     return param_hash
 
 
-def encode_statevector(state_vector: pa.Table) -> str:
+def encode_statevector(state_vector: pa.Table | np.ndarray) -> str:
+    warnings.warn("encode_statevector is deprecated; use the SDK state upload API", DeprecationWarning, stacklevel=2)
+    return base64.b64encode(_serialize_statevector(state_vector)).decode("ascii")
+
+
+def _serialize_statevector(state_vector: pa.Table | np.ndarray) -> bytes:
     buffer = io.BytesIO()
-    pq.write_table(state_vector, buffer)
-    buffer.seek(0)
-    return base64.encodebytes(buffer.read()).decode("utf-8").replace("\n", "")
+    if isinstance(state_vector, np.ndarray):
+        np.save(buffer, state_vector, allow_pickle=False)
+    else:
+        pq.write_table(state_vector, buffer)
+    return buffer.getvalue()
+
+
+def _payload_type(payload: bytes) -> str:
+    """Identify the two formats produced by our serializer."""
+    return "numpy_load" if payload.startswith(b"\x93NUMPY") else "parquet"
 
 
 def allow_deletion(wd_link: WorkDataLink) -> None:
@@ -124,12 +147,15 @@ def allow_deletion(wd_link: WorkDataLink) -> None:
         LOG.warning("Could not mark WorkData %s deletable.", wd_link.get_url(), exc_info=True)
 
 
-def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params: OptParams) -> WorkDataLink:
-    # Convert to buffer to get hash and later possibly upload
-    buffer = io.BytesIO()
-    pq.write_table(state_vector, buffer)
-    buffer.seek(0)
-    param_hash = hash_state_vector(buffer, opt_params)
+def upload_statevector(client: httpx.Client, state_vector: pa.Table | np.ndarray, opt_params: OptParams) -> WorkDataLink:
+    return _upload_statevector_payload(client, _serialize_statevector(state_vector), opt_params)
+
+
+def _upload_statevector_payload(client: httpx.Client, payload: bytes, opt_params: OptParams) -> WorkDataLink:
+    param_hash = (
+        hashlib.md5(payload).hexdigest()
+        if opt_params.assign_data_hash else datetime.now(UTC).timestamp()
+    )
 
     sequence_wd_tags = [
         f"Hash={param_hash}",
@@ -138,30 +164,31 @@ def upload_statevector(client: httpx.Client, state_vector: pa.Table, opt_params:
     sequence_wd_tags += opt_params.job_tags
     wd_root = enter_jma(client).work_data_root_link.navigate()
 
-    existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
-        Filter=WorkDataFilterParameter(
-            TagsByAnd=sequence_wd_tags,
-            NameContains=None,
-            ShowHidden=None,
-            MediaTypeContains=None,
-            TagsByOr=None,
-            IsKind=None,
-            CreatedBefore=None,
-            CreatedAfter=None,
-            IsDeletable=None,
-            IsUsed=None,
-            ProducerProcessingStepUrl=None,
-        ),
-        SortBy=None,
-        IncludeRemainingTags=None,
-        Pagination=None,
-    ))
+    existing_wd_query = None
+    if opt_params.assign_data_hash:
+        existing_wd_query = wd_root.query_action.execute(WorkDataQueryParameters(
+            Filter=WorkDataFilterParameter(
+                TagsByAnd=sequence_wd_tags,
+                NameContains=None,
+                ShowHidden=None,
+                MediaTypeContains=None,
+                TagsByOr=None,
+                IsKind=None,
+                CreatedBefore=None,
+                CreatedAfter=None,
+                IsDeletable=None,
+                IsUsed=None,
+                ProducerProcessingStepUrl=None,
+            ),
+            SortBy=None,
+            IncludeRemainingTags=None,
+            Pagination=None,
+        ))
 
-    if existing_wd_query.total_entities == 0:
-        wd_root = enter_jma(client).work_data_root_link.navigate()
+    if existing_wd_query is None or existing_wd_query.total_entities == 0:
         wd_link = wd_root.upload_action.execute(UploadParameters(
-            filename=f"{param_hash}.parquet",
-            binary=buffer.read(),
+            filename=f"{param_hash}.npy" if _payload_type(payload) == "numpy_load" else f"{param_hash}.parquet",
+            binary=payload,
             mediatype=MediaTypes.OCTET_STREAM,
             json=None,
         ))
@@ -190,7 +217,7 @@ def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) ->
 
 
 def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str,
-                            num_states: int = 1) -> tuple[str, dict[str, float | list[str]]]:
+                            num_states: int = 1, statevector_type: str = "parquet") -> tuple[str, dict[str, float | list[str]]]:
     processing_name = "build_initialization_circuit"
     job_parameters: Dict[str, str | float | int | bool | dict] = {
         "min_fidelity": 1.0 - opt_params.max_fidelity_loss,
@@ -207,7 +234,7 @@ def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLin
         job_parameters.update({
             "state_vector": {
                "state_vector_base64":statevector_data,
-               "state_vector_type":"parquet"
+               "state_vector_type":statevector_type
            }
         })
     elif num_states > 1:
@@ -234,6 +261,7 @@ class TimeAwareCache:
         """
         self._store = {}  # Internal storage for (timestamp, value) tuples
         self.ttl = ttl_seconds
+        self.lock = Lock()
 
     def get(self, key: str) -> Optional[object]:
         """
@@ -246,7 +274,7 @@ class TimeAwareCache:
         item = self._store.get(key)
         if item:
             timestamp, value = item
-            if time.time() - timestamp < self.ttl:
+            if time.monotonic() - timestamp < self.ttl:
                 return value
 
             # Entry has expired; remove it
@@ -261,9 +289,9 @@ class TimeAwareCache:
         Args: key (str): The key under which to store the value.
               value (object): The value to cache.
         """
-        self._store[key] = (time.time(), value)
+        self._store[key] = (time.monotonic(), value)
 
-step_cache = TimeAwareCache(ttl_seconds=300)
+_step_cache_lock = Lock()
 
 def _release_version(version: str) -> Optional[Version]:
     """The version as a `Version` if it is a final release, else None (dev, pre-release or unparseable)."""
@@ -324,22 +352,32 @@ def from_name(
     return ProcessingStep.from_hco(processing_step_hco)
 
 def find_processing_step(client, processing_name):
+    # ProcessingStep objects retain their HTTP client. Keep the cache on that
+    # client so accounts cannot share lookups and a global cache cannot retain
+    # closed clients. Callers should use a new client when changing accounts.
+    with _step_cache_lock:
+        cache = getattr(client, "_qalchemy_step_cache", None)
+        if cache is None:
+            cache = TimeAwareCache(ttl_seconds=300)
+            client._qalchemy_step_cache = cache
     step_key = str(client.base_url) + '/' + processing_name
-    step = step_cache.get(step_key)
-
-    if step is None:
-        step = from_name(client=client, step_name=processing_name, version=None)
-        step_cache.set(step_key, step)
-
-    return step
+    with cache.lock:
+        step = cache.get(step_key)
+        if step is None:
+            step = from_name(client=client, step_name=processing_name, version=None)
+            cache.set(step_key, step)
+        return step
 
 def configure_job(
     client: httpx.Client,
     opt_params: OptParams,
     statevector_data: WorkDataLink | str,
-    num_states: int = 1
+    num_states: int = 1,
+    statevector_type: str = "parquet",
 ) -> Job:
-    processing_name, inner_job_parameters = create_processing_input(opt_params, statevector_data, num_states)
+    processing_name, inner_job_parameters = create_processing_input(
+        opt_params, statevector_data, num_states, statevector_type
+    )
     step = find_processing_step(client, processing_name)
 
     # job_parameters
@@ -466,27 +504,59 @@ def clean_up_job(job: Job, opt_params: OptParams) -> None:
         delete_job_with_data(job)
 
 
-def run_job(job: Job, opt_params: OptParams, timeout_s: float):
-    """Wait for the job, extract its result, and clean up whether or not it succeeded.
+def _validate_initialization_result(result, expected_states):
+    summaries, circuits = result
+    if expected_states == 1 and isinstance(summaries, dict) and isinstance(circuits, str):
+        summaries, circuits = [summaries], [circuits]
+    if (not isinstance(summaries, list) or not isinstance(circuits, list)
+            or len(summaries) != expected_states or len(circuits) != expected_states):
+        raise ValueError("State-preparation service returned an unexpected batch size or format")
+    for summary, circuit in zip(summaries, circuits):
+        if (not isinstance(summary, dict) or not str(summary.get("status", "")).startswith("OK")
+                or not isinstance(circuit, str) or not circuit.strip()):
+            raise ValueError("State-preparation service returned an invalid result")
 
-    A failed job (e.g. an option the chosen method rejects) must not leak the job
-    and its uploaded state when remove_data is set. On that path a clean-up error
-    is only logged, so it cannot mask the reason the job failed.
+
+def run_job(job: Job, opt_params: OptParams, timeout_s: float, *, expected_states: int = 1):
+    """Retrieve and validate before cleanup; preserve recoverable failures.
+
+    A wait timeout does not cancel execution. On failure the original exception
+    exposes ``initialization_job`` for diagnosis/retry with this function.
+    Successful results remain cached on that job when cleanup needs a retry.
     """
     try:
-        job.wait_for_state(
-            state=JobStates.completed,
-            polling_interval_s=0.25,
-            timeout_s=timeout_s
-        )
-        result = extract_result(job)
-    except BaseException:
+        result = vars(job).get("_qalchemy_initialization_result")
+        if result is None:
+            job.wait_for_state(state=JobStates.completed, polling_interval_s=0.25, timeout_s=timeout_s)
+            result = extract_result(job)
+            _validate_initialization_result(result, expected_states)
+            job._qalchemy_initialization_result = result
+    except BaseException as exc:
+        exc.initialization_job = job
+        # URL remains usable with Job.from_url after an SDK-owned client closes.
+        try:
+            exc.initialization_job_url = job.self_link().get_url()
+        except Exception:
+            pass
+        try:
+            terminal_failure = job.get_state() in (JobStates.error, JobStates.canceled)
+        except Exception:
+            terminal_failure = False
+        if terminal_failure:
+            try:
+                clean_up_job(job, opt_params)
+            except Exception:
+                LOG.warning("Could not clean up the failed Q-Alchemy job.", exc_info=True)
+        else:
+            LOG.warning("Initialization job and data preserved for diagnosis and retry.")
+        raise
+    if not vars(job).get("_qalchemy_initialization_cleaned", False):
         try:
             clean_up_job(job, opt_params)
+            if opt_params.remove_data:
+                job._qalchemy_initialization_cleaned = True
         except Exception:
-            LOG.warning("Could not clean up the failed Q-Alchemy job.", exc_info=True)
-        raise
-    clean_up_job(job, opt_params)
+            LOG.warning("Initialization succeeded but cleanup failed; result retained.", exc_info=True)
     return result
 
 
@@ -497,28 +567,93 @@ def q_alchemy_as_qasm(
         return_summary=False,
         **kwargs
 ) -> str | Tuple[str, dict]:
+    """Prepare a state through the service.
 
+    With ``return_summary=True``, AUTO's ``fidelity_requirement_met`` reports
+    QTucker's decision independently of execution ``status``. False means best
+    effort; missing/None means unavailable (older services or pinned methods).
+    ``fidelity_loss`` is an estimate, not a simulated verification.
+    """
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
+    try:
+        return _q_alchemy_as_qasm(state_vector, opt_params, client, return_summary)
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
 
-    # The state vector need to be converted to a (1, 2**n) sparse (COO) matrix
-    data_matrix: sparse.coo_matrix = sparse.coo_matrix(state_vector).reshape(1, -1)
-    data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix)
 
-    # Now we decide if we use inline state-vectors
-    # (saves hussle and resources) or if we use the
-    # work-data approach:
-    # currently, all states <= 16 qubits are going inline.
-    num_qubits = np.log2(data_matrix.shape[1])
-    if not is_power_of_two(data_matrix):
+def _q_alchemy_as_qasm(
+        state_vector: List[complex] | np.ndarray | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> str | Tuple[str, dict]:
+    payload, num_qubits = _prepare_statevector(state_vector)
+    return _run_prepared_statevector(payload, num_qubits, opt_params, client, return_summary)
+
+
+def _maybe_make_sparse_row(vector: np.ndarray):
+    """Use QTucker's 10% density/early-exit rule, with lossless transport.
+
+    Mirrors ``SparseMixin._maybe_make_sparse_triplet`` / its backend density
+    check (QTucker 0.2.15), but uses eps_mass=0: no nonzero amplitude is dropped
+    in the SDK. Compilation/approximation policy stays with QTucker. Scanning
+    uses bounded blocks and avoids constructing COO indices for dense inputs.
+    """
+    limit = (vector.size + 9) // 10  # ceil(0.1 * size), without float rounding
+    nnz = 0
+    for start in range(0, vector.size, 1 << 20):
+        nnz += np.count_nonzero(vector[start:start + (1 << 20)])
+        if nnz > limit:
+            return None
+    return sparse.coo_matrix(vector.reshape(1, -1))
+
+
+def _state_row(state_vector):
+    """Validate width and choose a transport representation once per state."""
+    if sparse.issparse(state_vector):
+        row = sparse.coo_matrix(state_vector.reshape(1, -1))
+    else:
+        vector = np.asarray(state_vector).reshape(-1)
+        if vector.dtype.kind not in "buifc":
+            raise ValueError("State amplitudes must be numeric")
+        row = vector.reshape(1, -1)
+    if not is_power_of_two(row):
         raise ValueError(
             f"The state vector is not a power of two. "
-            f"The length of the state vector is {data_matrix.shape[1]}."
+            f"The length of the state vector is {row.shape[1]}."
         )
-    if num_qubits > USE_INLINE_STATE_NUM_QUBITS or opt_params.use_research_function is not None:
-        statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
+    if sparse.issparse(row):
+        return row  # Caller already chose sparse storage: never scan or densify.
+    sparse_row = _maybe_make_sparse_row(vector)
+    return row if sparse_row is None else sparse_row
+
+
+def _transport_data(matrix):
+    return convert_sparse_coo_to_arrow(matrix.tocoo()) if sparse.issparse(matrix) else matrix
+
+
+def _prepare_statevector(state_vector) -> tuple[bytes, int]:
+    """Validate/select/serialize once, even when option sets share a state."""
+    matrix = _state_row(state_vector)
+    return _serialize_statevector(_transport_data(matrix)), matrix.shape[1].bit_length() - 1
+
+
+def _run_prepared_statevector(
+    payload: bytes,
+    num_qubits: int,
+    opt_params: OptParams,
+    client: httpx.Client,
+    return_summary: bool,
+    inline_payload: str | None = None,
+) -> str | Tuple[str, dict]:
+    if not _fits_inline(payload) or opt_params.use_research_function is not None:
+        statevector_data = _upload_statevector_payload(client, payload, opt_params)
     else:
-        statevector_data = encode_statevector(data_matrix_pyarrow)
+        statevector_data = inline_payload if inline_payload is not None else base64.b64encode(payload).decode("ascii")
 
     job_timeout = (
         opt_params.job_completion_timeout_sec
@@ -529,7 +664,8 @@ def q_alchemy_as_qasm(
     job = configure_job(
         client=client,
         opt_params=opt_params,
-        statevector_data=statevector_data
+        statevector_data=statevector_data,
+        statevector_type=_payload_type(payload),
     )
 
     result_summary, qasm = run_job(job, opt_params, job_timeout)
@@ -541,25 +677,46 @@ def q_alchemy_as_qasm(
 
 
 def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse.sparray,
-                                opt_params: List[dict | OptParams], client: httpx.Client | None = None, return_summary=False):
-    """Run QAlchemy with different sets of opt_params in parallel."""
-    threads = []
-    result = []
-    for opt in opt_params:
-        def func(_opt):
-            sp_qasm = q_alchemy_as_qasm(state_vector, _opt, client, return_summary)
-            result.append(sp_qasm)
+                                opt_params: List[dict | OptParams], client: httpx.Client | None = None,
+                                return_summary=False, *, max_workers: int = 4):
+    """Run option sets concurrently, preserving order and propagating failures.
 
-        job = Thread(target=func, args=(opt,))
-        job.start()
-        sleep(0.05)  # be easy on the API
-        threads.append(job)
+    At most ``max_workers`` jobs run concurrently. Serialization is shared, but
+    each job retains its own upload/cleanup lifecycle. A supplied client remains
+    caller-owned; otherwise each worker opens and closes its own client.
+    """
+    if nonnegative_integer(max_workers, "max_workers") == 0:
+        raise ValueError("max_workers must be positive")
+    options = [deepcopy(populate_opt_params(opt)) for opt in opt_params]
+    if not options:
+        return []
+    payload, num_qubits = _prepare_statevector(state_vector)
+    inline_payload = (
+        base64.b64encode(payload).decode("ascii")
+        if _fits_inline(payload)
+        and any(opt.use_research_function is None for opt in options)
+        else None
+    )
 
-    # print(f"Waiting for {len(threads)} jobs to finish.")
-    for x in tqdm(threads):
-        x.join()
+    def run(opt):
+        worker_client = client if client is not None else create_client(opt)
+        try:
+            return _run_prepared_statevector(
+                payload, num_qubits, opt, worker_client, return_summary, inline_payload
+            )
+        finally:
+            if client is None:
+                worker_client.close()
 
-    return result
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(options))) as executor:
+        futures = [executor.submit(run, opt) for opt in options]
+        try:
+            return [future.result() for future in futures]
+        except BaseException:
+            # Running jobs finish their normal cleanup; queued work need not run.
+            for future in futures:
+                future.cancel()
+            raise
 
 
 def q_alchemy_as_qasm_parallel_states(
@@ -573,31 +730,84 @@ def q_alchemy_as_qasm_parallel_states(
 
     Note that the circuit's global phase is included both in the return summary and in the QASM;
     in the latter, if the circuit is a QASM2, the gphase is included as a comment.
+
+    Results are lists even for a one-state batch. With ``return_summary=True``,
+    AUTO summaries expose ``fidelity_requirement_met`` independently of execution
+    ``status``; fidelity loss is an initializer estimate, not a simulation.
     """
 
     opt_params: OptParams = populate_opt_params(opt_params, **kwargs)
+    owns_client = client is None
     client = client if client is not None else create_client(opt_params)
-
-    # cast/reshape state_vector into an (m x 2**n) coo_matrix, where m is the number of states
-    if sparse.issparse(state_vector): # state_vector is a sparse matrix/array, and thus 2d.
-        num_states = state_vector.shape[0]
-        data_matrix = state_vector.tocoo()
-    else:
-        num_states = len(state_vector)
-        data_matrix_rows = []
-        for state in state_vector: # convert each entry into a "row" (1 x 2**n)
-            data_matrix_row: sparse.coo_matrix = sparse.coo_matrix(state).reshape(1, -1)
-            data_matrix_rows.append(data_matrix_row)
-        data_matrix = sparse.vstack(data_matrix_rows)
-    data_matrix_pyarrow: pa.Table = convert_sparse_coo_to_arrow(data_matrix) # should be (m x 2**n)
-
-    num_qubits = np.log2(data_matrix.shape[1])
-    if not is_power_of_two(data_matrix):
-        raise ValueError(
-            f"The state vector is not a power of two. "
-            f"The length of the state vector is {data_matrix.shape[1]}."
+    try:
+        return _q_alchemy_as_qasm_parallel_states(
+            state_vector, opt_params, client, return_summary
         )
-    statevector_data = upload_statevector(client, data_matrix_pyarrow, opt_params)
+    finally:
+        # A caller-supplied client belongs to the caller and is left open.
+        if owns_client:
+            client.close()
+
+
+def _q_alchemy_as_qasm_parallel_states(
+        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
+        opt_params: OptParams,
+        client: httpx.Client,
+        return_summary: bool,
+) -> list[str] | tuple[list[str], list[dict]]:
+    # A file has one representation. Split mixed batches into at most two
+    # groups, then restore the caller's order. Sparse rows never become dense.
+    groups = _batch_state_groups(state_vector)
+    qasm_results = [None] * sum(len(indices) for indices, _ in groups)
+    summary_results = [None] * len(qasm_results)
+    for indices, matrix in groups:
+        qasms, summaries = _run_state_batch(matrix, opt_params, client)
+        for index, qasm, summary in zip(indices, qasms, summaries):
+            qasm_results[index] = qasm
+            summary_results[index] = summary
+    return (qasm_results, summary_results) if return_summary else qasm_results
+
+
+def _batch_state_groups(state_vector):
+    """Select every row before any upload; preserve sparse batches wholesale."""
+    if sparse.issparse(state_vector):
+        if state_vector.ndim != 2 or state_vector.shape[0] == 0:
+            raise ValueError("Expected a nonempty batch of state rows")
+        if not is_power_of_two(state_vector):
+            raise ValueError("The state vector is not a power of two")
+        return [(list(range(state_vector.shape[0])), state_vector.tocoo())]
+
+    rows = list(state_vector)
+    if not rows:
+        raise ValueError("Expected a nonempty batch of state rows")
+    groups = {False: ([], []), True: ([], [])}
+    width = None
+    for index, state in enumerate(rows):
+        row = _state_row(state)
+        if width is not None and row.shape[1] != width:
+            raise ValueError("All states in a batch must have the same width")
+        width = row.shape[1]
+        indices, selected = groups[sparse.issparse(row)]
+        indices.append(index)
+        selected.append(row)
+
+    result = []
+    for is_sparse, (indices, selected) in groups.items():
+        if not indices:
+            continue
+        if is_sparse:
+            matrix = sparse.vstack(selected, format="coo")
+        elif isinstance(state_vector, np.ndarray) and state_vector.ndim == 2 and len(indices) == len(rows):
+            matrix = state_vector  # Do not copy an already dense batch.
+        else:
+            matrix = np.concatenate(selected, axis=0)
+        result.append((indices, matrix))
+    return result
+
+
+def _run_state_batch(matrix, opt_params, client):
+    num_states = matrix.shape[0]
+    statevector_data = upload_statevector(client, _transport_data(matrix), opt_params)
 
     job_timeout = (
         opt_params.job_completion_timeout_sec
@@ -612,9 +822,15 @@ def q_alchemy_as_qasm_parallel_states(
         num_states=num_states
     )
 
-    result_summary_list, qasm_list = run_job(job, opt_params, job_timeout)
+    result_summary_list, qasm_list = run_job(job, opt_params, job_timeout, expected_states=num_states)
 
-    if return_summary:
-        return qasm_list, result_summary_list
+    # One uploaded state uses the single-state service, whose response is a
+    # string and dict. Preserve this batch API's list contract for every size.
+    if num_states == 1 and isinstance(qasm_list, str) and isinstance(result_summary_list, dict):
+        qasm_list = [qasm_list]
+        result_summary_list = [result_summary_list]
 
-    return qasm_list
+    if (not isinstance(qasm_list, list) or not isinstance(result_summary_list, list)
+            or len(qasm_list) != num_states or len(result_summary_list) != num_states):
+        raise ValueError("State-preparation service returned an unexpected batch size or format")
+    return qasm_list, result_summary_list

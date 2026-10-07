@@ -1,0 +1,2233 @@
+{
+  "core_version": "0.6.48",
+  "cases": [
+    {
+      "name": "reference",
+      "inputs": {
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.0016,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "evidence": {
+          "records": [
+            {
+              "metric": "preparation.claim_contradicted",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "claimed_fidelity_loss": 0.0,
+                "target_to_prepared_fidelity": 0.97152678,
+                "preparation_approximation_infidelity": 0.02847322,
+                "simulation_exact": true,
+                "warnings": [
+                  "Upstream preparation diagnostic"
+                ]
+              }
+            },
+            {
+              "metric": "quality.target_to_prepared_fidelity",
+              "value": 0.97152678,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "classical.reference.available",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "status": "available"
+              }
+            },
+            {
+              "metric": "classical.simulation.exact",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference-simulation",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.0,
+              "kind": "simulated",
+              "source": "quantum-io:exact-reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quantum.model.execution_completed",
+              "value": true,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.02,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "classical_resources": {
+          "total_memory_bytes": null,
+          "available_memory_bytes": 51539607552,
+          "cpu_cores": null,
+          "gpu_memory_bytes": null,
+          "accelerator": null,
+          "metadata": {}
+        },
+        "quantum_resources": null,
+        "policy": {
+          "quantum_execution": "when-needed"
+        }
+      },
+      "report": {
+        "schema_version": 1,
+        "kind": "feasibility-report",
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.0016,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "classical": {
+          "status": "feasible",
+          "quality_status": "satisfied",
+          "criteria": {
+            "complete": true,
+            "satisfied": true,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.0016,
+                  "label": null,
+                  "required": true
+                },
+                "status": "satisfied",
+                "evidence": {
+                  "metric": "quality.observable_rmse",
+                  "value": 0.0,
+                  "kind": "simulated",
+                  "source": "quantum-io:exact-reference",
+                  "scope": "classical",
+                  "unit": null,
+                  "uncertainty": null,
+                  "generated_at": "2026-08-31T12:00:00+00:00",
+                  "lower_bound": false,
+                  "metadata": {}
+                }
+              }
+            ]
+          },
+          "available_resources": {
+            "total_memory_bytes": null,
+            "available_memory_bytes": 51539607552,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "accelerator": null,
+            "metadata": {}
+          },
+          "selected_method": "quantum-io:reference-simulation",
+          "required_resources": null,
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "notes": [
+            "Available classical evidence establishes execution feasibility; solution quality is assessed separately."
+          ]
+        },
+        "quantum": {
+          "status": "not-needed",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.0016,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "model_criteria": {
+            "complete": true,
+            "satisfied": false,
+            "violated": true,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.0016,
+                  "label": null,
+                  "required": true
+                },
+                "status": "violated",
+                "evidence": {
+                  "metric": "quality.observable_rmse",
+                  "value": 0.02,
+                  "kind": "simulated",
+                  "source": "backend-x",
+                  "scope": "quantum-model",
+                  "unit": null,
+                  "uncertainty": null,
+                  "generated_at": "2026-08-31T12:00:00+00:00",
+                  "lower_bound": false,
+                  "metadata": {}
+                }
+              }
+            ]
+          },
+          "available_resources": null,
+          "backend": null,
+          "execution_performed": false,
+          "assessment_basis": "classical-short-circuit",
+          "required_resources": {
+            "qubits": null,
+            "max_one_qubit_error": null,
+            "max_two_qubit_error": null,
+            "min_t1_sec": null,
+            "min_t2_sec": null,
+            "max_readout_error": null,
+            "required_shots": null,
+            "metadata": {}
+          },
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "inconclusive_kind": null,
+          "notes": [
+            "Quantum execution was not required because the workload can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+          ]
+        },
+        "recommendation": {
+          "compute": "classical",
+          "reason": "A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+        },
+        "circuit_compression": null,
+        "computation_result": null,
+        "quantum_circuit": null,
+        "evidence": {
+          "records": [
+            {
+              "metric": "preparation.claim_contradicted",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "claimed_fidelity_loss": 0.0,
+                "target_to_prepared_fidelity": 0.97152678,
+                "preparation_approximation_infidelity": 0.02847322,
+                "simulation_exact": true,
+                "warnings": [
+                  "Upstream preparation diagnostic"
+                ]
+              }
+            },
+            {
+              "metric": "quality.target_to_prepared_fidelity",
+              "value": 0.97152678,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "classical.reference.available",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "status": "available"
+              }
+            },
+            {
+              "metric": "classical.simulation.exact",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference-simulation",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.0,
+              "kind": "simulated",
+              "source": "quantum-io:exact-reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quantum.model.execution_completed",
+              "value": true,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.02,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "execution_trace": null,
+        "experiment_diagram": {
+          "schema_version": 1,
+          "kind": "experiment-diagram",
+          "title": "EXPERIMENT EXECUTION DIAGRAM",
+          "nodes": [
+            {
+              "id": "experiment",
+              "title": "EXPERIMENT DEFINITION",
+              "details": [
+                "Experiment metadata not retained in this report."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical",
+              "title": "CLASSICAL EXECUTION",
+              "details": [
+                "Assessment: feasible",
+                "Quality: satisfied",
+                "Method: quantum-io:reference-simulation",
+                "No classical execution was recorded."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "classical-decision",
+              "title": "CLASSICAL SUFFICIENT?",
+              "details": [
+                "Answer: YES",
+                "Policy WHEN_NEEDED: use the classical result and bypass the quantum branch; result quality is reported separately."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical-result",
+              "title": "CLASSICAL RESULT",
+              "details": [
+                "Status: feasible",
+                "Quality: satisfied",
+                "Method: quantum-io:reference-simulation",
+                "Selected result path."
+              ],
+              "status": "run"
+            },
+            {
+              "id": "quantum-path",
+              "title": "QUANTUM PATH",
+              "details": [
+                "Classical execution fits within the assessed resource limits.",
+                "Static/resource analysis: NOT NEEDED",
+                "Quantum simulator execution: NOT NEEDED",
+                "Physical QPU execution: NOT NEEDED"
+              ],
+              "status": "not-needed"
+            },
+            {
+              "id": "recommendation",
+              "title": "RECOMMENDATION",
+              "details": [
+                "Compute: classical",
+                "A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+              ],
+              "status": null
+            }
+          ],
+          "edges": [
+            {
+              "source": "experiment",
+              "target": "classical",
+              "label": null
+            },
+            {
+              "source": "classical",
+              "target": "classical-decision",
+              "label": null
+            },
+            {
+              "source": "classical-decision",
+              "target": "classical-result",
+              "label": null
+            },
+            {
+              "source": "classical-decision",
+              "target": "quantum-path",
+              "label": null
+            },
+            {
+              "source": "classical-result",
+              "target": "recommendation",
+              "label": null
+            },
+            {
+              "source": "quantum-path",
+              "target": "recommendation",
+              "label": null
+            }
+          ]
+        },
+        "next_evidence": [],
+        "warnings": [
+          "Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target."
+        ],
+        "final": true
+      },
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: feasible\n  Quality: satisfied (relative to the simulated circuit reference)\n  Method: quantum-io:reference-simulation\n  WARNING: Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target.\n  Resource criteria:\n    Classical RAM limit: 48 GiB\n  Quality criteria:\n    Observable RMSE: 0 <= 0.0016 [SATISFIED]\n\nQUANTUM\n  Status: not-needed\n  Quality: not-assessed\n  Backend: not selected\n  Assessment basis: classical-short-circuit\n  Noisy simulation performed: True\n  QPU execution performed: False\n\nRECOMMENDATION\n  classical: A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+    },
+    {
+      "name": "mixed",
+      "inputs": {
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.0016,
+              "label": null,
+              "required": true
+            },
+            {
+              "metric": "quality.target_to_prepared_fidelity",
+              "relation": ">=",
+              "threshold": 0.99,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "evidence": {
+          "records": [
+            {
+              "metric": "preparation.claim_contradicted",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "claimed_fidelity_loss": 0.0,
+                "target_to_prepared_fidelity": 0.97152678,
+                "preparation_approximation_infidelity": 0.02847322,
+                "simulation_exact": true,
+                "warnings": [
+                  "Upstream preparation diagnostic"
+                ]
+              }
+            },
+            {
+              "metric": "quality.target_to_prepared_fidelity",
+              "value": 0.97152678,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "classical.reference.available",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "status": "available"
+              }
+            },
+            {
+              "metric": "classical.simulation.exact",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference-simulation",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.0,
+              "kind": "simulated",
+              "source": "quantum-io:exact-reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quantum.model.execution_completed",
+              "value": true,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.02,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "classical_resources": {
+          "total_memory_bytes": null,
+          "available_memory_bytes": 51539607552,
+          "cpu_cores": null,
+          "gpu_memory_bytes": null,
+          "accelerator": null,
+          "metadata": {}
+        },
+        "quantum_resources": null,
+        "policy": {
+          "quantum_execution": "when-needed"
+        }
+      },
+      "report": {
+        "schema_version": 1,
+        "kind": "feasibility-report",
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.0016,
+              "label": null,
+              "required": true
+            },
+            {
+              "metric": "quality.target_to_prepared_fidelity",
+              "relation": ">=",
+              "threshold": 0.99,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "classical": {
+          "status": "feasible",
+          "quality_status": "violated",
+          "criteria": {
+            "complete": true,
+            "satisfied": false,
+            "violated": true,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.0016,
+                  "label": null,
+                  "required": true
+                },
+                "status": "satisfied",
+                "evidence": {
+                  "metric": "quality.observable_rmse",
+                  "value": 0.0,
+                  "kind": "simulated",
+                  "source": "quantum-io:exact-reference",
+                  "scope": "classical",
+                  "unit": null,
+                  "uncertainty": null,
+                  "generated_at": "2026-08-31T12:00:00+00:00",
+                  "lower_bound": false,
+                  "metadata": {}
+                }
+              },
+              {
+                "criterion": {
+                  "metric": "quality.target_to_prepared_fidelity",
+                  "relation": ">=",
+                  "threshold": 0.99,
+                  "label": null,
+                  "required": true
+                },
+                "status": "violated",
+                "evidence": {
+                  "metric": "quality.target_to_prepared_fidelity",
+                  "value": 0.97152678,
+                  "kind": "simulated",
+                  "source": "quantum-io:preparation-preflight",
+                  "scope": "classical",
+                  "unit": null,
+                  "uncertainty": null,
+                  "generated_at": "2026-08-31T12:00:00+00:00",
+                  "lower_bound": false,
+                  "metadata": {}
+                }
+              }
+            ]
+          },
+          "available_resources": {
+            "total_memory_bytes": null,
+            "available_memory_bytes": 51539607552,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "accelerator": null,
+            "metadata": {}
+          },
+          "selected_method": "quantum-io:reference-simulation",
+          "required_resources": null,
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "notes": [
+            "Available classical evidence establishes execution feasibility; solution quality is assessed separately."
+          ]
+        },
+        "quantum": {
+          "status": "not-needed",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.0016,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              },
+              {
+                "criterion": {
+                  "metric": "quality.target_to_prepared_fidelity",
+                  "relation": ">=",
+                  "threshold": 0.99,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "model_criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": true,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.0016,
+                  "label": null,
+                  "required": true
+                },
+                "status": "violated",
+                "evidence": {
+                  "metric": "quality.observable_rmse",
+                  "value": 0.02,
+                  "kind": "simulated",
+                  "source": "backend-x",
+                  "scope": "quantum-model",
+                  "unit": null,
+                  "uncertainty": null,
+                  "generated_at": "2026-08-31T12:00:00+00:00",
+                  "lower_bound": false,
+                  "metadata": {}
+                }
+              },
+              {
+                "criterion": {
+                  "metric": "quality.target_to_prepared_fidelity",
+                  "relation": ">=",
+                  "threshold": 0.99,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": null,
+          "backend": null,
+          "execution_performed": false,
+          "assessment_basis": "classical-short-circuit",
+          "required_resources": {
+            "qubits": null,
+            "max_one_qubit_error": null,
+            "max_two_qubit_error": null,
+            "min_t1_sec": null,
+            "min_t2_sec": null,
+            "max_readout_error": null,
+            "required_shots": null,
+            "metadata": {}
+          },
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "inconclusive_kind": null,
+          "notes": [
+            "Quantum execution was not required because the workload can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+          ]
+        },
+        "recommendation": {
+          "compute": "classical",
+          "reason": "A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+        },
+        "circuit_compression": null,
+        "computation_result": null,
+        "quantum_circuit": null,
+        "evidence": {
+          "records": [
+            {
+              "metric": "preparation.claim_contradicted",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "claimed_fidelity_loss": 0.0,
+                "target_to_prepared_fidelity": 0.97152678,
+                "preparation_approximation_infidelity": 0.02847322,
+                "simulation_exact": true,
+                "warnings": [
+                  "Upstream preparation diagnostic"
+                ]
+              }
+            },
+            {
+              "metric": "quality.target_to_prepared_fidelity",
+              "value": 0.97152678,
+              "kind": "simulated",
+              "source": "quantum-io:preparation-preflight",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "classical.reference.available",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {
+                "status": "available"
+              }
+            },
+            {
+              "metric": "classical.simulation.exact",
+              "value": true,
+              "kind": "simulated",
+              "source": "quantum-io:reference-simulation",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.0,
+              "kind": "simulated",
+              "source": "quantum-io:exact-reference",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quantum.model.execution_completed",
+              "value": true,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "quality.observable_rmse",
+              "value": 0.02,
+              "kind": "simulated",
+              "source": "backend-x",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": "2026-08-31T12:00:00+00:00",
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "execution_trace": null,
+        "experiment_diagram": {
+          "schema_version": 1,
+          "kind": "experiment-diagram",
+          "title": "EXPERIMENT EXECUTION DIAGRAM",
+          "nodes": [
+            {
+              "id": "experiment",
+              "title": "EXPERIMENT DEFINITION",
+              "details": [
+                "Experiment metadata not retained in this report."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical",
+              "title": "CLASSICAL EXECUTION",
+              "details": [
+                "Assessment: feasible",
+                "Quality: violated",
+                "Method: quantum-io:reference-simulation",
+                "No classical execution was recorded."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "classical-decision",
+              "title": "CLASSICAL SUFFICIENT?",
+              "details": [
+                "Answer: YES",
+                "Policy WHEN_NEEDED: use the classical result and bypass the quantum branch; result quality is reported separately."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical-result",
+              "title": "CLASSICAL RESULT",
+              "details": [
+                "Status: feasible",
+                "Quality: violated",
+                "Method: quantum-io:reference-simulation",
+                "Selected result path."
+              ],
+              "status": "run"
+            },
+            {
+              "id": "quantum-path",
+              "title": "QUANTUM PATH",
+              "details": [
+                "Classical execution fits within the assessed resource limits.",
+                "Static/resource analysis: NOT NEEDED",
+                "Quantum simulator execution: NOT NEEDED",
+                "Physical QPU execution: NOT NEEDED"
+              ],
+              "status": "not-needed"
+            },
+            {
+              "id": "recommendation",
+              "title": "RECOMMENDATION",
+              "details": [
+                "Compute: classical",
+                "A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+              ],
+              "status": null
+            }
+          ],
+          "edges": [
+            {
+              "source": "experiment",
+              "target": "classical",
+              "label": null
+            },
+            {
+              "source": "classical",
+              "target": "classical-decision",
+              "label": null
+            },
+            {
+              "source": "classical-decision",
+              "target": "classical-result",
+              "label": null
+            },
+            {
+              "source": "classical-decision",
+              "target": "quantum-path",
+              "label": null
+            },
+            {
+              "source": "classical-result",
+              "target": "recommendation",
+              "label": null
+            },
+            {
+              "source": "quantum-path",
+              "target": "recommendation",
+              "label": null
+            }
+          ]
+        },
+        "next_evidence": [],
+        "warnings": [
+          "Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target."
+        ],
+        "final": true
+      },
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: feasible\n  Quality: violated\n  Quality reason: Available classical evidence violates the required Target-to-prepared fidelity criterion.\n  Method: quantum-io:reference-simulation\n  WARNING: Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target.\n  Resource criteria:\n    Classical RAM limit: 48 GiB\n  Quality criteria:\n    Observable RMSE: 0 <= 0.0016 [SATISFIED] (relative to the simulated circuit reference)\n    Target-to-prepared fidelity: 0.971527 >= 0.99 [VIOLATED]\n\nQUANTUM\n  Status: not-needed\n  Quality: not-assessed\n  Backend: not selected\n  Assessment basis: classical-short-circuit\n  Noisy simulation performed: True\n  QPU execution performed: False\n\nRECOMMENDATION\n  classical: A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+    },
+    {
+      "name": "attempt_only",
+      "inputs": {
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "evidence": {
+          "records": [
+            {
+              "metric": "quantum.model.execution_attempted",
+              "value": true,
+              "kind": "simulated",
+              "source": "review",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "classical_resources": {
+          "total_memory_bytes": null,
+          "available_memory_bytes": 1024,
+          "cpu_cores": null,
+          "gpu_memory_bytes": null,
+          "accelerator": null,
+          "metadata": {}
+        },
+        "quantum_resources": {
+          "backend": "test",
+          "qubits": 127,
+          "operational": true,
+          "pending_jobs": null,
+          "median_t1_sec": null,
+          "median_t2_sec": null,
+          "median_one_qubit_error": null,
+          "median_two_qubit_error": null,
+          "median_readout_error": null,
+          "coupling_edge_count": null,
+          "basis_gates": [],
+          "metadata": {}
+        },
+        "policy": {
+          "quantum_execution": "compare"
+        }
+      },
+      "report": {
+        "schema_version": 1,
+        "kind": "feasibility-report",
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "classical": {
+          "status": "unknown",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "total_memory_bytes": null,
+            "available_memory_bytes": 1024,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "accelerator": null,
+            "metadata": {}
+          },
+          "selected_method": null,
+          "required_resources": null,
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "notes": [
+            "Current evidence is insufficient to establish classical execution feasibility under the available resources."
+          ]
+        },
+        "quantum": {
+          "status": "unknown",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "model_criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "backend": "test",
+            "qubits": 127,
+            "operational": true,
+            "pending_jobs": null,
+            "median_t1_sec": null,
+            "median_t2_sec": null,
+            "median_one_qubit_error": null,
+            "median_two_qubit_error": null,
+            "median_readout_error": null,
+            "coupling_edge_count": null,
+            "basis_gates": [],
+            "metadata": {}
+          },
+          "backend": "test",
+          "execution_performed": false,
+          "assessment_basis": "execution-incomplete",
+          "required_resources": {
+            "qubits": null,
+            "max_one_qubit_error": null,
+            "max_two_qubit_error": null,
+            "min_t1_sec": null,
+            "min_t2_sec": null,
+            "max_readout_error": null,
+            "required_shots": null,
+            "metadata": {}
+          },
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "inconclusive_kind": "execution",
+          "notes": [
+            "Backend qubit capacity is unknown, so representability is unresolved.",
+            "Simulator execution was attempted, but no completed result is available."
+          ]
+        },
+        "recommendation": {
+          "compute": "undetermined",
+          "reason": "More evidence is required before choosing between additional classical resources and quantum execution."
+        },
+        "circuit_compression": null,
+        "computation_result": null,
+        "quantum_circuit": null,
+        "evidence": {
+          "records": [
+            {
+              "metric": "quantum.model.execution_attempted",
+              "value": true,
+              "kind": "simulated",
+              "source": "review",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "execution_trace": null,
+        "experiment_diagram": {
+          "schema_version": 1,
+          "kind": "experiment-diagram",
+          "title": "EXPERIMENT EXECUTION DIAGRAM",
+          "nodes": [
+            {
+              "id": "experiment",
+              "title": "EXPERIMENT DEFINITION",
+              "details": [
+                "Experiment metadata not retained in this report."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical",
+              "title": "CLASSICAL EXECUTION",
+              "details": [
+                "Assessment: unknown",
+                "Quality: not-assessed",
+                "Method: not selected",
+                "Requested as the next evidence to collect."
+              ],
+              "status": "pending"
+            },
+            {
+              "id": "classical-decision",
+              "title": "CLASSICAL SUFFICIENT?",
+              "details": [
+                "Answer: UNKNOWN",
+                "More classical evidence is required before quantum necessity can be established."
+              ],
+              "status": null
+            },
+            {
+              "id": "quantum-static",
+              "title": "QUANTUM TARGET STATIC / RESOURCE ANALYSIS",
+              "details": [
+                "Quantum assessment: unknown",
+                "Backend: test",
+                "No backend static analysis was recorded."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "quantum-execution",
+              "title": "QUANTUM EXECUTION TARGET",
+              "details": [
+                "Physical QPU target: NOT RUN",
+                "Simulator target: NOT RUN",
+                "The configured provider selects one execution target; simulator execution is not a pre-QPU stage."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "recommendation",
+              "title": "RECOMMENDATION",
+              "details": [
+                "Compute: undetermined",
+                "More evidence is required before choosing between additional classical resources and quantum execution."
+              ],
+              "status": null
+            }
+          ],
+          "edges": []
+        },
+        "next_evidence": [
+          {
+            "kind": "classical-execution",
+            "reason": "obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed",
+            "parameters": {
+              "preferred_method": "q-alchemy-sparse",
+              "sparse_epsilon": 0.0,
+              "final_sparse_epsilon": 0.0,
+              "num_qubits": null
+            }
+          }
+        ],
+        "warnings": [],
+        "final": false
+      },
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: unknown\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n\nQUANTUM\n  Status: execution inconclusive\n  Quality: not-assessed\n  Backend: test\n  Assessment basis: execution-incomplete\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - classical-execution: obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed"
+    },
+    {
+      "name": "completed_missing",
+      "inputs": {
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "evidence": {
+          "records": [
+            {
+              "metric": "quantum.model.execution_completed",
+              "value": true,
+              "kind": "simulated",
+              "source": "review",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "classical_resources": {
+          "total_memory_bytes": null,
+          "available_memory_bytes": 1024,
+          "cpu_cores": null,
+          "gpu_memory_bytes": null,
+          "accelerator": null,
+          "metadata": {}
+        },
+        "quantum_resources": {
+          "backend": "test",
+          "qubits": 127,
+          "operational": true,
+          "pending_jobs": null,
+          "median_t1_sec": null,
+          "median_t2_sec": null,
+          "median_one_qubit_error": null,
+          "median_two_qubit_error": null,
+          "median_readout_error": null,
+          "coupling_edge_count": null,
+          "basis_gates": [],
+          "metadata": {}
+        },
+        "policy": {
+          "quantum_execution": "compare"
+        }
+      },
+      "report": {
+        "schema_version": 1,
+        "kind": "feasibility-report",
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "classical": {
+          "status": "unknown",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "total_memory_bytes": null,
+            "available_memory_bytes": 1024,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "accelerator": null,
+            "metadata": {}
+          },
+          "selected_method": null,
+          "required_resources": null,
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "notes": [
+            "Current evidence is insufficient to establish classical execution feasibility under the available resources."
+          ]
+        },
+        "quantum": {
+          "status": "unknown",
+          "quality_status": "inconclusive",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "model_criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "backend": "test",
+            "qubits": 127,
+            "operational": true,
+            "pending_jobs": null,
+            "median_t1_sec": null,
+            "median_t2_sec": null,
+            "median_one_qubit_error": null,
+            "median_two_qubit_error": null,
+            "median_readout_error": null,
+            "coupling_edge_count": null,
+            "basis_gates": [],
+            "metadata": {}
+          },
+          "backend": "test",
+          "execution_performed": false,
+          "assessment_basis": "simulated-quantum",
+          "required_resources": {
+            "qubits": null,
+            "max_one_qubit_error": null,
+            "max_two_qubit_error": null,
+            "min_t1_sec": null,
+            "min_t2_sec": null,
+            "max_readout_error": null,
+            "required_shots": null,
+            "metadata": {}
+          },
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "inconclusive_kind": "quality",
+          "notes": [
+            "Backend qubit capacity is unknown, so representability is unresolved.",
+            "The configured quantum simulator executed the workload but did not produce every metric required to assess solution quality conclusively."
+          ]
+        },
+        "recommendation": {
+          "compute": "undetermined",
+          "reason": "More evidence is required before choosing between additional classical resources and quantum execution."
+        },
+        "circuit_compression": null,
+        "computation_result": null,
+        "quantum_circuit": null,
+        "evidence": {
+          "records": [
+            {
+              "metric": "quantum.model.execution_completed",
+              "value": true,
+              "kind": "simulated",
+              "source": "review",
+              "scope": "quantum-model",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "execution_trace": null,
+        "experiment_diagram": {
+          "schema_version": 1,
+          "kind": "experiment-diagram",
+          "title": "EXPERIMENT EXECUTION DIAGRAM",
+          "nodes": [
+            {
+              "id": "experiment",
+              "title": "EXPERIMENT DEFINITION",
+              "details": [
+                "Experiment metadata not retained in this report."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical",
+              "title": "CLASSICAL EXECUTION",
+              "details": [
+                "Assessment: unknown",
+                "Quality: not-assessed",
+                "Method: not selected",
+                "Requested as the next evidence to collect."
+              ],
+              "status": "pending"
+            },
+            {
+              "id": "classical-decision",
+              "title": "CLASSICAL SUFFICIENT?",
+              "details": [
+                "Answer: UNKNOWN",
+                "More classical evidence is required before quantum necessity can be established."
+              ],
+              "status": null
+            },
+            {
+              "id": "quantum-static",
+              "title": "QUANTUM TARGET STATIC / RESOURCE ANALYSIS",
+              "details": [
+                "Quantum assessment: unknown",
+                "Backend: test",
+                "No backend static analysis was recorded."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "quantum-execution",
+              "title": "QUANTUM EXECUTION TARGET",
+              "details": [
+                "Physical QPU target: NOT RUN",
+                "Simulator target: NOT RUN",
+                "The configured provider selects one execution target; simulator execution is not a pre-QPU stage."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "recommendation",
+              "title": "RECOMMENDATION",
+              "details": [
+                "Compute: undetermined",
+                "More evidence is required before choosing between additional classical resources and quantum execution."
+              ],
+              "status": null
+            }
+          ],
+          "edges": []
+        },
+        "next_evidence": [
+          {
+            "kind": "classical-execution",
+            "reason": "obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed",
+            "parameters": {
+              "preferred_method": "q-alchemy-sparse",
+              "sparse_epsilon": 0.0,
+              "final_sparse_epsilon": 0.0,
+              "num_qubits": null
+            }
+          }
+        ],
+        "warnings": [],
+        "final": false
+      },
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: unknown\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n\nQUANTUM\n  Status: quality inconclusive\n  Quality: inconclusive\n  Quality reason: The configured quantum simulator completed, but the required Observable RMSE metric is unavailable because no independent reference observable values were available.\n  Backend: test\n  Assessment basis: simulated-quantum\n  Noisy simulation performed: True\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n  Quality criteria (quantum simulator):\n    Observable RMSE: not available (required <= 0.1) [MISSING]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - classical-execution: obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed"
+    },
+    {
+      "name": "qpu_missing",
+      "inputs": {
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "evidence": {
+          "records": [
+            {
+              "metric": "quantum.execution.completed",
+              "value": true,
+              "kind": "measured",
+              "source": "review",
+              "scope": "quantum",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "classical_resources": {
+          "total_memory_bytes": null,
+          "available_memory_bytes": 1024,
+          "cpu_cores": null,
+          "gpu_memory_bytes": null,
+          "accelerator": null,
+          "metadata": {}
+        },
+        "quantum_resources": {
+          "backend": "test",
+          "qubits": 127,
+          "operational": true,
+          "pending_jobs": null,
+          "median_t1_sec": null,
+          "median_t2_sec": null,
+          "median_one_qubit_error": null,
+          "median_two_qubit_error": null,
+          "median_readout_error": null,
+          "coupling_edge_count": null,
+          "basis_gates": [],
+          "metadata": {}
+        },
+        "policy": {
+          "quantum_execution": "compare"
+        }
+      },
+      "report": {
+        "schema_version": 1,
+        "kind": "feasibility-report",
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "classical": {
+          "status": "unknown",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "total_memory_bytes": null,
+            "available_memory_bytes": 1024,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "accelerator": null,
+            "metadata": {}
+          },
+          "selected_method": null,
+          "required_resources": null,
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "notes": [
+            "Current evidence is insufficient to establish classical execution feasibility under the available resources."
+          ]
+        },
+        "quantum": {
+          "status": "feasible",
+          "quality_status": "inconclusive",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "model_criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "backend": "test",
+            "qubits": 127,
+            "operational": true,
+            "pending_jobs": null,
+            "median_t1_sec": null,
+            "median_t2_sec": null,
+            "median_one_qubit_error": null,
+            "median_two_qubit_error": null,
+            "median_readout_error": null,
+            "coupling_edge_count": null,
+            "basis_gates": [],
+            "metadata": {}
+          },
+          "backend": "test",
+          "execution_performed": true,
+          "assessment_basis": "measured-qpu",
+          "required_resources": {
+            "qubits": null,
+            "max_one_qubit_error": null,
+            "max_two_qubit_error": null,
+            "min_t1_sec": null,
+            "min_t2_sec": null,
+            "max_readout_error": null,
+            "required_shots": null,
+            "metadata": {}
+          },
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "inconclusive_kind": "quality",
+          "notes": [
+            "Backend qubit capacity is unknown, so representability is unresolved.",
+            "A QPU execution was completed, but it did not produce every metric required to assess the requested solution quality conclusively."
+          ]
+        },
+        "recommendation": {
+          "compute": "undetermined",
+          "reason": "The quantum target can execute the workload, but classical feasibility remains unresolved; more classical evidence is required before concluding that quantum execution is needed."
+        },
+        "circuit_compression": null,
+        "computation_result": null,
+        "quantum_circuit": null,
+        "evidence": {
+          "records": [
+            {
+              "metric": "quantum.execution.completed",
+              "value": true,
+              "kind": "measured",
+              "source": "review",
+              "scope": "quantum",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "execution_trace": null,
+        "experiment_diagram": {
+          "schema_version": 1,
+          "kind": "experiment-diagram",
+          "title": "EXPERIMENT EXECUTION DIAGRAM",
+          "nodes": [
+            {
+              "id": "experiment",
+              "title": "EXPERIMENT DEFINITION",
+              "details": [
+                "Experiment metadata not retained in this report."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical",
+              "title": "CLASSICAL EXECUTION",
+              "details": [
+                "Assessment: unknown",
+                "Quality: not-assessed",
+                "Method: not selected",
+                "Requested as the next evidence to collect."
+              ],
+              "status": "pending"
+            },
+            {
+              "id": "classical-decision",
+              "title": "CLASSICAL SUFFICIENT?",
+              "details": [
+                "Answer: UNKNOWN",
+                "More classical evidence is required before quantum necessity can be established."
+              ],
+              "status": null
+            },
+            {
+              "id": "quantum-static",
+              "title": "QUANTUM TARGET STATIC / RESOURCE ANALYSIS",
+              "details": [
+                "Quantum assessment: feasible",
+                "Backend: test",
+                "No backend static analysis was recorded."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "quantum-execution",
+              "title": "QUANTUM EXECUTION TARGET",
+              "details": [
+                "Physical QPU target: NOT RUN",
+                "Simulator target: NOT NEEDED",
+                "The configured provider selects one execution target; simulator execution is not a pre-QPU stage."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "recommendation",
+              "title": "RECOMMENDATION",
+              "details": [
+                "Compute: undetermined",
+                "The quantum target can execute the workload, but classical feasibility remains unresolved; more classical evidence is required before concluding that quantum execution is needed."
+              ],
+              "status": null
+            }
+          ],
+          "edges": []
+        },
+        "next_evidence": [
+          {
+            "kind": "classical-execution",
+            "reason": "obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed",
+            "parameters": {
+              "preferred_method": "q-alchemy-sparse",
+              "sparse_epsilon": 0.0,
+              "final_sparse_epsilon": 0.0,
+              "num_qubits": null
+            }
+          }
+        ],
+        "warnings": [],
+        "final": false
+      },
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: unknown\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n\nQUANTUM\n  Status: feasible\n  Quality: inconclusive\n  Quality reason: The QPU execution completed, but the required Observable RMSE metric is unavailable because no independent reference observable values were available.\n  Backend: test\n  Assessment basis: measured-qpu\n  QPU execution performed: True\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n  Quality criteria (measured QPU):\n    Observable RMSE: not available (required <= 0.1) [MISSING]\n\nRECOMMENDATION\n  undetermined: The quantum target can execute the workload, but classical feasibility remains unresolved; more classical evidence is required before concluding that quantum execution is needed.\n\nNEXT EVIDENCE\n  - classical-execution: obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed"
+    },
+    {
+      "name": "memory_limit",
+      "inputs": {
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "evidence": {
+          "records": [
+            {
+              "metric": "classical.approximation.amplitude_capping_occurred",
+              "value": true,
+              "scope": "classical",
+              "source": "test-simulator",
+              "kind": "simulated"
+            },
+            {
+              "metric": "classical.resources.simulator_budget_bytes",
+              "value": 512,
+              "scope": "classical",
+              "source": "test-simulator",
+              "kind": "simulated"
+            },
+            {
+              "metric": "classical.resources.estimated_peak_memory_bytes",
+              "value": 256,
+              "scope": "classical",
+              "source": "test-simulator",
+              "kind": "simulated"
+            }
+          ]
+        },
+        "classical_resources": {
+          "total_memory_bytes": null,
+          "available_memory_bytes": 1024,
+          "cpu_cores": null,
+          "gpu_memory_bytes": null,
+          "accelerator": null,
+          "metadata": {}
+        },
+        "quantum_resources": {
+          "backend": "test",
+          "qubits": 127,
+          "operational": true,
+          "pending_jobs": null,
+          "median_t1_sec": null,
+          "median_t2_sec": null,
+          "median_one_qubit_error": null,
+          "median_two_qubit_error": null,
+          "median_readout_error": null,
+          "coupling_edge_count": null,
+          "basis_gates": [],
+          "metadata": {}
+        },
+        "policy": {
+          "quantum_execution": "compare"
+        }
+      },
+      "report": {
+        "schema_version": 1,
+        "kind": "feasibility-report",
+        "criteria": {
+          "criteria": [
+            {
+              "metric": "quality.observable_rmse",
+              "relation": "<=",
+              "threshold": 0.1,
+              "label": null,
+              "required": true
+            }
+          ]
+        },
+        "classical": {
+          "status": "infeasible",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "total_memory_bytes": null,
+            "available_memory_bytes": 1024,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "accelerator": null,
+            "metadata": {}
+          },
+          "selected_method": null,
+          "required_resources": {
+            "memory_bytes": 1024,
+            "memory_is_lower_bound": true,
+            "cpu_cores": null,
+            "gpu_memory_bytes": null,
+            "expected_runtime_sec": null,
+            "method": "q-alchemy-sparse",
+            "metadata": {
+              "reason": "configured sparse-memory allocation was exceeded",
+              "note": "required memory is strictly greater than this lower bound; no adaptive memory search was performed"
+            }
+          },
+          "resource_gap": {
+            "additional_memory_bytes": null,
+            "additional_memory_is_lower_bound": true,
+            "additional_cpu_cores": null,
+            "additional_gpu_memory_bytes": null,
+            "metadata": {
+              "basis": "resource-limited sparse run",
+              "note": "no adaptive memory search was performed; an additional-memory lower bound is reported only when existing telemetry strengthens the configured-allocation bound"
+            }
+          },
+          "infeasibility_kind": "resource",
+          "notes": [
+            "The classical simulation exceeded the configured memory budget."
+          ]
+        },
+        "quantum": {
+          "status": "unknown",
+          "quality_status": "not-assessed",
+          "criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "model_criteria": {
+            "complete": false,
+            "satisfied": false,
+            "violated": false,
+            "results": [
+              {
+                "criterion": {
+                  "metric": "quality.observable_rmse",
+                  "relation": "<=",
+                  "threshold": 0.1,
+                  "label": null,
+                  "required": true
+                },
+                "status": "missing",
+                "evidence": null
+              }
+            ]
+          },
+          "available_resources": {
+            "backend": "test",
+            "qubits": 127,
+            "operational": true,
+            "pending_jobs": null,
+            "median_t1_sec": null,
+            "median_t2_sec": null,
+            "median_one_qubit_error": null,
+            "median_two_qubit_error": null,
+            "median_readout_error": null,
+            "coupling_edge_count": null,
+            "basis_gates": [],
+            "metadata": {}
+          },
+          "backend": "test",
+          "execution_performed": false,
+          "assessment_basis": "insufficient-evidence",
+          "required_resources": {
+            "qubits": null,
+            "max_one_qubit_error": null,
+            "max_two_qubit_error": null,
+            "min_t1_sec": null,
+            "min_t2_sec": null,
+            "max_readout_error": null,
+            "required_shots": null,
+            "metadata": {}
+          },
+          "resource_gap": null,
+          "infeasibility_kind": null,
+          "inconclusive_kind": null,
+          "notes": [
+            "Backend qubit capacity is unknown, so representability is unresolved."
+          ]
+        },
+        "recommendation": {
+          "compute": "undetermined",
+          "reason": "More evidence is required before choosing between additional classical resources and quantum execution."
+        },
+        "circuit_compression": null,
+        "computation_result": null,
+        "quantum_circuit": null,
+        "evidence": {
+          "records": [
+            {
+              "metric": "classical.approximation.amplitude_capping_occurred",
+              "value": true,
+              "kind": "simulated",
+              "source": "test-simulator",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "classical.resources.simulator_budget_bytes",
+              "value": 512,
+              "kind": "simulated",
+              "source": "test-simulator",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            },
+            {
+              "metric": "classical.resources.estimated_peak_memory_bytes",
+              "value": 256,
+              "kind": "simulated",
+              "source": "test-simulator",
+              "scope": "classical",
+              "unit": null,
+              "uncertainty": null,
+              "generated_at": null,
+              "lower_bound": false,
+              "metadata": {}
+            }
+          ]
+        },
+        "execution_trace": null,
+        "experiment_diagram": {
+          "schema_version": 1,
+          "kind": "experiment-diagram",
+          "title": "EXPERIMENT EXECUTION DIAGRAM",
+          "nodes": [
+            {
+              "id": "experiment",
+              "title": "EXPERIMENT DEFINITION",
+              "details": [
+                "Experiment metadata not retained in this report."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical",
+              "title": "CLASSICAL EXECUTION",
+              "details": [
+                "Assessment: infeasible",
+                "Quality: not-assessed",
+                "Method: not selected",
+                "No classical execution was recorded."
+              ],
+              "status": "not-run"
+            },
+            {
+              "id": "classical-decision",
+              "title": "CLASSICAL SUFFICIENT?",
+              "details": [
+                "Answer: NO",
+                "The assessed classical resources are insufficient; enter the quantum evaluation path."
+              ],
+              "status": null
+            },
+            {
+              "id": "classical-limit",
+              "title": "CLASSICAL RESOURCE LIMIT",
+              "details": [
+                "Status: resource infeasible",
+                "Quality: not-assessed",
+                "Method: not selected",
+                "No classical computation result is available within the assessed resource limits."
+              ],
+              "status": "unavailable"
+            },
+            {
+              "id": "quantum-path",
+              "title": "QUANTUM EXECUTION PATH",
+              "details": [
+                "Static/resource analysis: PENDING",
+                "Quantum simulator execution: NOT RUN",
+                "Physical QPU execution: NOT RUN",
+                "Backend: test"
+              ],
+              "status": "pending"
+            },
+            {
+              "id": "recommendation",
+              "title": "RECOMMENDATION",
+              "details": [
+                "Compute: undetermined",
+                "More evidence is required before choosing between additional classical resources and quantum execution."
+              ],
+              "status": null
+            }
+          ],
+          "edges": [
+            {
+              "source": "experiment",
+              "target": "classical",
+              "label": null
+            },
+            {
+              "source": "classical",
+              "target": "classical-decision",
+              "label": null
+            },
+            {
+              "source": "classical-decision",
+              "target": "classical-limit",
+              "label": null
+            },
+            {
+              "source": "classical-decision",
+              "target": "quantum-path",
+              "label": null
+            },
+            {
+              "source": "classical-limit",
+              "target": "recommendation",
+              "label": null
+            },
+            {
+              "source": "quantum-path",
+              "target": "recommendation",
+              "label": null
+            }
+          ]
+        },
+        "next_evidence": [
+          {
+            "kind": "quantum-static-analysis",
+            "reason": "comparison mode was requested; discover the configured quantum target and evaluate hard capacity constraints without executing it",
+            "parameters": {
+              "num_qubits": null
+            }
+          }
+        ],
+        "warnings": [],
+        "final": false
+      },
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: resource infeasible\n  Reason: The classical simulation exceeded the configured memory budget.\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n    Detected simulator host budget: 512 B\n    Sparse memory estimate at amplitude limit: 256 B\n    Sparse simulation memory: > 1 KiB required (lower bound); 1 KiB available [VIOLATED]\n\nQUANTUM\n  Status: unknown\n  Quality: not-assessed\n  Backend: test\n  Assessment basis: insufficient-evidence\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - quantum-static-analysis: comparison mode was requested; discover the configured quantum target and evaluate hard capacity constraints without executing it"
+    }
+  ]
+}

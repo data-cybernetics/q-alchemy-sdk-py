@@ -1,9 +1,10 @@
 # Q-Alchemy Python SDK
 
-This is the Python-SDK for using the data cybernetics [Q-Alchemy](https://www.q-alchemy.com) 
-API which helps quantum computing researchers to put classical data into the quantum computer.
-This is all also called: the loading problem, encoding problem, or quantum state preparation.
-Some people also call it a form of QRAM, or quantum random-access memory.
+This is the Python SDK for using the data cybernetics [Q-Alchemy](https://www.q-alchemy.com) API.
+It provides state preparation, hosted sparse simulation, circuit compression, feasibility
+assessment, and provider-neutral Quantum I/O execution through PineXQ. The state-preparation API helps quantum computing researchers put
+classical data into a quantum computer (the loading/encoding problem, sometimes described as a
+form of QRAM).
 
 Under the hood, Q-Alchemy runs on [PineXQ](https://pinexq.net), the hypermedia (Siren) API platform of
 [data cybernetics](https://www.data-cybernetics.com). You do not need to know anything about it to use this
@@ -42,6 +43,15 @@ it after cloning is simply
 ```bash
 uv sync --locked
 ```
+
+The SDK requires `pinexq-client>=2.1.0,<3`. Client 2.1.0 expects PineXQ
+JobManagement API 10.1. The client checks its protocol major/minor against the
+server and warns when they differ; the SDK preserves these warnings. A server
+still running API 10.0 therefore produces a mismatch warning with client 2.1.0.
+Client package versions and API protocol versions are separate.
+This client recognizes the server's `TenantId` and `IsMaterialized` fields.
+API-version and schema warnings are no longer suppressed by the SDK; a future
+mismatch remains visible. `Q_ALCHEMY_API_VERSION_WARNING` is no longer needed.
 
 Again, for qiskit- or PennyLane-integrations, please add the groups
 ```bash
@@ -200,18 +210,51 @@ Every entry point (`q_alchemy_as_qasm`, `QAlchemyInitialize`,
 also accepts them as keyword arguments. The state itself can be a list, a numpy
 array, a scipy sparse array or, for Qiskit, a `Statevector`.
 
+Dense inputs are checked for sparsity once before serialization. The SDK uses
+QTucker's blockwise, early-exit density rule: a vector is sent as sparse when its
+number of nonzero amplitudes is at most `ceil(0.1 * vector_length)`. Unlike
+QTucker's numerical thresholding, the transport check counts exact nonzeros and
+never discards tiny amplitudes or renormalizes the state. This keeps transport
+lossless and leaves the approximation budget with QTucker.
+
+- Dense vectors use NumPy `.npy` serialization (`numpy_load` for inline input).
+- Sparse vectors use Parquet with basis indices and complex amplitudes. Inputs
+  already supplied as SciPy sparse matrices/arrays skip the density check and
+  remain sparse, even when fully populated.
+- Mixed batches are split into at most two service jobs, one per representation;
+  returned circuits and summaries follow the original input order. Each job uses
+  the usual cleanup policy and timeout. If either job fails, the call raises.
+  Uniform batches still use one job; parallel option sets share one serialization.
+
+The updated ProCon preserves these dense/sparse paths into QTucker. Both formats
+are supported by older services too, but avoiding server-side conversions requires
+the updated ProCon deployment. No private QTucker dependency is added to the SDK.
+
 The fields you are most likely to touch:
 
 | Field | Default | Meaning |
 |---|---|---|
 | `max_fidelity_loss` | `0.0` | How much fidelity you are willing to give up for a shallower circuit. `0.0` asks for an exact preparation. |
-| `basis_gates` | `["u", "cx"]` | Gate set the returned circuit is transpiled to. |
+| `basis_gates` | `["u", "cx"]` | Gate names used to transpile the returned circuit for all three methods; under `AUTO`, also used to compare candidates. |
 | `api_key` | `$Q_ALCHEMY_API_KEY` | Your Q-Alchemy API key. Keep it safe! |
 | `initialization_method` | `InitializationMethods.AUTO` | Which algorithm builds the circuit (see below). |
 | `extra_kwargs` | `{}` | Method-specific options, as a dict (see below). |
 | `use_qasm3` | `False` | Experimental: return OpenQASM 3 instead of OpenQASM 2. |
 | `remove_data` | `True` | Delete the job and its uploaded data once the result is fetched. |
 | `job_completion_timeout_sec` | `300` | How long to wait for the job before giving up. |
+
+`q_alchemy_as_qasm_parallel(state, option_sets, max_workers=4)` compares option
+sets concurrently. Results follow the order of `option_sets`; a failed worker
+raises an exception instead of returning an incomplete list. Input serialization
+is shared, and `max_workers` bounds concurrent jobs. Already-running jobs finish
+their normal cleanup if another worker fails. A supplied HTTP client remains
+caller-owned. Processing-step lookups are cached per client for five minutes;
+create a new client when changing accounts.
+
+`QAlchemyInitialize` owns a copy of the input amplitudes, so later changes to the
+caller's array cannot change the pending initialization. Dense inputs remain
+NumPy arrays internally. Upload hashing is controlled by `assign_data_hash`;
+the instruction no longer computes the unused `param_hash` attribute.
 
 `InitializationMethods` lives in `q_alchemy.initialize`:
 
@@ -220,8 +263,6 @@ The fields you are most likely to touch:
   circuit. Trivial inputs such as single-qubit and single-basis states take an
   exact fast path.
 - `ITERATIVE_TUCKER` and `HIERARCHICAL_TUCKER` pin one Tucker variant.
-- `SWAP_PIVOT` is suited to very sparse states.
-- `BAA_LOW_RANK` uses the BAA low-rank initializer; it is limited to 12 qubits.
 
 #### Method-specific options (`extra_kwargs`)
 
@@ -245,22 +286,674 @@ opt_params = OptParams(
 
 | Method | Accepted `extra_kwargs` keys |
 |---|---|
-| `AUTO` | `cost_function` (`"cx_then_depth"` default, `"depth_then_cx"`, `"two_qubit_then_depth"`, `"cx+depth"`, `"cx"`, `"depth"`), `basis_gates` (gate set used to *compare* candidates, default `["u", "cx"]`), `transpile_optimization_level` (1), `seed_transpiler` (0), `dominant_basis_fast_path` (`True`), `fidelity_tolerance`, `geometric_entanglement`, `check_normalization` (`True`) |
+| `AUTO` | `cost_function` (`"two_qubit_then_depth"` default, `"cx_then_depth"`, `"depth_then_cx"`, `"cx+depth"`, `"cx"`, `"depth"`), `transpile_optimization_level` (1), `seed_transpiler` (0), `dominant_basis_fast_path` (`True`), `fidelity_tolerance`, `geometric_entanglement`, `check_normalization` (`True`) |
 | `ITERATIVE_TUCKER` | `max_iterations` (≤ 0 picks one from the qubit count), `factors_size` (0 = automatic), `max_stepup` (0), `fallback` (`True`), `perturbation` (`None`), `geometric_entanglement` (0.0), `check_normalization` (`True`), `barriers` (`False`; debugging only, hurts transpilation) |
 | `HIERARCHICAL_TUCKER` | `geometric_entanglement`, `check_normalization` |
-| `SWAP_PIVOT` | `aux` |
-| `BAA_LOW_RANK` | `strategy` (`"greedy"`), `use_low_rank` (`True`), `max_combination_size`, `iso_scheme`, `unitary_scheme` |
 
 Two interactions worth knowing:
 
 - **Set the fidelity with `max_fidelity_loss` on `OptParams`, not in
-  `extra_kwargs`.** Every method accepts `max_fidelity_loss` in `extra_kwargs`
-  too, but if you put it there it silently overrides the top-level value.
-- **Under `AUTO`, `basis_gates` on `OptParams` only affects the final
-  transpilation.** Candidates are compared on `u`/`cx` cost unless you also pass
-  `extra_kwargs={"basis_gates": [...]}`.
+  `extra_kwargs`.** The service rejects a conflicting duplicate instead of
+  silently replacing the top-level budget. An equivalent duplicate is accepted.
+- **Set the gate basis with `OptParams.basis_gates` for all three methods.**
+  Under `AUTO`, the hosted QAlchemy initializer also uses it when comparing
+  candidates. Do not duplicate `basis_gates` in `extra_kwargs`.
+
+All three initialization methods return logical circuits transpiled to the
+supplied gate basis, without physical placement or routing. Under `AUTO`, QTucker
+transpiles candidates to that basis before comparison and returns the selected
+circuit. For explicit `HIERARCHICAL_TUCKER` and `ITERATIVE_TUCKER` requests, the
+ProCon transpiles the synthesized circuit to that basis at optimization level 1.
+This applies to single requests and batches; reported circuit costs precede
+physical placement and routing.
+
+The SDK accepts gate names through `OptParams.basis_gates`, not Qiskit backend or
+Target objects. To use a backend's gate basis, supply its supported unitary gate
+names explicitly. Compile the complete application for the actual backend later.
+For AUTO's optional `transpile_options`, QTucker ignores physical layout,
+coupling-map and scheduling settings and rejects lossy transpilation
+(`approximation_degree` must be `1.0`).
+
+Request `return_summary=True` from `q_alchemy_as_qasm` or
+`q_alchemy_as_qasm_parallel_states` to inspect the preparation outcome:
+`status="OK"` means execution completed; `fidelity_requirement_met=False`
+means AUTO returned its best-effort circuit without meeting the requested budget.
+The decision is supplied by QTucker. It is `None` for pinned methods and may be
+absent in older services. `fidelity_loss` remains an unsimulated estimate;
+`fidelity_loss_source` identifies its source and `selection_reason` explains the
+AUTO outcome. These fields pass through unchanged. Batch functions always return
+lists, including a one-state batch. A synthesis failure stops a batch with the
+original error and the failing state's zero-based index.
+
+### Compressing circuits through PineXQ
+
+`CircuitCompressionService` calls the `compress_circuit` ProcessingStep from
+`q-alchemy-circuit-compressor-pinexq`. The SDK accepts a native Qiskit circuit, the
+existing SDK `Circuit` type, or a schema-1 `quantum-circuit` envelope (including
+`feasibility_report.raw["quantum_circuit"]`). It returns a typed report with the
+compressed circuit, exactness semantics, input/baseline/output metrics, accepted
+regions, and optional diagnostics. The local SDK does not install or run the
+compression engine or a simulator.
+
+```python
+from qiskit import QuantumCircuit
+from q_alchemy import CircuitCompressionRequest, CircuitCompressionService
+
+circuit = QuantumCircuit(2)
+circuit.h(0)
+circuit.cx(0, 1)
+circuit.cx(0, 1)
+
+with CircuitCompressionService() as service:
+    report = service.compress(
+        circuit, CircuitCompressionRequest(options={"collect_report": True})
+    ).result()
+
+print(report.format_summary())
+compressed = report.to_qiskit()
+```
+
+The default assumes the complete circuit starts in `|0...0>`
+(`equivalence="reachable_subspace"`). For a subroutine with arbitrary input states,
+use `CircuitCompressionRequest(options={"equivalence": "operator"})`.
+`report.exact` applies to that declared equivalence; it does not imply that a
+reachable-subspace result preserves every possible input. Qiskit input conversion
+and output transport preserve the top-level global phase, which matters for
+subsequent controlled-subroutine use. Bind symbolic global phases before export.
+
+Compression option names and resource limits are validated by the deployed core.
+Omitting options sends `{}` and retains its defaults. The SDK adds no duplicate
+memory or synthesis ceilings. Transport admission checks are owned by the PineXQ
+adapter; region indices in the report refer to its normalized baseline circuit.
+
+`CircuitCompressionParams` follows the other service clients: `api_key` defaults
+to `Q_ALCHEMY_API_KEY` (then `PINEXQ_API_KEY`), and `host` defaults to
+`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="0.1.1"` to pin a
+deployed step, or omit it to discover the visible version. Successful result
+retrieval removes SDK-created jobs and WorkData by default. Set `remove_data=False`
+to retain them. A failure or malformed report preserves the job for diagnosis;
+`CircuitCompressionExecutionError` exposes the remote error and its original
+exception. Repeating `job.result()` retries retrieval, or returns the cached report
+and retries any unfinished cleanup. `job.raw_job` remains available until deletion.
+
+`job_completion_timeout_sec` (default 300) and `job.result(timeout=...)` only limit
+the client's wait. They do not cancel the job or set a server computation deadline.
+Use the service context manager to close SDK-owned HTTP connections; injected
+clients remain owned by the caller.
+
+Install the `qiskit` extra for native circuit conversion. Portable usage needs no
+Qiskit: pass `Circuit.qasm3(program)` and consume `report.circuit.payload` or
+`report.to_dict()`. See [the runnable example](examples/circuit_compression_service.py).
+
+For the 12-qubit chemistry workload, run:
+
+```bash
+python examples/circuit_compression_quantum_chemistry.py
+```
+
+[This example](examples/circuit_compression_quantum_chemistry.py) reuses
+`build_experiment()` from `feasibility_quantum_chemistry.py`. It builds the full
+Hartree--Fock preparation plus correlated evolution circuit (71 one-qubit gates
+and 34 CX gates), submits it directly to the compression service, and prints the
+input/baseline/compressed metrics and two-qubit gate reduction. The complete
+circuit starts in `|0...0>`, so default reachable-subspace compression is used.
+It requires the SDK's `qiskit` extra and a Q-Alchemy API key; it does not run the
+Feasibility workflow, select a quantum backend, or require IBM credentials.
+
+#### Live circuit-compression tests
+
+`tests/test_circuit_compression.py` uses mocked PineXQ transport. Its optional
+ProCon check invokes a locally installed adapter; it does not contact PineXQ.
+
+The separate live suite submits **two real jobs** to the deployed service. With
+`Q_ALCHEMY_API_KEY` (or `PINEXQ_API_KEY`) already exported and the SDK's `qiskit`
+extra installed, run:
+
+```bash
+Q_ALCHEMY_RUN_LIVE_CIRCUIT_COMPRESSION=1 \
+  pytest -v -s tests/test_circuit_compression_live_integration.py
+```
+
+Optionally set `Q_ALCHEMY_CIRCUIT_COMPRESSION_STEP_VERSION=0.1.1` to pin the
+ProcessingStep, and `Q_ALCHEMY_HOST` to select a different PineXQ host. Both a key
+and the explicit live-test flag are required; otherwise these tests skip.
+
+The first test sends a two-qubit circuit with two CX gates, checks that compression
+reduces its two-qubit gate count below both the input and the O0 baseline, and
+compares the returned statevector with the original. The current compressor
+reduces this example from two CX gates to one. The second test checks operator
+equivalence and global phase, including reuse as a controlled subroutine. Both
+exercise report retrieval, cached results and cleanup of their own jobs/WorkData.
+The small local statevector/operator calculations verify the results; compression
+itself runs on PineXQ. Successful jobs are removed, while remote execution or
+retrieval failures preserve their jobs and data for diagnosis.
+
+### Running experiments with Quantum I/O
+
+For a complete molecular example, run
+[the 12-qubit LiH reconstruction notebook](examples/quantum_io_lih_reconstruction.ipynb).
+It includes the original sparse CISD target and offers direct ideal simulation,
+Aer simulation with an imported IBM device noise model, or an IBM QPU, followed
+by reconstruction and sparse-result export in one service request.
+
+For a system initialized in an arbitrary state with a bath starting in its ground
+state, see [the system–bath example](examples/quantum_io_system_bath.py). It evolves
+both groups and evaluates one observable on the system, without state reconstruction.
+
+
+State widths, sparse indices, qubit selections and shot counts require integers;
+booleans and fractional values are rejected locally. Sparse indices in JSON
+remain decimal strings so large basis indices retain their full precision.
+
+Quantum I/O uses typed Python objects throughout the public SDK. Users construct
+`State`, `Circuit`, `MeasurementPlan`, `QuantumExperiment`, `Runtime`, and
+`ExecutionPlan` objects and receive a typed `ExperimentReport`. The SDK handles the
+schema-3 JSON serialization used by PineXQ internally; application code does not need
+to assemble contract dictionaries or encode complex amplitudes manually.
+`ExperimentReport.format_summary()` uses the same human-readable section layout and
+number formatting as the Quantum I/O runtime report, so local/service output remains
+consistent at the client boundary.
+
+Quantum I/O removes its SDK-created PineXQ Job and input/output WorkData by default
+once `result()` has successfully returned a report. Provider credentials are uploaded
+separately as Secret WorkData before they are attached to a Job and never become part of
+`QuantumExperiment` or `ExecutionPlan`. Set `QuantumIOParams(remove_data=False)` when
+you explicitly want to preserve the complete PineXQ execution lineage.
+
+> **Execution-lineage cleanup happens after successful result retrieval.** If the job
+> fails, times out, or returns a report the SDK cannot parse, the Job and its WorkData are
+> left in place so the failure can be diagnosed and `result()` retried. If submission
+> fails before PineXQ creates a Job, unreferenced WorkData created by that attempt is
+> removed when `remove_data=True`. If cleanup itself fails after the report was cached,
+> another `result()` call retries the remaining cleanup. After a successful automatic
+> cleanup the PineXQ resources are gone: `QuantumIOJob.raw_job` then raises, and
+> `QuantumIOJob.removed` is `True`. Use `remove_data=False` if you need to inspect the Job
+> afterwards.
+
+#### Preflight
+
+Preflight is the simplest Quantum I/O workflow. It prepares the target state and, by
+default, independently verifies the preparation with Q-Alchemy's sparse simulator. It
+does not run a reference experiment, noisy simulation, or QPU acquisition.
+
+```python
+from math import sqrt
+
+from q_alchemy import QuantumExperiment, QuantumIOService, State
+
+a = 1 / sqrt(2)
+experiment = QuantumExperiment(
+    target=State.dense([a, 0, 0, a]),
+)
+
+report = QuantumIOService().preflight(experiment).result()
+
+print(report.mode)  # preflight
+print(report.preparation.method)
+print(report.preparation.metrics.cx_count)
+print(report.preparation_preflight.target_to_prepared_fidelity)
+```
+
+See `examples/quantum_io_preflight.py` for the complete preflight example.
+
+#### Ideal simulation
+
+With no explicit execution plan, `run()` uses the deployed Q-Alchemy sparse simulator
+as an ideal acquisition source:
+
+```python
+from math import sqrt
+
+from q_alchemy import (
+    BasisMeasurement,
+    MeasurementPlan,
+    QuantumExperiment,
+    QuantumIOService,
+    State,
+)
+
+a = 1 / sqrt(2)
+experiment = QuantumExperiment(
+    target=State.dense([a, 0, 0, a]),
+    measurement_plan=MeasurementPlan(
+        basis_measurements=(BasisMeasurement("q0-q1", (0, 1)),),
+    ),
+)
+
+report = QuantumIOService().run(experiment, shots=256).result()
+print(report.mode)                       # ideal-simulation
+print(report.execution.source_kind)      # ideal-simulator
+print(report.execution.basis_distributions[0].probabilities)
+```
+
+See `examples/quantum_io_service.py` for a runnable version.
+
+#### Noisy backend simulation
+
+A noisy simulation can use the topology and calibration of a real IBM backend without
+submitting a QPU job. The PineXQ runtime constructs `AerSimulator.from_backend(...)`
+and reports `source_kind="noisy-simulator"`. An ideal sparse reference can be run in
+the same experiment so the report includes observable and distribution error metrics.
+
+```python
+import os
+from qiskit import QuantumCircuit
+
+from q_alchemy import (
+    BasisMeasurement,
+    Circuit,
+    IBMQuantumCredentials,
+    MeasurementPlan,
+    PauliObservable,
+    QuantumExperiment,
+    QuantumIOService,
+    State,
+    noisy_backend_execution_plan,
+)
+
+credentials = IBMQuantumCredentials(token=os.environ["IBM_QUANTUM_TOKEN"])
+service = QuantumIOService(ibm_credentials=credentials)
+backends = service.backends(provider="ibm", min_num_qubits=2)
+backend = min(
+    backends,
+    key=lambda item: (item.num_qubits, item.pending_jobs or 0, item.name),
+)
+
+evolution = QuantumCircuit(2)
+evolution.h(0)
+evolution.cx(0, 1)
+
+experiment = QuantumExperiment(
+    target=State.dense([1, 0, 0, 0]),
+    evolution=Circuit.from_qiskit(evolution),
+    measurement_plan=MeasurementPlan(
+        training=(
+            PauliObservable.pauli("ZI", "ZI"),
+            PauliObservable.pauli("IZ", "IZ"),
+        ),
+        validation=(
+            PauliObservable.pauli("XX", "XX"),
+            PauliObservable.pauli("ZZ", "ZZ"),
+        ),
+        basis_measurements=(BasisMeasurement("computational", (0, 1)),),
+    ),
+)
+
+plan = noisy_backend_execution_plan(
+    provider="ibm",
+    backend=backend.name,
+    shots=4096,
+    ideal_reference=True,
+    estimator=True,
+    execution_options={"transpile": True},
+)
+report = service.run(experiment, execution_plan=plan).result()
+
+print(report.mode)                       # noisy-simulation
+print(report.execution.source_kind)      # noisy-simulator
+print(report.observable_error)
+print(report.distribution_errors)
+print(report.held_out_verification_error)
+```
+
+No QPU execution occurs in this workflow. IBM credentials are used only to discover the
+backend and read the device information needed to construct the calibrated simulator.
+The explicit `execution_options={"transpile": True}` compiles the logical preparation,
+evolution and measurement circuits to the selected device's native gates and
+connectivity. Omit it only when the circuits already satisfy that Target.
+`examples/quantum_io_noisy_simulation.py` demonstrates the full typed report, including
+preparation diagnostics, complete-circuit metrics, ideal reference, noisy observations,
+basis distributions, error metrics, state-estimation output, held-out verification, and
+warnings.
+
+#### Quantum hardware
+
+When hardware is needed, backend discovery and execution follow the familiar
+service/backend pattern. The experiment object is exactly the same one used for
+simulation:
+
+```python
+backend = service.backends(provider="ibm", min_num_qubits=2)[0]
+report = backend.run(experiment, shots=1024).result()
+print(report.mode)                       # qpu
+print(report.execution.source_kind)      # qpu
+```
+
+For advanced workflows, construct a typed `ExecutionPlan` explicitly. `Runtime.resource`
+selects PineXQ runtime resources without exposing credentials in the experiment contract.
+
+#### Compact sparse reconstruction
+
+SDK 0.5.0 can submit preparation, reconstruction-observable generation,
+acquisition, fitting, and sparse model export in one Quantum I/O job. Requires
+deployed `q-alchemy-quantum-io-pinexq` 0.8.0 with Quantum I/O core 0.11.0.
+
+```python
+from q_alchemy import (
+    ExecutionPlan, MeasurementPlan, QuantumExperiment, QuantumIOParams,
+    QuantumIOService, Runtime, State,
+)
+
+target = State.sparse(num_qubits=2, indices=[0, 3], amplitudes=[2**-.5, 2**-.5])
+experiment = QuantumExperiment(
+    target,
+    measurement_plan=MeasurementPlan.qtucker_reconstruction(block_size=2, rank=1),
+)
+plan = ExecutionPlan(
+    preparation_method="iterative_tucker",
+    preparation_options={"basis_gates": ["u", "cx"], "max_fidelity_loss": 1e-3},
+    acquisition=Runtime.qalchemy_sparse(),
+    estimator=Runtime.qtucker(
+        block_size=2, rank=1, n_restarts=4,
+        fit_config={"epochs": 600, "learning_rate": .03, "stderr_floor": .01,
+                    "seed": 123, "verbose": False},
+    ),
+    estimation_output={"support": "target", "target_fidelity": True},
+)
+with QuantumIOService(QuantumIOParams(step_version="0.8.0")) as service:
+    report = service.run(experiment, plan).result()
+print(report.format_summary())
+report.estimate.sparse_state.save_npz("reconstructed.npz")
+```
+
+`preparation_method` accepts `auto` (default), `hierarchical_tucker`, and
+`iterative_tucker`. QTucker/core own initialization and logical basis
+compilation; the SDK forwards the request. Inspect preparation `found`,
+claimed fidelity loss, and preflight diagnostics when using options such as
+`fallback=False`.
+
+`qtucker_reconstruction` uses the complete native training family. Defaults
+allow training-only fitting; `validation=True` requests an independent disjoint
+validation family (optionally `validation_edges` and `validation_paulis`).
+No held-out RMSE is claimed when validation is absent.
+
+Direct `Runtime.qalchemy_sparse()` acquisition evaluates expectations without
+sampling, uses zero pruning by default, reuses matching preflight/reference
+simulation, and reports capping/pruning/exactness. Its configurable
+`stderr_floor` (default 1e-12) is a numerical fitting floor, not sampling
+uncertainty or a bound on approximation bias. The plan's positive `shots`
+value is recorded but unused for sampling.
+
+Sparse export queries the implicit fitted QTucker model without dense
+materialization. `estimation_output` also accepts explicit
+`support="indices", indices=[...]`, `threshold` (default 0), and
+`max_entries` (default None). It does not renormalize the subset:
+`sparse_state.norm_squared` and metadata `support_probability` /
+`returned_probability` reveal retained mass. Zero survivors are valid.
+`target_fidelity` uses the entire original input target support **before**
+filtering/capping, so export options cannot inflate it. It compares the input
+target with a pure fitted surrogate, rather than certifying a noisy mixed state
+or an evolved target. Existing reference-to-estimated surrogate metrics remain
+separate. Both wire JSON and NPZ preserve basis indices above 64 bits.
+Leave `materialize_statevector_max_qubits` unset to keep fitting output implicit.
+
+Molecule/CISD construction stays local. Supply its sparse amplitudes as the
+target; the hosted workflow replaces manual QASM/observable/fit handoffs.
+The SDK requires no private Quantum I/O or QTucker package locally.
+
+### Choosing classical or quantum execution with feasibility
+
+The feasibility API is a separate hosted service. The SDK is only its remote client: it
+uploads a `QuantumExperiment` and a portable `FeasibilityRequest`, submits one PineXQ
+`assess_feasibility` Job, and returns the final `FeasibilityReport`. The classical-first
+decision loop, execution of the configured quantum target (a simulator or a physical
+QPU), and evidence collection happen on the service side rather than
+in the SDK process.
+
+```python
+from q_alchemy import (
+    FeasibilityRequest,
+    FeasibilityService,
+    QuantumExperiment,
+    SolutionCriteria,
+    State,
+)
+
+experiment = QuantumExperiment(target=State.dense([1, 0]))
+request = FeasibilityRequest(
+    criteria=SolutionCriteria.common(max_observable_rmse=0.01),
+)
+
+report = FeasibilityService().analyze(experiment, request).result()
+print(report.format_summary())
+```
+
+`FeasibilityReport.format_summary()` mirrors the canonical human-readable formatter in
+`q-alchemy-feasibility`, including classical and quantum status, resource/quality
+criteria, backend/model evidence, recommendation, and next-evidence requests.
+The SDK formatter is aligned with Feasibility 0.6.50, the PineXQ adapter 0.2.11, and
+Quantum I/O 0.11.0. Serialized core reports and their canonical summaries are kept
+as regression fixtures so later core changes can be checked without installing
+the server runtime in the SDK environment.
+
+Classical `Status` describes resource feasibility; `Quality` is a separate assessment.
+Quality based on `quantum-io:exact-reference` is explicitly labeled as relative to
+the simulated circuit reference, not necessarily the intended target state.
+When Quantum I/O reports a contradicted preparation estimate, the summary displays
+its warning. The raw evidence and `report.warnings` remain available as well.
+
+The embedded computation's `preparation_preflight.claim_contradicted` is tri-state:
+`True` means a certified comparison found more preparation loss than the initializer
+estimated; `False` means the comparison passed; `None` (including absent legacy fields)
+means no certified comparison is available. `preparation.claimed_fidelity_loss` is
+the initializer's estimate, `target_to_prepared_fidelity` is the measured fidelity,
+and `preparation_approximation_infidelity` is the measured loss. Quantum I/O owns
+the exactness and comparison-tolerance checks. The SDK preserves these fields;
+it does not simulate circuits, recompute the verdict, or infer target-relative
+energy error from a fidelity discrepancy.
+
+Execution settings use `EvidenceCollectionConfig(execution_options=...)`, separate
+from `backend_options`. The default is `{"transpile": True}`. For example:
+
+```python
+from q_alchemy import EvidenceCollectionConfig
+
+evidence = EvidenceCollectionConfig(
+    provider="aer",
+    execution_options={
+        "transpile": True,
+        "transpile_options": {"optimization_level": 3},
+        "estimator_options": {"seed_simulator": 7},
+    },
+)
+```
+
+Use `execution_options={"transpile": False}` only for circuits already compatible
+with the selected backend. Legacy execution keys inside `backend_options` are
+moved into `execution_options`; conflicting values are rejected locally.
+Use `estimator_options` for Pauli-observable execution. `backend_run_options`
+(and its legacy alias `run_options`) applies to basis-measurement/count execution.
+Retired resource-sweep and attribution controls are no longer constructor
+parameters. Their keys in old request JSON are ignored, matching the service.
+`classical_first=False` is rejected locally; use `quantum_execution=COMPARE`
+when both classical and quantum paths are wanted.
+
+To check formatter parity after a core upgrade, run
+`tests/generate_feasibility_fixtures.py --check` using a Python environment with
+`q-alchemy-feasibility` installed and without the SDK on its import path. If the
+core intentionally changes, rerun without `--check`, review the fixture diff,
+and run `pytest tests/test_feasibility_contract_alignment.py` in the SDK environment.
+The fixture generator only analyzes synthetic evidence; it submits no PineXQ jobs.
+
+Full-circuit compression is enabled by default by the feasibility service. The typed SDK
+contract exposes the same control when callers need to disable it or pass compressor
+options:
+
+```python
+from q_alchemy import CircuitCompressionConfig, EvidenceCollectionConfig
+
+evidence = EvidenceCollectionConfig(
+    circuit_compression=CircuitCompressionConfig(
+        enabled=True,
+        options={"optimization_level": 2},
+    )
+)
+```
+
+When a criterion requires QTucker state-estimation evidence and the experiment does not
+supply an explicit estimator training plan, the service can generate the reconstruction
+family automatically. `qtucker_config` controls the fitted Tucker model, while
+`qtucker_observable_config` controls observable generation and independent validation:
+
+```python
+evidence = EvidenceCollectionConfig(
+    qtucker_config={
+        "blocks": [[0, 1], [2, 3]],
+        "ranks": [2, 2],
+    },
+    qtucker_observable_config={
+        "within_block_mode": "all_paulis",
+        "cross_block_mode": None,
+        "extra_edges": [[0, 2]],
+        "validation_edges": [[1, 3]],
+        "validation_paulis": "XYZ",
+    },
+)
+```
+
+Every observable returned by QTucker's native reconstruction-observable generator remains
+in the training set. Validation is generated separately and is never carved out of that
+training family. Direct application diagnostics belong in `MeasurementPlan.observables`;
+`training` and `validation` should be used only for an explicit estimator plan.
+
+The default `QuantumExecutionPolicy.WHEN_NEEDED` stops once the classical path is already
+sufficient. Estimator-only criteria do not force quantum execution merely so they can be
+evaluated. Use `QuantumExecutionPolicy.COMPARE` when the quantum path should run even when
+classical execution is feasible. The SDK only serializes this policy; the feasibility
+service owns the routing decision.
+
+For an opt-in end-to-end check of the SDK -> PineXQ -> feasibility transport, the
+repository includes a live integration test that submits two small Bell-state jobs: one
+with compression explicitly disabled and one using the default enabled compression path.
+Ordinary test runs skip it. Run it explicitly with:
+
+```bash
+Q_ALCHEMY_RUN_LIVE_FEASIBILITY=1 \
+Q_ALCHEMY_API_KEY=... \
+pytest -v tests/test_feasibility_live_integration.py
+```
+
+Set `Q_ALCHEMY_FEASIBILITY_STEP_VERSION` as well when a specific published ProcessingStep
+version should be tested; otherwise the SDK selects the latest available version. The live
+test does not require IBM credentials because the two-qubit workload is intentionally
+classical-first.
+
+The SDK preserves the complete portable report returned by the service.
+`report.computation_result` is the feasibility computation-result envelope: it records
+which compute path ran, execution mode/source, whether the requested criteria were met,
+and whether the result was selected by the recommendation. If feasibility ran a
+classical, simulated, or QPU computation, `report.computation_experiment_report`
+deserializes the embedded Quantum I/O `ExperimentReport`; the SDK does not rerun that
+computation. The nested report uses the same formatter as a directly submitted Quantum
+I/O experiment:
+
+```python
+computation = report.computation_experiment_report
+if computation is not None:
+    print(computation.format_summary())
+```
+
+Quantum circuits are not returned by default because generated state-preparation circuits can
+be large. Request the logical experiment circuit (`P + U`) explicitly on the SDK call:
+
+```python
+report = FeasibilityService().analyze(
+    experiment,
+    request,
+    include_quantum_circuits=True,
+).result()
+
+circuit = report.quantum_circuit
+if circuit is not None:
+    print(circuit.draw(output="text"))
+```
+
+The service returns the selected logical circuit as portable QASM 3. The SDK reconstructs
+the native Qiskit circuit and delegates parsing/rendering to Qiskit; it does not implement a
+second circuit parser or drawer. Internal measurement and backend-transpiled circuits
+are not returned.
+
+Feasibility core also returns the renderer-neutral experiment graph that describes which
+steps ran, were skipped, were unavailable, or were not needed. The SDK never reconstructs
+that graph from statuses. With the optional `visualization` extra installed,
+`report.experiment_diagram` deserializes the service representation into the shared
+`q-alchemy-visualization` `ExperimentDiagram` type:
+
+```python
+diagram = report.experiment_diagram
+if diagram is not None:
+    print(diagram.draw(output="text"))
+```
+
+The SDK similarly exposes a requested logical circuit as a native Qiskit
+`QuantumCircuit` through `report.quantum_circuit`. Raw diagram and circuit payloads are
+transport details retained by `report.to_dict()` rather than separate user-facing APIs.
+
+The visualization package is optional so the public SDK remains installable without the
+private Q-Alchemy package feed. Graphical Matplotlib output additionally requires the
+`mpl` extra of `q-alchemy-visualization`.
+
+IBM credentials are optional at submission time because the server may prove that the
+problem is classically feasible and stop before any quantum-backend evidence is needed.
+When credentials are supplied, the SDK transports them as separate Secret WorkData; they
+are never serialized into the experiment or feasibility request.
+
+Noisy simulation is not an automatic pre-QPU stage. When simulation is the desired
+quantum target, select a simulator explicitly in `EvidenceCollectionConfig`, for example
+`provider="aer"`, `backend="aer_simulator"`, optionally with portable `backend_options`.
+When IBM is selected, feasibility proceeds from static target checks to physical-QPU
+execution when the policy requires quantum evidence.
+
+Use `QuantumIOService` when you explicitly want to execute a particular Quantum I/O plan.
+Use `FeasibilityService` when the question is which compute path is sufficient under the
+stated solution criteria.
+
+A complete hosted example is available in `examples/feasibility_service.py`. It submits a
+small Bell-state workload, prints the canonical feasibility summary and embedded Quantum I/O
+report, draws the returned logical experiment circuit with Qiskit when available, and renders
+the server-provided experiment diagram when the optional visualization extra is installed.
+
+For a notebook-oriented introduction, see
+[`examples/feasibility_h2_dynamics.ipynb`](examples/feasibility_h2_dynamics.ipynb). It uses
+the published two-qubit parity-reduced H2 electronic Hamiltonian at 0.735 Angstrom in STO-3G,
+starts from the Hartree-Fock molecular reference state, applies one first-order Trotter step,
+and runs feasibility in `COMPARE` mode against an Aer target. The final cells display the
+canonical `format_summary()`, the server-provided experiment diagram, and the returned logical
+`P + U` circuit.
+
+A quantum-chemistry example is available in
+[`examples/feasibility_quantum_chemistry.py`](examples/feasibility_quantum_chemistry.py).
+It uses an illustrative 12-spin-orbital correlated active-space workload and selects the
+quantum target from the environment:
+
+- with `IBM_QUANTUM_TOKEN`, it uses a physical IBM Quantum device;
+- with both `IBM_QUANTUM_TOKEN` and `IBM_QUANTUM_BACKEND`, it uses that backend;
+- with an IBM token but no backend name, it requests the least-busy suitable backend;
+- without an IBM token, it uses `provider="aer"`, `backend="aer_simulator"` with an
+  illustrative portable noise model.
+
+`IBM_QUANTUM_INSTANCE` is optional and is forwarded when present. The example uses
+`QuantumExecutionPolicy.COMPARE` deliberately so the selected quantum target is actually
+executed even if the small classical reference is feasible. Normal feasibility requests can
+keep the default `when-needed` policy. Run it with:
+
+```bash
+# Required for the hosted Q-Alchemy service.
+export Q_ALCHEMY_API_KEY=...
+
+# Optional: physical IBM execution. Omit IBM_QUANTUM_TOKEN for noisy Aer.
+export IBM_QUANTUM_TOKEN=...
+export IBM_QUANTUM_BACKEND=ibm_example   # optional; otherwise least busy
+export IBM_QUANTUM_INSTANCE=...          # optional
+
+ python examples/feasibility_quantum_chemistry.py
+ ```
 
 ### Verifying preparation circuits with the sparse simulator
+
+Simulator jobs and their WorkData are preserved on execution, timeout or result
+download failure for diagnosis. After a successful download, `remove_data=True`
+requests cleanup; a cleanup failure logs a warning and still returns the result.
 
 Q-Alchemy also hosts a **sparse state-vector simulator** so you can verify that a
 preparation circuit really produces your target state. The typical loop is
@@ -332,6 +1025,12 @@ result = backend.run(qc, save_statevector=True).result()
 print(result.data(0)["statevector"])
 # [0.70710678+0.j 0.        +0.j 0.        +0.j 0.70710678+0.j]   -> length 2**n
 ```
+
+Dense exports default to `max_dense_qubits=26` (up to 1 GiB of amplitudes).
+Larger requests fail before submission. `SparseStatevectorResult.to_dense()`
+enforces the same default; pass a larger `max_dense_qubits` explicitly only when
+sufficient memory is available. Backend `run()` options apply only to that job;
+use `backend.set_options()` to change defaults for future jobs.
 
 `save_sparse_statevector` is Q-Alchemy's own, and it is the one that scales. It
 returns **only the amplitudes the circuit actually populates**, so nothing of
@@ -425,3 +1124,82 @@ Carsten Blank
 ## License
 
 The q-alchemy-sdk-py is free and open source, released under the Apache License, Version 2.0.
+
+### Optional Quantum I/O circuit compression
+
+Enable full logical P+U compression through the execution plan. The public SDK transports these settings and requires no
+private compressor or Quantum I/O runtime installation:
+
+```python
+from dataclasses import replace
+from q_alchemy.quantum_io import CircuitCompressionConfig, local_simulator_execution_plan
+
+plan = replace(local_simulator_execution_plan(),
+               circuit_compression=CircuitCompressionConfig(enabled=True))
+# report = service.run(experiment, plan).result()
+# print(report.circuit_compression)
+# print(report.format_summary())
+```
+
+Quantum I/O compression defaults to disabled; Feasibility keeps its enabled
+default. Reports include exactness semantics and input/output metrics, and older
+reports remain readable. Preparation claim diagnostics still describe original P.
+
+
+### Quantum I/O validation and reporting
+
+Execution-plan helpers require positive integer shots; booleans and fractional
+values are rejected instead of truncated. The `qiskit-aer` provider alias, like
+`aer`, is local simulation and does not require remote-provider credentials.
+State serialization rejects zero and nonfinite amplitudes before upload, during
+the existing serialization pass. Wire schema versions must be integers, excluding
+booleans. Training and held-out Pauli operators must be distinct even when their
+labels differ.
+
+Quantum I/O and Feasibility compression summaries use `baseline_metrics` when
+available, comparing the compiled baseline with the compressed circuit. Original
+logical `input_metrics` remain available; reports from older deployments still use
+those metrics when a baseline is absent.
+
+The unused initialization helpers `hash_state_vector` and `encode_statevector`
+remain callable for compatibility but emit `DeprecationWarning`. Use the regular
+SDK state-upload/initialization API, which manages serialization and identity.
+
+### Feasibility request validation
+
+Feasibility request schema versions must be integer `1`; boolean options and
+criterion `required` must be actual booleans, and classical resource counts must be
+non-negative integers. Strings such as `"false"` and fractional counts are rejected
+instead of silently changing the request. Zero remains a valid explicit memory
+budget. These checks are local and require no private Feasibility dependency.
+The SDK displays the returned resource and quality conclusions separately.
+
+### Initialization transport and failure recovery
+
+Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.
+
+
+### Optional logical circuit return
+
+Request the logical experiment circuit with
+`QuantumIOService.run(experiment, plan, include_quantum_circuits=True)`.
+The default is `False`, with no circuit export cost. The service exports the
+existing logical preparation-plus-evolution circuit **after compression**, as
+`report.quantum_circuit` in the portable report's inner JSON object. Its envelope
+uses `kind="quantum-circuit"`, `schema_version=1`,
+`role="logical-experiment-circuit"`, `format="qasm3"`, and a `qasm` program.
+It preserves global phase and excludes physical routing and measurement circuits.
+No preparation, compression or simulation is repeated to export the circuit.
+
+In the SDK, `report.quantum_circuit` reconstructs a Qiskit `QuantumCircuit` on
+access; install the SDK's Qiskit extra. Use
+`print(report.quantum_circuit.draw(output="text"))` to print it. The downloaded
+payload remains available after job cleanup. Reports without a circuit return
+`None`, and ordinary report parsing does not require Qiskit.
+
+PineXQ consumes `service_options.include_quantum_circuits` from the execution-plan
+input before parsing the core plan. This is a service option, not an
+`ExecutionPlan` field. Direct core callers can use
+`run_quantum_experiment(..., include_quantum_circuits=True)` for portable export;
+`run_quantum_experiment_report(..., include_quantum_circuits=True)` continues to
+retain runtime circuit objects locally without exporting them automatically.

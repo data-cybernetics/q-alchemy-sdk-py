@@ -21,6 +21,7 @@ mirroring the local ``SparseAerBackend`` so the two are interchangeable.
 from __future__ import annotations
 
 import datetime as _dt
+from copy import deepcopy
 import uuid
 from typing import Sequence
 
@@ -51,7 +52,7 @@ from qiskit.providers import BackendV2, JobStatus, JobV1, Options
 from qiskit.result import Result
 from qiskit.transpiler import Target
 
-from q_alchemy.simulator import SparseSimulator, SimulatorParams
+from q_alchemy.simulator import SparseSimulator, SimulatorParams, _check_dense_limit
 
 # The gate set the simulator natively supports (matches SparseAerBackend).
 QALCHEMY_BASIS_GATES = [
@@ -204,7 +205,7 @@ class QAlchemyBackend(BackendV2):
         return target
 
     def run(self, run_input: QuantumCircuit | Sequence[QuantumCircuit], **options) -> QAlchemyJob:
-        run_options = self.options
+        run_options = deepcopy(self.options)
         run_options.update_options(**options)
 
         circuits = list(run_input) if isinstance(run_input, (list, tuple)) else [run_input]
@@ -215,6 +216,8 @@ class QAlchemyBackend(BackendV2):
                 raise ValueError(
                     f"Circuit uses {circuit.num_qubits} qubits, backend limit is {self._num_qubits}."
                 )
+            if run_options.save_statevector:
+                _check_dense_limit(circuit.num_qubits, run_options.max_dense_qubits)
 
         job_id = str(uuid.uuid4())
 
@@ -265,7 +268,7 @@ class QAlchemyBackend(BackendV2):
             if want_sparse:
                 data["sparse_statevector"] = sv.raw
             if want_dense:
-                data["statevector"] = sv.to_dense()
+                data["statevector"] = sv.to_dense(max_dense_qubits=run_options.max_dense_qubits)
 
         return {
             "shots": shots,
