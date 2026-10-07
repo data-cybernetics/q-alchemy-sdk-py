@@ -42,7 +42,7 @@ def build_experiment() -> QuantumExperiment:
         num_qubits=n_a + n_b,
     )
 
-    # Replace these gates with your colleague's evolution on A + B.
+    # Replace these gates with evolution on A + B.
     evolution = QuantumCircuit(n_a + n_b)
     evolution.rxx(0.6, 0, 2)  # Couple A[0] to B[0].
     evolution.rxx(0.6, 1, 3)  # Couple A[1] to B[1].
@@ -60,7 +60,7 @@ def build_experiment() -> QuantumExperiment:
     )
 
 
-def main() -> QuantumCircuit:
+def main():
     plan = ExecutionPlan(
         preparation_options={"max_fidelity_loss": 0.0, "basis_gates": ["u", "cx"]},
         circuit_compression=CircuitCompressionConfig(enabled=True),
@@ -81,12 +81,9 @@ def main() -> QuantumCircuit:
         print()
         print(report.circuit_compression.format_summary())
 
-    circuit = report.quantum_circuit
-    if circuit is None:
-        raise RuntimeError("The service returned no quantum circuit")
-    print("\nCOMPRESSED PREPARATION + EVOLUTION CIRCUIT")
-    print(circuit.draw(output="text", fold=100))
-    return circuit
+    if report.quantum_circuit is not None:
+        print("\nCOMPRESSED PREPARATION + EVOLUTION CIRCUIT")
+        print(report.quantum_circuit.draw(output="text", fold=100))
 
 
 if __name__ == "__main__":
