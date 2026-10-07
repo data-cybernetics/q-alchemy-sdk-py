@@ -1127,8 +1127,7 @@ The q-alchemy-sdk-py is free and open source, released under the Apache License,
 
 ### Optional Quantum I/O circuit compression
 
-With the Quantum I/O 0.12.0 service, enable full logical P+U compression through
-the execution plan. The public SDK transports these settings and requires no
+Enable full logical P+U compression through the execution plan. The public SDK transports these settings and requires no
 private compressor or Quantum I/O runtime installation:
 
 ```python
@@ -1145,10 +1144,9 @@ plan = replace(local_simulator_execution_plan(),
 Quantum I/O compression defaults to disabled; Feasibility keeps its enabled
 default. Reports include exactness semantics and input/output metrics, and older
 reports remain readable. Preparation claim diagnostics still describe original P.
-Compression settings require the updated service; deploy it before enabling them.
 
 
-### Quantum I/O validation and reporting in 0.5.1
+### Quantum I/O validation and reporting
 
 Execution-plan helpers require positive integer shots; booleans and fractional
 values are rejected instead of truncated. The `qiskit-aer` provider alias, like
@@ -1161,31 +1159,29 @@ labels differ.
 Quantum I/O and Feasibility compression summaries use `baseline_metrics` when
 available, comparing the compiled baseline with the compressed circuit. Original
 logical `input_metrics` remain available; reports from older deployments still use
-those metrics when a baseline is absent. Server-side corrections and faster
-batched inference are provided by Quantum I/O PineXQ 0.8.7 / Quantum I/O 0.12.3.
+those metrics when a baseline is absent.
 
 The unused initialization helpers `hash_state_vector` and `encode_statevector`
 remain callable for compatibility but emit `DeprecationWarning`. Use the regular
 SDK state-upload/initialization API, which manages serialization and identity.
 
-### Feasibility request validation in 0.5.2
+### Feasibility request validation
 
 Feasibility request schema versions must be integer `1`; boolean options and
 criterion `required` must be actual booleans, and classical resource counts must be
 non-negative integers. Strings such as `"false"` and fractional counts are rejected
 instead of silently changing the request. Zero remains a valid explicit memory
 budget. These checks are local and require no private Feasibility dependency.
-Server-side workflow fixes are delivered by Feasibility PineXQ 0.2.17; the SDK
-continues to display the returned resource and quality conclusions separately.
+The SDK displays the returned resource and quality conclusions separately.
 
-### Workflow review release 0.5.3
+### Initialization transport and failure recovery
 
-Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports now validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.
+Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.
 
 
 ### Optional logical circuit return
 
-Quantum I/O core 0.12.6, PineXQ adapter 0.8.10 and SDK 0.5.4 support
+Request the logical experiment circuit with
 `QuantumIOService.run(experiment, plan, include_quantum_circuits=True)`.
 The default is `False`, with no circuit export cost. The service exports the
 existing logical preparation-plus-evolution circuit **after compression**, as

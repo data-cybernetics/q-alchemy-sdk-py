@@ -11,12 +11,16 @@ name: Publish to PyPI
 # Release process:
 #   1. bump [project].version in pyproject.toml, merge to main
 #   2. create a GitHub Release with tag v<version> (e.g. v0.2.28)
-#   3. this workflow builds, verifies tag == package version, and publishes
+#   3. this workflow builds, verifies tag == package version, tests the built
+#      wheel on supported Python endpoints, and publishes only after success
 
 on:
   release:
     types: [published]
-  workflow_dispatch:  # manual fallback: builds and publishes the current main
+  workflow_dispatch:  # manual fallback: tests and publishes the selected commit
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -46,10 +50,17 @@ jobs:
           name: dist
           path: dist/
 
+  test:
+    name: Release wheel checks
+    needs: build
+    uses: ./.github/workflows/test-installed-wheel.yaml
+    with:
+      artifact-name: dist
+
   publish:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, test]
     environment:
       name: pypi
       url: https://pypi.org/p/q-alchemy-sdk-py
