@@ -19,7 +19,9 @@ GitHub Actions and [Trusted Publishing](https://docs.pypi.org/trusted-publishers
 
 ## Release process
 
-1. Bump `[project].version` in `pyproject.toml` (PR, review, merge to `main`).
+1. Bump `[project].version` in `pyproject.toml`, and in `CHANGELOG.md` rename
+   `[Unreleased]` to `[<version>] - <date>`, start a new empty `[Unreleased]`, and
+   update the compare links at the bottom (PR, review, merge to `main`).
 2. Create a **GitHub Release** with tag `v<version>` (e.g. `v0.2.28`) on `main`.
 3. The `Publish to PyPI` workflow builds sdist + wheel, verifies the tag matches
    the package version, smoke-imports the wheel, and publishes.
