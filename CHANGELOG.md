@@ -8,6 +8,8 @@ Each release on GitHub has fuller notes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-08
+
 Adds three hosted services (Quantum I/O, feasibility analysis and circuit compression)
 and moves state preparation to the current Q-Alchemy service. **Contains breaking
 changes**; see *Removed* and *Changed*. SDK 0.3.1 keeps working against the current
@@ -113,7 +115,8 @@ state-preparation service, so you can upgrade when convenient.
   (#53).
 - Reworked example notebooks (#50). The README uses `uv` for setup.
 
-[Unreleased]: https://github.com/data-cybernetics/q-alchemy-sdk-py/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/data-cybernetics/q-alchemy-sdk-py/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/data-cybernetics/q-alchemy-sdk-py/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/data-cybernetics/q-alchemy-sdk-py/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/data-cybernetics/q-alchemy-sdk-py/compare/v0.2.27...v0.3.0
 [0.2.27]: https://github.com/data-cybernetics/q-alchemy-sdk-py/releases/tag/v0.2.27

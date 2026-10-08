@@ -368,7 +368,7 @@ adapter; region indices in the report refer to its normalized baseline circuit.
 
 `CircuitCompressionParams` follows the other service clients: `api_key` defaults
 to `Q_ALCHEMY_API_KEY` (then `PINEXQ_API_KEY`), and `host` defaults to
-`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="0.1.1"` to pin a
+`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="0.1.7"` to pin a
 deployed step, or omit it to discover the visible version. Successful result
 retrieval removes SDK-created jobs and WorkData by default. Set `remove_data=False`
 to retain them. A failure or malformed report preserves the job for diagnosis;
