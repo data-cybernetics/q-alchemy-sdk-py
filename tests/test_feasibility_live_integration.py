@@ -252,16 +252,9 @@ def test_live_qtucker_observable_config_reaches_state_estimation():
             provider="aer",
             backend="aer_simulator",
             shots=512,
-            # GHZ has two nonzero amplitudes. max_nnz=1 makes the sparse
-            # classical reference resource-limited; the one-byte classical
-            # budget also excludes the dense fallback. COMPARE still runs the
-            # explicitly requested simulator path so its observable plan can
-            # be checked below.
-            sparse_config={
-                "max_nnz": 1,
-                "sparse_epsilon": 0.0,
-                "final_sparse_epsilon": 0.0,
-            },
+            # The one-byte RAM budget prevents an exact classical reference.
+            # COMPARE still runs the explicitly selected simulator so its
+            # observable plan can be checked below.
             qtucker_config={
                 "n_qubits": 4,
                 "blocks": [[0, 1], [2, 3]],

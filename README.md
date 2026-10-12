@@ -1188,6 +1188,19 @@ keys with those names are ignored through the existing unknown-field handling an
 are not emitted by new requests. A retired `classical_first=false` key cannot change
 the classical-first workflow; automatic dense-statevector fallback remains disabled.
 
+Since SDK 0.4.1 / core 0.6.59, sparse pruning thresholds in `sparse_config` or nested
+`run_options` must be numeric zero. Nonzero, boolean, string, or null values are
+rejected locally. Explicit zeros normalize away because Feasibility supplies the
+exact-reference settings itself; the default `sparse_config` is `{}`. Other sparse
+settings are preserved.
+
+`FeasibilityRequest` rejects `max_nnz` at either config level, including `"auto"`
+or null. Use `classical_resources.available_memory_bytes` for the classical quota;
+the service derives sparse capacity from the effective worker RAM budget. Remove
+explicit caps from saved request JSON and examples. A standalone
+`EvidenceCollectionConfig` can still carry `max_nnz` for direct core-provider use
+without a RAM limit, but cannot be placed in a portable `FeasibilityRequest`.
+
 ### Initialization transport and failure recovery
 
 Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from enum import Enum
 import json
 from math import isfinite
-from numbers import Integral
+from numbers import Integral, Real
 from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
@@ -218,6 +218,38 @@ class CircuitCompressionConfig(QuantumIOCircuitCompressionConfig):
         return super().from_dict({"enabled": True, **data})
 
 
+def _validated_sparse_config(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("sparse_config must be a mapping")
+    config = dict(value)
+    if "run_options" in config:
+        if not isinstance(config["run_options"], Mapping):
+            raise ValueError("sparse_config.run_options must be a mapping")
+        config["run_options"] = dict(config["run_options"])
+    for path, options in (("sparse_config", config),
+                          ("sparse_config.run_options", config.get("run_options", {}))):
+        for key in ("sparse_epsilon", "final_sparse_epsilon"):
+            if key not in options:
+                continue
+            threshold = options.pop(key)
+            if isinstance(threshold, bool) or not isinstance(threshold, Real) or threshold != 0:
+                raise ValueError(
+                    f"{path}.{key} must be numeric zero; feasibility requires "
+                    "exact sparse references and does not permit amplitude pruning"
+                )
+    return config
+
+
+def _validate_sparse_memory_control(config: Mapping[str, Any]) -> None:
+    for path, options in (("sparse_config", config),
+                          ("sparse_config.run_options", config.get("run_options", {}))):
+        if "max_nnz" in options:
+            raise ValueError(
+                f"{path}.max_nnz cannot be combined with a feasibility RAM budget; "
+                "use classical_resources.available_memory_bytes instead"
+            )
+
+
 @dataclass(frozen=True)
 class EvidenceCollectionConfig:
     """Portable acquisition controls for Feasibility >= 0.6.48.
@@ -231,7 +263,7 @@ class EvidenceCollectionConfig:
     backend_options: Mapping[str, Any] = field(default_factory=dict)
     shots: int = 4096
     preparation_options: Mapping[str, Any] = field(default_factory=dict)
-    sparse_config: Mapping[str, Any] = field(default_factory=lambda: {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})
+    sparse_config: Mapping[str, Any] = field(default_factory=dict)
     qtucker_config: Mapping[str, Any] = field(default_factory=dict)
     circuit_compression: CircuitCompressionConfig = field(
         default_factory=CircuitCompressionConfig
@@ -246,6 +278,7 @@ class EvidenceCollectionConfig:
 
     def __post_init__(self) -> None:
         _boolean(self.least_busy, "least_busy")
+        object.__setattr__(self, "sparse_config", _validated_sparse_config(self.sparse_config))
         if not isinstance(self.circuit_compression, CircuitCompressionConfig):
             raise ValueError("circuit_compression must be a CircuitCompressionConfig")
         if not isinstance(self.qtucker_observable_config, Mapping):
@@ -320,7 +353,7 @@ class EvidenceCollectionConfig:
             backend_options=dict(data.get("backend_options", {})),
             shots=data.get("shots", 4096),
             preparation_options=dict(data.get("preparation_options", {})),
-            sparse_config=dict(data.get("sparse_config", {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})),
+            sparse_config=data.get("sparse_config", {}),
             qtucker_config=dict(data.get("qtucker_config", {})),
             circuit_compression=CircuitCompressionConfig.from_dict(
                 data.get("circuit_compression", {})
@@ -341,6 +374,7 @@ class FeasibilityRequest:
 
     def __post_init__(self) -> None:
         _schema_version(self.schema_version)
+        _validate_sparse_memory_control(_validated_sparse_config(self.evidence_collection.sparse_config))
 
     def to_dict(self) -> dict[str, Any]:
         return {

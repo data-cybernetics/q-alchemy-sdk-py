@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from q_alchemy.feasibility_contract import (
-    EvidenceCollectionConfig, FeasibilityPolicy, FeasibilityReport,
+    ClassicalResources, EvidenceCollectionConfig, FeasibilityPolicy, FeasibilityReport,
     FeasibilityRequest, QuantumExecutionPolicy, SolutionCriteria,
 )
 from q_alchemy.quantum_io_contract import ExperimentReport, PreparationPreflightSummary
@@ -15,6 +15,56 @@ from tests.test_feasibility import EXPERIMENT_REPORT
 
 
 FIXTURE = json.loads((Path(__file__).parent / "data" / "feasibility_summary.json").read_text())
+
+
+@pytest.mark.parametrize("key", ["sparse_epsilon", "final_sparse_epsilon"])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("value", [1e-10, -1e-10, False, "0", None, float("nan"), float("inf")])
+def test_feasibility_rejects_conflicting_sparse_pruning(key, nested, value):
+    sparse = {"run_options": {key: value}} if nested else {key: value}
+    with pytest.raises(ValueError, match="sparse_config.*numeric zero"):
+        EvidenceCollectionConfig(sparse_config=sparse)
+    payload = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1)).to_dict()
+    payload["evidence_collection"]["sparse_config"] = sparse
+    with pytest.raises(ValueError, match="sparse_config.*numeric zero"):
+        FeasibilityRequest.from_json(json.dumps(payload))
+
+
+def test_sparse_zero_thresholds_normalize_without_mutating_other_options():
+    sparse = {"sparse_epsilon": 0, "dense_reference_max_qubits": 2,
+              "run_options": {"final_sparse_epsilon": 0.0, "optimization_level": 1}}
+    config = EvidenceCollectionConfig(sparse_config=sparse)
+    assert sparse["sparse_epsilon"] == 0
+    assert sparse["run_options"]["final_sparse_epsilon"] == 0
+    assert config.sparse_config == {
+        "dense_reference_max_qubits": 2, "run_options": {"optimization_level": 1}}
+    request = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1),
+                                 evidence_collection=config)
+    assert FeasibilityRequest.from_json(request.to_json()) == request
+    assert EvidenceCollectionConfig().sparse_config == {}
+    assert EvidenceCollectionConfig.from_dict({}).sparse_config == {}
+
+
+@pytest.mark.parametrize("value", [None, [], {"run_options": None}, {"run_options": []}])
+def test_sparse_options_require_mappings(value):
+    with pytest.raises(ValueError, match="sparse_config.*mapping"):
+        EvidenceCollectionConfig.from_dict({"sparse_config": value})
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("value", [1, "auto", None])
+def test_portable_requests_reject_explicit_sparse_capacity(nested, value):
+    sparse = {"run_options": {"max_nnz": value}} if nested else {"max_nnz": value}
+    config = EvidenceCollectionConfig(sparse_config=sparse)
+    criteria = SolutionCriteria.common(max_observable_rmse=.1)
+    for resources in (None, ClassicalResources(available_memory_bytes=960)):
+        with pytest.raises(ValueError, match="classical_resources.available_memory_bytes"):
+            FeasibilityRequest(criteria=criteria, evidence_collection=config,
+                               classical_resources=resources)
+    payload = FeasibilityRequest(criteria=criteria).to_dict()
+    payload["evidence_collection"] = config.to_dict()
+    with pytest.raises(ValueError, match="classical_resources.available_memory_bytes"):
+        FeasibilityRequest.from_json(json.dumps(payload))
 
 
 @pytest.mark.parametrize("case", FIXTURE["cases"], ids=lambda case: case["name"])
