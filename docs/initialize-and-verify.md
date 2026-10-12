@@ -96,17 +96,31 @@ never discards tiny amplitudes or renormalizes the state. This keeps transport
 lossless and leaves the approximation budget with QTucker.
 
 - Dense vectors use NumPy `.npy` serialization (`numpy_load` for inline input).
-- Sparse vectors use Parquet with basis indices and complex amplitudes. Inputs
-  already supplied as SciPy sparse matrices/arrays skip the density check and
-  remain sparse, even when fully populated.
+- Sparse vectors use the existing Quantum I/O `State.sparse(...)` JSON wire
+  format: explicit `num_qubits`, decimal-string basis indices, and `[real, imag]`
+  amplitudes. `State.sparse(...)` inputs go directly to serialization without a
+  SciPy conversion, including indices above 64 bits. SciPy inputs skip the density
+  check, combine duplicate coordinates and remove exact zeros before serialization.
+  Zero states and nonfinite sparse amplitudes are rejected before submission.
 - Mixed batches are split into at most two service jobs, one per representation;
   returned circuits and summaries follow the original input order. Each job uses
   the usual cleanup policy and timeout. If either job fails, the call raises.
   Uniform batches still use one job; parallel option sets share one serialization.
 
-The updated ProCon preserves these dense/sparse paths into QTucker. Both formats
-are supported by older services too, but avoiding server-side conversions requires
-the updated ProCon deployment. No private QTucker dependency is added to the SDK.
+Sparse JSON requires preparation ProCon **0.4.9 or later**. Deploy the adapter
+before upgrading SDK clients. For older adapters, set
+`OptParams(legacy_sparse_transport=True)` to retain sparse Parquet transport;
+that format cannot represent 63 or more qubits. Existing NumPy and Parquet files
+remain accepted by the new adapter. No private QTucker dependency is added to the SDK.
+
+The adapter decodes sparse JSON once and packs one row into QTucker's unsigned
+64-bit words at dispatch, without SciPy, Arrow or dense-state conversions. This
+removes the transport's width restriction; it does not change subscription
+limits (currently 12 qubits Free / 20 Enterprise) or QTucker's resource safeguards.
+A state above 20 qubits can be represented and transported but is still rejected
+by the current service license check. Forcing an algorithm can also reach technical
+limits; for example, hierarchical Tucker's low-rank fallback can exceed the
+Python backend's dense-lifting limit even on a sparse 72-qubit state.
 
 ---
 

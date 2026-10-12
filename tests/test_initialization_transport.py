@@ -1,6 +1,7 @@
 """Public SDK transport selection, tested without private Q-Alchemy packages."""
 import base64
 import io
+import json
 from unittest.mock import Mock
 
 import numpy as np
@@ -11,12 +12,19 @@ from scipy import sparse
 
 import q_alchemy.initialize as init
 from q_alchemy.pyarrow_data import recover_sparse_coo_from_arrow
+from q_alchemy import State
 
 
 def decode(payload):
     if payload.startswith(b'\x93NUMPY'):
         return np.load(io.BytesIO(payload), allow_pickle=False)
-    return recover_sparse_coo_from_arrow(pq.read_table(io.BytesIO(payload)))
+    if payload.startswith(b'PAR1'):
+        return recover_sparse_coo_from_arrow(pq.read_table(io.BytesIO(payload)))
+    wire = json.loads(payload)
+    states = [State.from_dict(row) for row in (wire if isinstance(wire, list) else [wire])]
+    # Small-state assertion helper only; wide-state tests inspect the wire.
+    return sparse.vstack([sparse.coo_matrix((row.amplitudes, ([0] * len(row.indices), row.indices)),
+                                          shape=(1, 1 << row.num_qubits)) for row in states])
 
 
 def dense_state():
@@ -24,7 +32,7 @@ def dense_state():
     return state / np.linalg.norm(state)
 
 
-@pytest.mark.parametrize('count,expected_sparse', [(0, True), (1, True), (13, True), (14, False), (128, False)])
+@pytest.mark.parametrize('count,expected_sparse', [(1, True), (13, True), (14, False), (128, False)])
 def test_density_boundary_and_lossless_amplitudes(count, expected_sparse):
     state = np.zeros(128, complex)
     state[:count] = np.arange(1, count + 1) * (1 + 2j)
@@ -54,7 +62,7 @@ def test_explicit_sparse_input_is_never_density_checked_or_densified(monkeypatch
     monkeypatch.setattr(init, '_maybe_make_sparse_row', forbidden)
     monkeypatch.setattr(container, 'toarray', forbidden)
     payload, _ = init._prepare_statevector(state)
-    assert init._payload_type(payload) == 'parquet'
+    assert init._payload_type(payload) == 'json'
     actual = decode(payload)
     np.testing.assert_array_equal(actual.tocoo().data, state.tocoo().data)
 
@@ -89,7 +97,7 @@ def test_single_inline_and_upload_routes_carry_correct_format(monkeypatch, use_s
         monkeypatch.setattr(init, 'MAX_INLINE_STATE_BYTES', 0)
     assert init.q_alchemy_as_qasm(state, client=Mock()) == 'qasm'
     options = configure.call_args.kwargs
-    assert options['statevector_type'] == ('parquet' if use_sparse else 'numpy_load')
+    assert options['statevector_type'] == ('json' if use_sparse else 'numpy_load')
     if upload:
         payload = upload_payload.call_args.args[1]
     else:
@@ -113,7 +121,7 @@ def test_upload_filename_matches_serialized_data(monkeypatch, use_sparse):
     payload, _ = init._prepare_statevector(state)
     init._upload_statevector_payload(Mock(), payload, init.OptParams(assign_data_hash=False))
     uploaded = root.upload_action.execute.call_args.args[0]
-    assert uploaded.filename.endswith('.parquet' if use_sparse else '.npy')
+    assert uploaded.filename.endswith('.json' if use_sparse else '.npy')
     assert uploaded.binary == payload
 
 
@@ -145,7 +153,7 @@ def test_mixed_batches_group_and_restore_original_order(monkeypatch):
     assert summaries == [{'label': label} for label in expected]
     assert len(uploads) == 2
     assert sum(isinstance(item, np.ndarray) for item in uploads) == 1
-    assert sum(isinstance(item, pa.Table) for item in uploads) == 1
+    assert sum(isinstance(item, (dict, list)) for item in uploads) == 1
 
 
 def test_parallel_dense_options_select_and_serialize_only_once(monkeypatch):
@@ -186,3 +194,79 @@ def test_short_service_result_is_rejected(monkeypatch):
     monkeypatch.setattr(init, 'run_job', Mock(return_value=([{}], ['qasm'])))
     with pytest.raises(ValueError, match='unexpected batch size'):
         init.q_alchemy_as_qasm_parallel_states([dense_state(), dense_state()], {}, client=Mock())
+
+
+@pytest.mark.parametrize('upload', [False, True])
+def test_state_sparse_72_qubit_public_api_uses_existing_wire(monkeypatch, upload):
+    state = State.sparse(num_qubits=72, indices=[0, (1 << 71) + 3],
+                         amplitudes=[2**-.5, 2**-.5])
+    def forbidden(*args, **kwargs):
+        pytest.fail('State.sparse must bypass NumPy/SciPy/Arrow conversions')
+    monkeypatch.setattr(init.sparse, 'coo_matrix', forbidden)
+    monkeypatch.setattr(init, 'convert_sparse_coo_to_arrow', forbidden)
+    monkeypatch.setattr(init, '_maybe_make_sparse_row', forbidden)
+    configure = Mock(return_value=object())
+    uploader = Mock(return_value=object())
+    monkeypatch.setattr(init, 'configure_job', configure)
+    monkeypatch.setattr(init, '_upload_statevector_payload', uploader)
+    monkeypatch.setattr(init, 'run_job', Mock(return_value=({'status': 'OK'}, 'qasm')))
+    if upload:
+        monkeypatch.setattr(init, 'MAX_INLINE_STATE_BYTES', 0)
+    assert init.q_alchemy_as_qasm(state, client=Mock()) == 'qasm'
+    params = configure.call_args.kwargs
+    assert params['statevector_type'] == 'json'
+    payload = uploader.call_args.args[1] if upload else base64.b64decode(params['statevector_data'])
+    assert json.loads(payload) == state.to_dict()
+    assert json.loads(payload)['indices'][1] == '2361183241434822606851'
+
+
+@pytest.mark.parametrize('legacy', [False, True])
+def test_scipy_duplicate_cancellation_and_legacy_compatibility(legacy):
+    state = sparse.coo_matrix(([.3, .3, .2, -.2, 0., .8j],
+                               ([0] * 6, [0, 0, 1, 1, 2, 3])), shape=(1, 4))
+    before = state.data.copy()
+    payload, _ = init._prepare_statevector(state, legacy_sparse_transport=legacy)
+    assert init._payload_type(payload) == ('parquet' if legacy else 'json')
+    np.testing.assert_array_equal(decode(payload).toarray(), [[.6, 0, 0, .8j]])
+    np.testing.assert_array_equal(state.data, before)
+    if not legacy:
+        assert json.loads(payload)['indices'] == ['0', '3']
+
+
+def test_legacy_transport_for_small_state_and_clear_wide_rejection():
+    payload, _ = init._prepare_statevector(State.sparse(num_qubits=2, indices=[0], amplitudes=[1]),
+                                         legacy_sparse_transport=True)
+    assert init._payload_type(payload) == 'parquet'
+    for n in (63, 64, 72):
+        with pytest.raises(ValueError, match='Legacy sparse transport'):
+            init._prepare_statevector(State.sparse(num_qubits=n, indices=[0], amplitudes=[1]),
+                                      legacy_sparse_transport=True)
+
+
+def test_wide_state_batch_uses_existing_state_objects(monkeypatch):
+    states = [State.sparse(num_qubits=72, indices=[index], amplitudes=[1])
+              for index in (0, (1 << 71) + 3)]
+    uploader = Mock(return_value=object())
+    monkeypatch.setattr(init, 'upload_statevector', uploader)
+    configure = Mock(return_value=object())
+    monkeypatch.setattr(init, 'configure_job', configure)
+    monkeypatch.setattr(init, 'run_job', Mock(return_value=([{'status': 'OK'}] * 2, ['first', 'second'])))
+    assert init.q_alchemy_as_qasm_parallel_states(states, {}, client=Mock()) == ['first', 'second']
+    assert uploader.call_args.args[1] == [state.to_dict() for state in states]
+    assert configure.call_args.kwargs['num_states'] == 2
+
+
+def test_invalid_sparse_row_in_mixed_batch_fails_before_upload(monkeypatch):
+    uploader = Mock()
+    monkeypatch.setattr(init, 'upload_statevector', uploader)
+    with pytest.raises(ValueError):
+        init.q_alchemy_as_qasm_parallel_states([dense_state(), np.zeros(128)], {}, client=Mock())
+    uploader.assert_not_called()
+
+
+def test_parallel_options_can_mix_legacy_and_json(monkeypatch):
+    def run(payload, n, opt, client, summary, inline):
+        assert base64.b64decode(inline) == payload
+        return init._payload_type(payload)
+    monkeypatch.setattr(init, '_run_prepared_statevector', run)
+    assert init.q_alchemy_as_qasm_parallel([1, 0], [{}, {'legacy_sparse_transport': True}], client=Mock()) == ['json', 'parquet']
