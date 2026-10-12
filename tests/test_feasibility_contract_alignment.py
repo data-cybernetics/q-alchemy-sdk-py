@@ -99,10 +99,22 @@ def test_execution_defaults_and_legacy_options():
 
 
 @pytest.mark.parametrize("value", [True, False, 0, -1, 1.5, float("nan"), float("inf"), "5"])
-def test_count_controls_are_rejected_before_submission(value):
+def test_shots_are_rejected_before_submission(value):
     with pytest.raises(ValueError, match="positive integer"):
         EvidenceCollectionConfig.from_dict({"shots": value})
-    payload = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=0.1)).to_dict()
-    payload["max_steps"] = value
-    with pytest.raises(ValueError, match="positive integer"):
-        FeasibilityRequest.from_dict(payload)
+
+
+@pytest.mark.parametrize("legacy_value", [1, 8, 16, None, "obsolete"])
+def test_retired_max_steps_is_ignored_and_not_emitted(legacy_value):
+    request = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1))
+    payload = request.to_dict()
+    assert "max_steps" not in payload
+    payload["max_steps"] = legacy_value
+    restored = FeasibilityRequest.from_json(json.dumps(payload))
+    assert restored == request
+    assert "max_steps" not in restored.to_dict()
+
+
+def test_removed_python_iteration_argument_is_rejected():
+    with pytest.raises(TypeError, match="max_steps"):
+        FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1), max_steps=1)

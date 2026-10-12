@@ -353,14 +353,11 @@ class FeasibilityRequest:
     policy: FeasibilityPolicy = field(default_factory=FeasibilityPolicy)
     evidence_collection: EvidenceCollectionConfig = field(default_factory=EvidenceCollectionConfig)
     classical_resources: ClassicalResources | None = None
-    max_steps: int = 16
     metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: int = 1
 
     def __post_init__(self) -> None:
         _schema_version(self.schema_version)
-        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, Integral) or self.max_steps <= 0:
-            raise ValueError("max_steps must be a positive integer")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -370,7 +367,6 @@ class FeasibilityRequest:
             "policy": self.policy.to_dict(),
             "evidence_collection": self.evidence_collection.to_dict(),
             "classical_resources": self.classical_resources.to_dict() if self.classical_resources else None,
-            "max_steps": self.max_steps,
             "metadata": dict(self.metadata),
         }
 
@@ -385,7 +381,6 @@ class FeasibilityRequest:
             policy=FeasibilityPolicy.from_dict(data.get("policy", {})),
             evidence_collection=EvidenceCollectionConfig.from_dict(data.get("evidence_collection", {})),
             classical_resources=ClassicalResources.from_dict(resources) if resources is not None else None,
-            max_steps=data.get("max_steps", 16),
             metadata=dict(data.get("metadata", {})),
         )
 

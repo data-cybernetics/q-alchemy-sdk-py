@@ -1174,6 +1174,13 @@ instead of silently changing the request. Zero remains a valid explicit memory
 budget. These checks are local and require no private Feasibility dependency.
 The SDK displays the returned resource and quality conclusions separately.
 
+`FeasibilityRequest` no longer accepts or emits `max_steps`. Remove that argument
+from Python construction calls. Legacy schema-v1 request JSON containing the field
+remains loadable; its value is ignored. The service attempts each declared evidence
+kind at most once per solve, so changing parameters does not trigger another attempt.
+Custom retry or parameter-study workflows must run inside a provider or use separate
+assessments. No replacement iteration control is required.
+
 ### Initialization transport and failure recovery
 
 Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.
