@@ -765,8 +765,8 @@ Use `estimator_options` for Pauli-observable execution. `backend_run_options`
 (and its legacy alias `run_options`) applies to basis-measurement/count execution.
 Retired resource-sweep and attribution controls are no longer constructor
 parameters. Their keys in old request JSON are ignored, matching the service.
-`classical_first=False` is rejected locally; use `quantum_execution=COMPARE`
-when both classical and quantum paths are wanted.
+Feasibility always follows the classical-first workflow; use
+`quantum_execution=COMPARE` when both classical and quantum paths are wanted.
 
 To check formatter parity after a core upgrade, run
 `tests/generate_feasibility_fixtures.py --check` using a Python environment with
@@ -1180,6 +1180,13 @@ remains loadable; its value is ignored. The service attempts each declared evide
 kind at most once per solve, so changing parameters does not trigger another attempt.
 Custom retry or parameter-study workflows must run inside a provider or use separate
 assessments. No replacement iteration control is required.
+
+`FeasibilityPolicy` now accepts and serializes only `quantum_execution`. Remove
+`classical_first` and `dense_memory_utilization_fraction` from Python calls; use
+the named `quantum_execution` argument when migrating positional calls. Saved JSON
+keys with those names are ignored through the existing unknown-field handling and
+are not emitted by new requests. A retired `classical_first=false` key cannot change
+the classical-first workflow; automatic dense-statevector fallback remains disabled.
 
 ### Initialization transport and failure recovery
 

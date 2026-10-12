@@ -8,7 +8,7 @@ import pytest
 
 from q_alchemy.feasibility_contract import (
     EvidenceCollectionConfig, FeasibilityPolicy, FeasibilityReport,
-    FeasibilityRequest, SolutionCriteria,
+    FeasibilityRequest, QuantumExecutionPolicy, SolutionCriteria,
 )
 from q_alchemy.quantum_io_contract import ExperimentReport, PreparationPreflightSummary
 from tests.test_feasibility import EXPERIMENT_REPORT
@@ -92,8 +92,6 @@ def test_execution_defaults_and_legacy_options():
         EvidenceCollectionConfig(execution_options={"transpile_options": {"optimization_level": 1}})
     with pytest.raises(ValueError, match="boolean"):
         EvidenceCollectionConfig(execution_options={"transpile": "false"})
-    with pytest.raises(ValueError, match="classical-first"):
-        FeasibilityPolicy(classical_first=False)
     with pytest.raises(TypeError, match="resource_sweep_scales"):
         EvidenceCollectionConfig(resource_sweep_scales=(1.0, 0.5))
 
@@ -118,3 +116,30 @@ def test_retired_max_steps_is_ignored_and_not_emitted(legacy_value):
 def test_removed_python_iteration_argument_is_rejected():
     with pytest.raises(TypeError, match="max_steps"):
         FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1), max_steps=1)
+
+
+@pytest.mark.parametrize("mode", list(QuantumExecutionPolicy))
+@pytest.mark.parametrize("retired_fields", [
+    {"classical_first": True, "dense_memory_utilization_fraction": .8},
+    {"classical_first": False, "dense_memory_utilization_fraction": "retired"},
+])
+def test_policy_request_drops_retired_fields(mode, retired_fields):
+    request = FeasibilityRequest(
+        criteria=SolutionCriteria.common(max_observable_rmse=.1),
+        policy=FeasibilityPolicy(quantum_execution=mode),
+    )
+    expected = {"quantum_execution": mode.value}
+    payload = request.to_dict()
+    assert payload["policy"] == expected
+    payload["policy"].update(retired_fields)
+    restored = FeasibilityRequest.from_json(json.dumps(payload))
+    assert restored == request
+    assert restored.to_dict()["policy"] == expected
+
+
+@pytest.mark.parametrize("field,value", [
+    ("classical_first", True), ("dense_memory_utilization_fraction", .8),
+])
+def test_removed_policy_constructor_parameters_are_rejected(field, value):
+    with pytest.raises(TypeError, match=field):
+        FeasibilityPolicy(**{field: value})

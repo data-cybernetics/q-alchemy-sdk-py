@@ -152,35 +152,18 @@ class RecommendedCompute(str, Enum):
 
 @dataclass(frozen=True)
 class FeasibilityPolicy:
-    classical_first: bool = True
     quantum_execution: QuantumExecutionPolicy = QuantumExecutionPolicy.WHEN_NEEDED
-    dense_memory_utilization_fraction: float = 0.80
-
-    def __post_init__(self) -> None:
-        if self.classical_first is not True:
-            raise ValueError(
-                "classical_first=False is not supported; feasibility is always "
-                "classical-first. Use quantum_execution=COMPARE to run both paths."
-            )
-        if not 0 < self.dense_memory_utilization_fraction <= 1:
-            raise ValueError("dense_memory_utilization_fraction must be in (0, 1]")
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "classical_first": self.classical_first,
             "quantum_execution": self.quantum_execution.value,
-            "dense_memory_utilization_fraction": self.dense_memory_utilization_fraction,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FeasibilityPolicy":
         return cls(
-            classical_first=data.get("classical_first", True),
             quantum_execution=QuantumExecutionPolicy(
                 str(data.get("quantum_execution", QuantumExecutionPolicy.WHEN_NEEDED.value))
-            ),
-            dense_memory_utilization_fraction=float(
-                data.get("dense_memory_utilization_fraction", 0.80)
             ),
         )
 
