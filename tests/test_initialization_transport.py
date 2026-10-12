@@ -151,9 +151,9 @@ def test_mixed_batches_group_and_restore_original_order(monkeypatch):
     expected = ['sparse-input', 'dense-positive', 'explicit-sparse', 'dense-negative']
     assert qasms == expected
     assert summaries == [{'label': label} for label in expected]
-    assert len(uploads) == 2
+    assert len(uploads) == 3  # Distinct sparse dtypes must not be promoted.
     assert sum(isinstance(item, np.ndarray) for item in uploads) == 1
-    assert sum(isinstance(item, (dict, list)) for item in uploads) == 1
+    assert sum(isinstance(item, (dict, list)) for item in uploads) == 2
 
 
 def test_parallel_dense_options_select_and_serialize_only_once(monkeypatch):

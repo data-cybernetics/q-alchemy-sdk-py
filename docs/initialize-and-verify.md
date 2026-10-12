@@ -189,3 +189,32 @@ section of the README.
   — the full prepare → simulate → verify notebook with plots.
 - The [PineXQ documentation](https://pinexq.net/docs/), to work with the
   underlying API directly.
+
+### Amplitude dtype
+
+Preparation and portable `State` inputs retain `float32`, `float64`, `complex64`,
+and `complex128` amplitude storage. NumPy and SciPy inputs infer the dtype from
+their data; `State.dense(...)` and `State.sparse(...)` also accept an explicit
+`dtype="float32"` (or another supported name) for Python lists. Integer/bool
+inputs use float64. Unsupported storage types are rejected by `State`.
+A real dtype rejects amplitudes with nonzero imaginary parts.
+
+```python
+values = np.array([.6, .8], dtype=np.float64)
+state = State.sparse(num_qubits=72, indices=[0, (1 << 71) + 3], amplitudes=values)
+assert state.dtype == "float64"
+```
+
+The existing sparse JSON wire includes an optional `dtype` field. Legacy
+Parquet transport includes dtype schema metadata; dense NumPy transport retains
+its native dtype. Batches of different dtypes are submitted in separate groups
+and results retain their original order. JSON payloads without `dtype` remain
+readable and default to complex128; old Parquet files keep their legacy behavior.
+
+Dtype preservation requires preparation ProCon **0.4.10+**, Quantum I/O core
+**0.12.9+** (hosted adapter **0.8.12+**), and Feasibility core **0.6.61+** (hosted
+adapter **0.2.20+**), as applicable. Older consumers can still read the wire but
+may widen amplitudes. Deploy updated consumers before releasing SDK **0.4.3**.
+Dtype preservation applies to the input passed into preparation. Quantum
+evolution, decomposition and other algorithm intermediates choose their own
+appropriate numerical types.

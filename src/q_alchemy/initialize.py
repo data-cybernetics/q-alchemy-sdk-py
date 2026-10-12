@@ -626,7 +626,7 @@ def _state_row(state_vector):
             raise ValueError("Preparation requires at least one qubit")
         if state_vector.indices is not None:
             return state_vector
-        state_vector = state_vector.amplitudes
+        state_vector = np.asarray(state_vector.amplitudes, dtype=state_vector.dtype)
     if sparse.issparse(state_vector):
         row = sparse.coo_matrix(state_vector.reshape(1, -1))
     else:
@@ -681,7 +681,7 @@ def _transport_data(matrix, *, legacy_sparse_transport=False):
                 if isinstance(row, State):
                     if row.num_qubits >= 63:
                         raise ValueError("Legacy sparse transport cannot represent 63 or more qubits; use State JSON")
-                    row = sparse.coo_matrix((row.amplitudes, ([0] * len(row.indices), row.indices)),
+                    row = sparse.coo_matrix((np.asarray(row.amplitudes, dtype=row.dtype), ([0] * len(row.indices), row.indices)),
                                             shape=(1, 1 << row.num_qubits))
                 converted.append(row)
             matrix = sparse.vstack(converted, format="coo")
@@ -839,19 +839,21 @@ def _batch_state_groups(state_vector):
     rows = list(state_vector)
     if not rows:
         raise ValueError("Expected a nonempty batch of state rows")
-    groups = {False: ([], []), True: ([], [])}
+    groups = {}
     width = None
     for index, state in enumerate(rows):
         row = _state_row(state)
         if width is not None and _row_qubits(row) != width:
             raise ValueError("All states in a batch must have the same width")
         width = _row_qubits(row)
-        indices, selected = groups[sparse.issparse(row) or isinstance(row, State)]
+        is_sparse = sparse.issparse(row) or isinstance(row, State)
+        key = (is_sparse, row.dtype if isinstance(row, State) else row.dtype.name)
+        indices, selected = groups.setdefault(key, ([], []))
         indices.append(index)
         selected.append(row)
 
     result = []
-    for is_sparse, (indices, selected) in groups.items():
+    for (is_sparse, _dtype), (indices, selected) in groups.items():
         if not indices:
             continue
         if is_sparse:
