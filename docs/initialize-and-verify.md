@@ -107,39 +107,46 @@ lossless and leaves the approximation budget with QTucker.
   the usual cleanup policy and timeout. If either job fails, the call raises.
   Uniform batches still use one job; parallel option sets share one serialization.
 
-Sparse JSON requires preparation ProCon **0.4.9 or later**. Deploy the adapter
-before upgrading SDK clients. For older adapters, set
+Sparse JSON requires a preparation adapter that supports the State wire format.
+Deploy that adapter before upgrading SDK clients. For older adapters, set
 `OptParams(legacy_sparse_transport=True)` to retain sparse Parquet transport;
 that format cannot represent 63 or more qubits. Existing NumPy and Parquet files
 remain accepted by the new adapter. No private QTucker dependency is added to the SDK.
 
 The adapter decodes sparse JSON once and packs one row into QTucker's unsigned
-64-bit words at dispatch, without SciPy, Arrow or dense-state conversions. This
-removes the transport's width restriction; it does not change subscription
-limits (currently 12 qubits Free / 20 Enterprise) or QTucker's resource safeguards.
-A state above 20 qubits can be represented and transported but is still rejected
-by the current service license check. Forcing an algorithm can also reach technical
-limits; for example, hierarchical Tucker's low-rank fallback can exceed the
-Python backend's dense-lifting limit even on a sparse 72-qubit state.
+64-bit words at dispatch, without SciPy, Arrow or dense-state conversions.
+Workload licensing admits states by the score below, independently of technical
+resource safeguards. For example, hierarchical Tucker's low-rank fallback can
+exceed the Python backend's dense-lifting limit even on an admitted sparse
+72-qubit state.
 
 ---
 
-## Plans & limits — the free tier is strongly limited
+## Plans and limits
 
 State preparation runs on Q-Alchemy's servers, so usage is bounded by your plan
-(read from your account's grants). **The free tier is intentionally limited** —
-it's meant for trying things out, not production-scale workloads:
+(read from your account's grants). Adapters with workload licensing use
+**state complexity = logical qubits × canonical nonzero amplitudes**. The same
+state score and allowances apply to Preparation's entanglement analysis and to
+Quantum I/O and Feasibility requests that supply a target state.
 
 | | Free plan | Enterprise plan |
 |---|---|---|
-| Max qubits for **state preparation** | **up to 12 qubits** | larger (currently up to ~16; in active expansion) |
-| Batch size (multi-state preparation) | **up to 100 states** | higher |
+| Maximum state complexity (inclusive) | **49,152** | **20,971,520** |
+| Batch size per preparation service job | **up to 100 states** | No separate commercial batch cap |
 | Simulator resource tier | **Standard (Medium)** | **XLarge** (auto-selected) |
 
-If you exceed a free-tier limit you'll get a clear error asking you to upgrade
-(`support@q-alchemy.com`). These numbers reflect the current prototype phase and
-may change — check the [portal](https://portal.q-alchemy.com/) for what your key
-allows.
+Count nonzeros after combining duplicate basis indices and removing exact-zero
+cancellations; explicit zeros do not count and tiny nonzeros do. State JSON
+requires unique indices, while the SDK canonicalizes legacy SciPy input. Each
+batch row must fit its allowance independently. A dense 12-qubit state scores
+`12 * 4096 = 49,152`; a sparse 72-qubit state with two amplitudes scores only 144.
+
+The authenticated adapter enforces admission, and the SDK preserves its error
+message. Older deployments can still enforce qubit limits. See the
+[licensing test guide](licensing_tests.md) to check the latest released services
+or override their versions. Admission does not guarantee successful execution;
+technical memory, width and algorithm constraints still apply.
 
 ### Simulator tiers are automatic
 

@@ -37,13 +37,14 @@ If you would like to run our examples, please use
 pip install q-alchemy-sdk-py[examples]
 ```
 
-We use [uv](https://docs.astral.sh/uv/) and have tested this all with Python 3.11 through 3.14. So the way to install 
-it after cloning is simply
+The SDK supports Python 3.11 through 3.14. We use
+[uv](https://docs.astral.sh/uv/). To install after cloning, run:
 
 ```bash
 uv sync --locked
 ```
 
+Dependency requirements are defined in [pyproject.toml](pyproject.toml).
 The SDK requires `pinexq-client>=2.1.0,<3`. Client 2.1.0 expects PineXQ
 JobManagement API 10.1. The client checks its protocol major/minor against the
 server and warns when they differ; the SDK preserves these warnings. A server
@@ -230,20 +231,43 @@ lossless and leaves the approximation budget with QTucker.
   the usual cleanup policy and timeout. If either job fails, the call raises.
   Uniform batches still use one job; parallel option sets share one serialization.
 
-Sparse JSON requires preparation ProCon **0.4.9 or later**. Deploy the adapter
-before upgrading SDK clients. For older adapters, set
+Sparse JSON requires a preparation adapter that supports the State wire format.
+For adapters without that support, set
 `OptParams(legacy_sparse_transport=True)` to retain sparse Parquet transport;
 that format cannot represent 63 or more qubits. Existing NumPy and Parquet files
 remain accepted by the new adapter. No private QTucker dependency is added to the SDK.
 
 The adapter decodes sparse JSON once and packs one row into QTucker's unsigned
-64-bit words at dispatch, without SciPy, Arrow or dense-state conversions. This
-removes the transport's width restriction; it does not change subscription
-limits (currently 12 qubits Free / 20 Enterprise) or QTucker's resource safeguards.
-A state above 20 qubits can be represented and transported but is still rejected
-by the current service license check. Forcing an algorithm can also reach technical
-limits; for example, hierarchical Tucker's low-rank fallback can exceed the
-Python backend's dense-lifting limit even on a sparse 72-qubit state.
+64-bit words at dispatch, without SciPy, Arrow or dense-state conversions.
+
+Preparation (including both entanglement methods), Quantum I/O and Feasibility
+adapters with workload licensing use **state complexity = logical qubits × nonzero
+amplitudes** whenever a target state is supplied:
+
+| Subscription | Maximum state complexity (inclusive) |
+|---|---:|
+| Free | 49,152 |
+| Enterprise | 20,971,520 |
+
+Count nonzeros after combining duplicate basis indices and removing exact-zero
+cancellations. Explicit zeros do not count; tiny nonzero amplitudes do. Dense and
+sparse representations of the same state have the same score. The State JSON
+contract requires unique indices; legacy SciPy inputs are canonicalized before
+transport. Nonzero support is counted in the transmitted dtype, with no numerical
+tolerance.
+
+For example, a 72-qubit state with two nonzero amplitudes scores 144 and fits Free;
+with 10,000 nonzero amplitudes it scores 720,000 and requires Enterprise. Preparation
+checks each batch row independently and retains the Free limit of 100 rows per
+service job. Authentication and admission checks belong to the adapters; the SDK
+does not enforce a second subscription policy. Older deployments can still use
+qubit-based admission. See [licensing tests](docs/licensing_tests.md) for live
+checks using the latest released ProCons, with optional version overrides.
+
+Admission does not guarantee that an algorithm can execute the state. Technical
+resource safeguards remain independent. For example, hierarchical Tucker's
+low-rank fallback can exceed the Python backend's dense-lifting limit even on a
+sparse 72-qubit state.
 
 The fields you are most likely to touch:
 
@@ -255,7 +279,7 @@ The fields you are most likely to touch:
 | `initialization_method` | `InitializationMethods.AUTO` | Which algorithm builds the circuit (see below). |
 | `extra_kwargs` | `{}` | Method-specific options, as a dict (see below). |
 | `use_qasm3` | `False` | Experimental: return OpenQASM 3 instead of OpenQASM 2. |
-| `legacy_sparse_transport` | `False` | Send sparse Parquet to preparation adapters older than 0.4.9. |
+| `legacy_sparse_transport` | `False` | Send sparse Parquet to preparation adapters without State JSON support. |
 | `remove_data` | `True` | Delete the job and its uploaded data once the result is fetched. |
 | `job_completion_timeout_sec` | `300` | How long to wait for the job before giving up. |
 
@@ -384,8 +408,7 @@ adapter; region indices in the report refer to its normalized baseline circuit.
 
 `CircuitCompressionParams` follows the other service clients: `api_key` defaults
 to `Q_ALCHEMY_API_KEY` (then `PINEXQ_API_KEY`), and `host` defaults to
-`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="0.1.7"` to pin a
-deployed step, or omit it to discover the visible version. Successful result
+`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Successful result
 retrieval removes SDK-created jobs and WorkData by default. Set `remove_data=False`
 to retain them. A failure or malformed report preserves the job for diagnosis;
 `CircuitCompressionExecutionError` exposes the remote error and its original
@@ -430,8 +453,7 @@ Q_ALCHEMY_RUN_LIVE_CIRCUIT_COMPRESSION=1 \
   pytest -v -s tests/test_circuit_compression_live_integration.py
 ```
 
-Optionally set `Q_ALCHEMY_CIRCUIT_COMPRESSION_STEP_VERSION=0.1.1` to pin the
-ProcessingStep, and `Q_ALCHEMY_HOST` to select a different PineXQ host. Both a key
+Optionally set `Q_ALCHEMY_HOST` to select a different PineXQ host. Both a key
 and the explicit live-test flag are required; otherwise these tests skip.
 
 The first test sends a two-qubit circuit with two CX gates, checks that compression
@@ -640,9 +662,8 @@ selects PineXQ runtime resources without exposing credentials in the experiment 
 
 #### Compact sparse reconstruction
 
-SDK 0.5.0 can submit preparation, reconstruction-observable generation,
-acquisition, fitting, and sparse model export in one Quantum I/O job. Requires
-deployed `q-alchemy-quantum-io-pinexq` 0.8.0 with Quantum I/O core 0.11.0.
+The SDK can submit preparation, reconstruction-observable generation,
+acquisition, fitting, and sparse model export in one Quantum I/O job.
 
 ```python
 from q_alchemy import (
@@ -666,7 +687,7 @@ plan = ExecutionPlan(
     ),
     estimation_output={"support": "target", "target_fidelity": True},
 )
-with QuantumIOService(QuantumIOParams(step_version="0.8.0")) as service:
+with QuantumIOService() as service:
     report = service.run(experiment, plan).result()
 print(report.format_summary())
 report.estimate.sparse_state.save_npz("reconstructed.npz")
@@ -737,8 +758,7 @@ print(report.format_summary())
 `FeasibilityReport.format_summary()` mirrors the canonical human-readable formatter in
 `q-alchemy-feasibility`, including classical and quantum status, resource/quality
 criteria, backend/model evidence, recommendation, and next-evidence requests.
-The SDK formatter is aligned with Feasibility 0.6.50, the PineXQ adapter 0.2.11, and
-Quantum I/O 0.11.0. Serialized core reports and their canonical summaries are kept
+Serialized core reports and their canonical summaries are kept
 as regression fixtures so later core changes can be checked without installing
 the server runtime in the SDK environment.
 
@@ -992,9 +1012,10 @@ print("fidelity:", state_fidelity(Statevector(sv.to_dense()), Statevector(target
 auto-selects your resource tier from your plan (Standard/Medium for everyone,
 XLarge for enterprise).
 
-> ⚠️ **The free plan is strongly limited** — state preparation is capped (currently
-> ~12 qubits, batches up to 100) and runs on the Medium simulator tier. Enterprise
-> plans get larger circuits and the XLarge tier. See the limits table in the guide.
+> Preparation's Free allowance is **49,152** for `logical_qubits * canonical_nnz`,
+> with batches of up to 100 states per service job. Enterprise allows **20,971,520**.
+> The simulator uses Medium for Free and XLarge for Enterprise. Technical resource
+> limits remain independent; see the limits table in the guide.
 
 📖 **Full guide:** [docs/initialize-and-verify.md](docs/initialize-and-verify.md) ·
 🧪 **Runnable notebook:** [examples/simulator_vs_initializer.ipynb](examples/simulator_vs_initializer.ipynb)
@@ -1204,7 +1225,7 @@ keys with those names are ignored through the existing unknown-field handling an
 are not emitted by new requests. A retired `classical_first=false` key cannot change
 the classical-first workflow; automatic dense-statevector fallback remains disabled.
 
-Since SDK 0.4.1 / core 0.6.59, sparse pruning thresholds in `sparse_config` or nested
+Sparse pruning thresholds in `sparse_config` or nested
 `run_options` must be numeric zero. Nonzero, boolean, string, or null values are
 rejected locally. Explicit zeros normalize away because Feasibility supplies the
 exact-reference settings itself; the default `sparse_config` is `{}`. Other sparse

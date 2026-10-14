@@ -2083,7 +2083,7 @@ wheels = [
 
 [[package]]
 name = "pinexq-client"
-version = "2.1.0"
+version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -2092,7 +2092,7 @@ dependencies = [
     { name = "pydantic" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6b/29/22bcdd8b7151a4650125eeb09dcf4cc24b7fbaea86b647543cb6b5aea7b2/pinexq_client-2.1.0-py3-none-any.whl", hash = "sha256:8fdb1bb77af6c832981b4de61b3d57d85bfb4366c3f58653aa46272d33e8116d", size = 108266, upload-time = "2026-10-03T21:58:06.848Z" },
+    { url = "https://files.pythonhosted.org/packages/95/28/8811a23b63c436cc6947850c0b3871f85551fed8463159b4ff4a1c288533/pinexq_client-2.4.0-py3-none-any.whl", hash = "sha256:389b0e24c1de74719e3b72ddeb7d88d51a8f180a6f6098ec2e2794d8f7c212c7", size = 112473, upload-time = "2026-10-14T13:47:44.104Z" },
 ]
 
 [[package]]
@@ -2679,7 +2679,7 @@ requires-dist = [
     { name = "pennylane", marker = "extra == 'pennylane'", specifier = ">=0.45.1" },
     { name = "pennylane-qiskit", marker = "extra == 'examples'", specifier = ">=0.45.0" },
     { name = "pennylane-qiskit", marker = "extra == 'pennylane'", specifier = ">=0.45.0" },
-    { name = "pinexq-client", specifier = ">=2.1.0,<3" },
+    { name = "pinexq-client", specifier = ">=2.4.0,<3" },
     { name = "pyarrow", specifier = ">=19.0.1" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pylatexenc", marker = "extra == 'examples'" },
