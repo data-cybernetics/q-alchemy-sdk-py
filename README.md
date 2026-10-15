@@ -64,6 +64,89 @@ And for running our examples,
 uv sync --locked --extra examples
 ```
 
+## Request licensing
+
+Calculate your request's **state score**, **circuit score**, or both, then compare
+with this table. Limits are inclusive: a score equal to the limit is allowed.
+
+| Request workload | Free limit | Enterprise limit |
+|---|---:|---:|
+| Target state: Preparation (including entanglement), Quantum I/O, Feasibility | 49,152 | 20,971,520 |
+| Circuit: Simulator, or supplied evolution in Quantum I/O / Feasibility | 2,500 | 25,000 |
+| Circuit: Circuit Compressor | 10,000 | 100,000 |
+
+If every applicable score fits Free, the request fits Free. Otherwise, it requires
+Enterprise if every score fits Enterprise. A score above the Enterprise limit
+exceeds both plans. For Quantum I/O and Feasibility requests containing both a
+target state and an evolution circuit, **both scores must fit your plan**. Without
+a target state, there is no target-state score to calculate.
+
+### State score
+
+**State score = number of logical qubits × number of nonzero amplitudes.**
+
+Count nonzero amplitudes in the dtype you submit, after adding together any
+entries with the same basis index. Ignore exact zeros, including entries that
+cancel to zero. Tiny nonzero amplitudes still count. Dense and sparse
+representations of the same state have the same score.
+
+| Example state | Calculation | Required plan |
+|---|---:|---|
+| Dense 12-qubit state, all amplitudes nonzero | `12 × 4,096 = 49,152` | Free |
+| Sparse 72-qubit state, 2 nonzero amplitudes | `72 × 2 = 144` | Free |
+| Sparse 72-qubit state, 10,000 nonzero amplitudes | `72 × 10,000 = 720,000` | Enterprise |
+
+For a dense state with every amplitude nonzero, the score is `n × 2**n`, where
+`n` is the number of qubits.
+For preparation batches, calculate each state's score separately; Free also
+allows at most **100 states per service job**.
+
+### Circuit score
+
+**Circuit score = sum of the weights of the submitted gates and operations.**
+
+The following gates have weight equal to the number of qubits they act on:
+
+| Gate names | Weight per gate |
+|---|---:|
+| `u`, `p`, `rx`, `ry`, `rz`, `x`, `y`, `z`, `h` | 1 |
+| `cx`, `cy`, `cz`, `rzz`, `swap` | 2 |
+| `ccx`, `cswap` | 3 |
+
+Other atomic gates, such as a unitary or multi-controlled X gate, have weight
+**`4**(q - 1)`**, where `q` is the number of qubits the gate acts on, including
+controls:
+
+| Qubits per other atomic gate | 1 | 2 | 3 | 4 |
+|---|---:|---:|---:|---:|
+| Weight per gate | 1 | 4 | 16 | 64 |
+
+For a custom gate with an explicit body, count the operations inside its body
+**each time the gate is used**, including nested custom gates. Each measurement
+or reset adds 1 per qubit. Barriers, delays, and global phase add 0. An open
+control (a control on zero) on a listed gate adds 2 for each open control.
+Qiskit's `initialize` costs `4**(q - 1) + q`, including its resets.
+
+For example, **1,000 H + 500 CX + 100 CCX** scores:
+
+```text
+1,000 × 1 + 500 × 2 + 100 × 3 = 2,300
+```
+
+That fits Free for all circuit services. A score of **3,000** requires Enterprise
+for Simulator or supplied evolution, and fits Free for Circuit Compressor.
+
+Count the circuit **as submitted, before optimization**; cancelling gates still
+count. Serialization can change the operations: an RZZ sent in QPY scores 2,
+while its QASM expansion into CX–RZ–CX scores 5. See the
+[detailed circuit rules](docs/licensing_tests.md#circuit-cases) for supported forms.
+
+These limits apply to services with workload licensing. The service checks your
+subscription and reports the circuit score and allowance; the SDK does not enforce
+a separate licensing policy. Passing a license check does not guarantee that a
+request fits the algorithm's technical resource limits. See
+[live licensing tests](docs/licensing_tests.md) to verify a deployment.
+
 ## Usage
 
 There are examples under the `/examples` folder, but for those that are eager to find out, here it is.
@@ -239,42 +322,6 @@ remain accepted by the new adapter. No private QTucker dependency is added to th
 
 The adapter decodes sparse JSON once and packs one row into QTucker's unsigned
 64-bit words at dispatch, without SciPy, Arrow or dense-state conversions.
-
-Preparation (including both entanglement methods), Quantum I/O and Feasibility
-adapters with workload licensing use **state complexity = logical qubits × nonzero
-amplitudes** whenever a target state is supplied:
-
-| Subscription | Maximum state complexity (inclusive) |
-|---|---:|
-| Free | 49,152 |
-| Enterprise | 20,971,520 |
-
-Count nonzeros after combining duplicate basis indices and removing exact-zero
-cancellations. Explicit zeros do not count; tiny nonzero amplitudes do. Dense and
-sparse representations of the same state have the same score. The State JSON
-contract requires unique indices; legacy SciPy inputs are canonicalized before
-transport. Nonzero support is counted in the transmitted dtype, with no numerical
-tolerance.
-
-For example, a 72-qubit state with two nonzero amplitudes scores 144 and fits Free;
-with 10,000 nonzero amplitudes it scores 720,000 and requires Enterprise. Preparation
-checks each batch row independently and retains the Free limit of 100 rows per
-service job. Authentication and admission checks belong to the adapters; the SDK
-does not enforce a second subscription policy. Older deployments can still use
-qubit-based admission. See [licensing tests](docs/licensing_tests.md) for live
-checks using the latest released ProCons, with optional version overrides.
-
-Circuit-consuming workload deployments also admit submitted circuits by weighted
-gate count. Simulator and supplied evolution in Quantum I/O/Feasibility allow
-**2,500 / 25,000** points for Free/Enterprise; Compressor allows **10,000 / 100,000**.
-Native gates weigh their arity, other atomic gates weigh `4 ** (arity - 1)`, and explicit
-custom bodies count on every invocation. Count the submitted representation before
-optimization; see [the public counting rules and live tests](docs/licensing_tests.md#circuit-cases).
-
-Admission does not guarantee that an algorithm can execute the state. Technical
-resource safeguards remain independent. For example, hierarchical Tucker's
-low-rank fallback can exceed the Python backend's dense-lifting limit even on a
-sparse 72-qubit state.
 
 The fields you are most likely to touch:
 
