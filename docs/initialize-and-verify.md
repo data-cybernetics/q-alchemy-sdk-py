@@ -52,7 +52,6 @@ result. It picks the circuit transport automatically (inline OpenQASM for small
 circuits, a QPY upload for large ones).
 
 ```python
-from qiskit.quantum_info import Statevector, state_fidelity
 from q_alchemy import SparseSimulator
 
 sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from the env
@@ -61,18 +60,17 @@ sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from the e
 sv = sim.sparse_statevector(prep, sparse_index_format="bitstring")
 print(sv.nnz, "non-zero amplitudes")
 
-# Did we prepare the state we asked for, and does the simulator agree with Qiskit?
-print("vs target:", state_fidelity(Statevector(sv.to_dense()), Statevector(target)))
-print("vs qiskit:", state_fidelity(Statevector(sv.to_dense()), Statevector(prep)))
+# Compare the simulator output directly against the requested amplitudes.
+print("vs target:", abs(np.vdot(target, sv.to_dense()))**2)
 
 # (b) Measurement counts (Born-rule sampling).
 measured = prep.copy(); measured.measure_all()
 print(sim.counts(measured, shots=8192).counts)
 
 # (c) Tomography: an exact analysis of the simulated state (not measurement-based):
-#     density matrix and purity, plus fidelity against a dense reference for small circuits.
+#     density matrix and purity, without a second simulation.
 tomo = sim.tomography(prep)
-print("purity:", tomo.purity, "fidelity:", tomo.state_fidelity)
+print("purity:", tomo.purity)
 ```
 
 For a sparse target the simulator reproduces the prepared state **exactly**

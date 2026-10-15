@@ -264,6 +264,13 @@ does not enforce a second subscription policy. Older deployments can still use
 qubit-based admission. See [licensing tests](docs/licensing_tests.md) for live
 checks using the latest released ProCons, with optional version overrides.
 
+Circuit-consuming workload deployments also admit submitted circuits by weighted
+gate count. Simulator and supplied evolution in Quantum I/O/Feasibility allow
+**2,500 / 25,000** points for Free/Enterprise; Compressor allows **10,000 / 100,000**.
+Native gates weigh their arity, other atomic gates weigh `4 ** (arity - 1)`, and explicit
+custom bodies count on every invocation. Count the submitted representation before
+optimization; see [the public counting rules and live tests](docs/licensing_tests.md#circuit-cases).
+
 Admission does not guarantee that an algorithm can execute the state. Technical
 resource safeguards remain independent. For example, hierarchical Tucker's
 low-rank fallback can exceed the Python backend's dense-lifting limit even on a

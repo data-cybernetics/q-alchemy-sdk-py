@@ -1834,6 +1834,7 @@ class ExperimentReport:
     circuit_compression: CircuitCompressionSummary | None = None
     # Optional portable QASM 3, separate from runtime-only circuit objects.
     portable_quantum_circuit: Mapping[str, Any] | None = None
+    circuit_complexity: Mapping[str, Any] | None = None
 
     @property
     def quantum_circuit(self) -> Any | None:
@@ -1898,6 +1899,8 @@ class ExperimentReport:
                 else None
             ),
             warnings=tuple(str(item) for item in data.get("warnings", ())),
+            circuit_complexity=(dict(data['circuit_complexity'])
+                                if isinstance(data.get('circuit_complexity'), Mapping) else None),
             reference_to_estimated_surrogate_fidelity=(float(data["reference_to_estimated_surrogate_fidelity"]) if data.get("reference_to_estimated_surrogate_fidelity") is not None else None),
             reference_to_estimated_surrogate_infidelity=(float(data["reference_to_estimated_surrogate_infidelity"]) if data.get("reference_to_estimated_surrogate_infidelity") is not None else None),
         )
@@ -1906,6 +1909,8 @@ class ExperimentReport:
         payload = {
             "generated_at": self.generated_at,
             "mode": self.mode,
+            **({'circuit_complexity': dict(self.circuit_complexity)}
+               if self.circuit_complexity is not None else {}),
             **({"quantum_circuit": _portable_quantum_circuit(self.portable_quantum_circuit)}
                if self.portable_quantum_circuit is not None else {}),
             "experiment": self.experiment.to_dict(),

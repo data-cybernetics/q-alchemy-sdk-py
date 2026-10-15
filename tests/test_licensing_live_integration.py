@@ -8,6 +8,8 @@ from pinexq.client.job_management.model import JobStates
 
 import q_alchemy.initialize as preparation
 from q_alchemy import (
+    Circuit, CircuitCompressionExecutionError, CircuitCompressionParams,
+    CircuitCompressionRequest, CircuitCompressionService,
     CircuitCompressionConfig, EvidenceCollectionConfig, FeasibilityExecutionError,
     FeasibilityParams, FeasibilityPolicy, FeasibilityRequest, FeasibilityService,
     QuantumExecutionPolicy, QuantumExperiment, QuantumIOParams, QuantumIOService,
@@ -39,7 +41,7 @@ def live_configuration():
         pytest.fail("Live licensing tests require Q_ALCHEMY_API_KEY (or PINEXQ_API_KEY)")
     versions = {
         adapter: os.getenv(f"QALCHEMY_LICENSING_{adapter.upper()}_VERSION", "").strip() or None
-        for adapter in ADAPTERS
+        for adapter in ADAPTERS + ('simulator', 'circuit_compressor')
     }
     with preparation.create_client(options) as client:
         response = client.get("/api/EntryPoint")
@@ -153,3 +155,135 @@ def test_live_over_limit_reports_subscription_failure(
     message = str(captured.value)
     assert "state complexity" in message
     assert str(limit) in message and str(n * (k + 1)) in message
+
+
+def _circuit_workload(score, *, measured=False):
+    """Cheap zero-state circuit; score counts input before cancellations."""
+    from qiskit import QuantumCircuit
+    block = QuantumCircuit(2)
+    for _ in range(50):
+        block.cx(0, 1)
+    gate = block.to_gate()
+    circuit = QuantumCircuit(2, 1 if measured else 0)
+    score -= int(measured)
+    for _ in range(score // 100):
+        circuit.append(gate, [0, 1])
+    for _ in range(score % 100):
+        circuit.z(0)
+    if measured:
+        circuit.measure(0, 0)
+    return circuit
+
+
+@contextmanager
+def _circuit_submission(adapter, circuit, configuration, monkeypatch, *, form=None, capability='counts'):
+    connection, versions, _ = configuration
+    version = versions[adapter]
+    if adapter == 'simulator':
+        import q_alchemy.simulator as simulator
+        if version is not None:
+            monkeypatch.setattr(simulator, 'find_processing_step',
+                                lambda client, name: preparation.from_name(client, name, version=version))
+        jobs = []
+        configure = simulator.Job.create_and_configure_rapidly
+        def record_job(self, *args, **kwargs):
+            job = configure(self, *args, **kwargs)
+            jobs.append(job)
+            return job
+        monkeypatch.setattr(simulator.Job, 'create_and_configure_rapidly', record_job)
+        params = simulator.SimulatorParams(api_key=connection.api_key, host=connection.host,
+                                           remove_data=False, tier='standard',
+                                           job_completion_timeout_sec=300)
+        with simulator.SparseSimulator(params) as service:
+            try:
+                yield lambda: getattr(service, capability)(circuit, input_form=form)
+            finally:
+                for job in jobs:
+                    _delete_terminal_job(job)
+        return
+    params_type, service_type = {
+        'circuit_compressor': (CircuitCompressionParams, CircuitCompressionService),
+        'quantum_io': (QuantumIOParams, QuantumIOService),
+        'feasibility': (FeasibilityParams, FeasibilityService),
+    }[adapter]
+    params = params_type(api_key=connection.api_key, host=connection.host,
+                         step_version=version, remove_data=False, job_completion_timeout_sec=300)
+    with service_type(params) as service:
+        if adapter == 'circuit_compressor':
+            handle = service.compress(circuit, CircuitCompressionRequest(options={'optimization_level': 3}))
+        else:
+            experiment = QuantumExperiment(
+                target=State.sparse(num_qubits=2, indices=[0], amplitudes=[1.]),
+                evolution=Circuit.from_qiskit(circuit))
+            if adapter == 'quantum_io':
+                handle = service.preflight(experiment, verify_preparation=False)
+            else:
+                request = FeasibilityRequest(
+                    criteria=SolutionCriteria.common(min_final_state_fidelity=.999),
+                    policy=FeasibilityPolicy(quantum_execution=QuantumExecutionPolicy.NEVER),
+                    evidence_collection=EvidenceCollectionConfig(
+                        circuit_compression=CircuitCompressionConfig(enabled=False)))
+                handle = service.analyze(experiment, request)
+        try:
+            yield handle.result
+        finally:
+            if not handle.removed:
+                _delete_terminal_job(handle.raw_job)
+
+
+CIRCUIT_CASES = [('simulator', form, capability)
+                 for form in ('qasm_string', 'qasm_file', 'qpy')
+                 for capability in ('counts', 'sparse_statevector', 'tomography')]
+CIRCUIT_CASES += [(adapter, None, None)
+                  for adapter in ('circuit_compressor', 'quantum_io', 'feasibility')]
+
+
+@pytest.mark.parametrize('adapter,form,capability', CIRCUIT_CASES)
+@pytest.mark.parametrize('extra', [0, 1], ids=['exact-limit', 'one-over'])
+def test_live_circuit_admission_success_and_failure(
+        live_configuration, monkeypatch, adapter, form, capability, extra):
+    # The account's authenticated plan selects the public contract fixture.
+    state_limit = live_configuration[2][0]
+    enterprise = state_limit == BOUNDARIES['enterprise'][0]
+    limit = ((100_000 if enterprise else 10_000) if adapter == 'circuit_compressor'
+             else (25_000 if enterprise else 2_500))
+    circuit = _circuit_workload(limit + extra, measured=capability == 'counts')
+    error_type = {'feasibility': FeasibilityExecutionError,
+                  'circuit_compressor': CircuitCompressionExecutionError}.get(adapter, PollingException)
+    with _circuit_submission(adapter, circuit, live_configuration, monkeypatch,
+                             form=form, capability=capability) as result:
+        if extra:
+            with pytest.raises(error_type) as captured:
+                result()
+            message = str(captured.value)
+            assert 'circuit complexity' in message
+            assert str(limit) in message and str(limit + 1) in message
+        else:
+            report = result()
+            complexity = (report.circuit_complexity if adapter == 'quantum_io'
+                          else report.raw['circuit_complexity'])
+            assert complexity['score'] == complexity['limit'] == limit
+            assert complexity['policy'] == 'circuit-score-v1'
+
+
+@pytest.mark.parametrize('max_nnz,expected_nnz', [(0, 8), (2, 2), (2_000_000, 8)])
+def test_live_simulator_preserves_amplitude_cap(
+        live_configuration, monkeypatch, max_nnz, expected_nnz):
+    import q_alchemy.simulator as simulator
+    from qiskit import QuantumCircuit
+    connection, versions, _ = live_configuration
+    if versions['simulator'] is not None:
+        monkeypatch.setattr(simulator, 'find_processing_step',
+                            lambda client, name: preparation.from_name(
+                                client, name, version=versions['simulator']))
+    circuit = QuantumCircuit(3)
+    circuit.h(range(3))
+    with simulator.SparseSimulator(api_key=connection.api_key, host=connection.host,
+                                   tier='standard', remove_data=True) as service:
+        result = service.sparse_statevector(circuit, max_nnz=max_nnz, input_form='qpy')
+    metadata = result.raw['simulation_metadata']
+    assert result.nnz == expected_nnz
+    assert metadata['max_nnz'] == max_nnz
+    assert metadata['max_nnz_mode'] == ('unlimited' if max_nnz == 0 else 'explicit')
+    assert bool(metadata['amplitude_capping_occurred']) == (max_nnz == 2)
+    assert result.raw['circuit_complexity']['score'] == 3
