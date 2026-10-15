@@ -27,7 +27,7 @@ without touching the job-management API directly::
     sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from env
     print(sim.counts(qc, shots=2048).counts)    # {'00': ..., '11': ...}
     print(sim.sparse_statevector(qc).amplitudes_dict())
-    print(sim.tomography(qc).state_fidelity)    # ~1.0 vs the dense reference
+    print(sim.tomography(qc).purity)            # ~1.0 for the Bell state
 
 The circuit input form is chosen automatically (small circuits go inline as
 OpenQASM 2, larger ones are uploaded as QPY WorkData); override it with
@@ -165,9 +165,9 @@ class CountsResult:
 class SparseStatevectorResult:
     """Sparse state-vector: only the amplitudes above the simulator's ``1e-10`` cutoff.
 
-    Exact unless the run set ``max_nnz``: the simulator then keeps only the
-    ``max_nnz`` largest amplitudes after every gate and renormalises them, and
-    nothing here marks that the state was truncated.
+    A positive ``max_nnz`` can truncate the state by keeping the largest
+    amplitudes and renormalising them. ``0`` imposes no amplitude-count cap.
+    Inspect ``raw['simulation_metadata']`` for capping and pruning statistics.
     """
 
     num_qubits: int
@@ -258,12 +258,12 @@ class SparseStatevectorResult:
 
 @dataclass
 class TomographyResult:
-    """Exact simulator-state analysis (not measurement-based tomography).
+    """Analysis of the simulated state (not measurement-based tomography).
 
     ``state`` is the reconstructed density matrix (full, or the reduced
     subsystem selected by ``measurement_indices``) as a complex ``ndarray``, when
-    one was materialized. ``state_fidelity`` is the fidelity against Qiskit's
-    dense ``Statevector`` reference, reported for the small full-state case.
+    one was materialized. Analysis uses the Q-Alchemy simulator's state without
+    running a Qiskit reference simulation.
     """
 
     num_qubits: int
@@ -272,7 +272,6 @@ class TomographyResult:
     state: np.ndarray | None
     state_is_reduced: bool | None
     purity: float | None
-    state_fidelity: float | None
     raw: dict
 
     @classmethod
@@ -290,7 +289,6 @@ class TomographyResult:
             state=state,
             state_is_reduced=raw.get("state_is_reduced"),
             purity=raw.get("purity"),
-            state_fidelity=raw.get("state_fidelity"),
             raw=raw,
         )
 
@@ -482,10 +480,13 @@ class SparseSimulator:
     ) -> SparseStatevectorResult:
         """Export the sparse state-vector produced by ``circuit``.
 
-        ``max_nnz=0`` (the default) keeps every amplitude above ``1e-10``: exact,
-        but a state that is not sparse needs as much memory as the dense vector.
-        A positive ``max_nnz`` caps it, keeping the largest amplitudes and
-        renormalising after every gate, so the result becomes approximate.
+        ``max_nnz=0`` (the default) imposes no amplitude-count cap, allowing
+        growth using available process/container memory. A positive value is
+        passed unchanged to the simulator. Capping keeps the largest amplitudes
+        and renormalises.
+        Inspect ``result.raw['simulation_metadata']`` for effective limits and
+        approximation statistics. Older service versions may use different
+        defaults; use the returned metadata to establish actual behavior.
         """
         raw = self._run(
             "sparse_statevector",

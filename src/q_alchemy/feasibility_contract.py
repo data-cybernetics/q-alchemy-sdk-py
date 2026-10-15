@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from enum import Enum
 import json
 from math import isfinite
-from numbers import Integral
+from numbers import Integral, Real
 from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
@@ -152,35 +152,18 @@ class RecommendedCompute(str, Enum):
 
 @dataclass(frozen=True)
 class FeasibilityPolicy:
-    classical_first: bool = True
     quantum_execution: QuantumExecutionPolicy = QuantumExecutionPolicy.WHEN_NEEDED
-    dense_memory_utilization_fraction: float = 0.80
-
-    def __post_init__(self) -> None:
-        if self.classical_first is not True:
-            raise ValueError(
-                "classical_first=False is not supported; feasibility is always "
-                "classical-first. Use quantum_execution=COMPARE to run both paths."
-            )
-        if not 0 < self.dense_memory_utilization_fraction <= 1:
-            raise ValueError("dense_memory_utilization_fraction must be in (0, 1]")
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "classical_first": self.classical_first,
             "quantum_execution": self.quantum_execution.value,
-            "dense_memory_utilization_fraction": self.dense_memory_utilization_fraction,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FeasibilityPolicy":
         return cls(
-            classical_first=data.get("classical_first", True),
             quantum_execution=QuantumExecutionPolicy(
                 str(data.get("quantum_execution", QuantumExecutionPolicy.WHEN_NEEDED.value))
-            ),
-            dense_memory_utilization_fraction=float(
-                data.get("dense_memory_utilization_fraction", 0.80)
             ),
         )
 
@@ -235,6 +218,38 @@ class CircuitCompressionConfig(QuantumIOCircuitCompressionConfig):
         return super().from_dict({"enabled": True, **data})
 
 
+def _validated_sparse_config(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("sparse_config must be a mapping")
+    config = dict(value)
+    if "run_options" in config:
+        if not isinstance(config["run_options"], Mapping):
+            raise ValueError("sparse_config.run_options must be a mapping")
+        config["run_options"] = dict(config["run_options"])
+    for path, options in (("sparse_config", config),
+                          ("sparse_config.run_options", config.get("run_options", {}))):
+        for key in ("sparse_epsilon", "final_sparse_epsilon"):
+            if key not in options:
+                continue
+            threshold = options.pop(key)
+            if isinstance(threshold, bool) or not isinstance(threshold, Real) or threshold != 0:
+                raise ValueError(
+                    f"{path}.{key} must be numeric zero; feasibility requires "
+                    "exact sparse references and does not permit amplitude pruning"
+                )
+    return config
+
+
+def _validate_sparse_memory_control(config: Mapping[str, Any]) -> None:
+    for path, options in (("sparse_config", config),
+                          ("sparse_config.run_options", config.get("run_options", {}))):
+        if "max_nnz" in options:
+            raise ValueError(
+                f"{path}.max_nnz cannot be combined with a feasibility RAM budget; "
+                "use classical_resources.available_memory_bytes instead"
+            )
+
+
 @dataclass(frozen=True)
 class EvidenceCollectionConfig:
     """Portable acquisition controls for Feasibility >= 0.6.48.
@@ -248,7 +263,7 @@ class EvidenceCollectionConfig:
     backend_options: Mapping[str, Any] = field(default_factory=dict)
     shots: int = 4096
     preparation_options: Mapping[str, Any] = field(default_factory=dict)
-    sparse_config: Mapping[str, Any] = field(default_factory=lambda: {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})
+    sparse_config: Mapping[str, Any] = field(default_factory=dict)
     qtucker_config: Mapping[str, Any] = field(default_factory=dict)
     circuit_compression: CircuitCompressionConfig = field(
         default_factory=CircuitCompressionConfig
@@ -263,6 +278,7 @@ class EvidenceCollectionConfig:
 
     def __post_init__(self) -> None:
         _boolean(self.least_busy, "least_busy")
+        object.__setattr__(self, "sparse_config", _validated_sparse_config(self.sparse_config))
         if not isinstance(self.circuit_compression, CircuitCompressionConfig):
             raise ValueError("circuit_compression must be a CircuitCompressionConfig")
         if not isinstance(self.qtucker_observable_config, Mapping):
@@ -337,7 +353,7 @@ class EvidenceCollectionConfig:
             backend_options=dict(data.get("backend_options", {})),
             shots=data.get("shots", 4096),
             preparation_options=dict(data.get("preparation_options", {})),
-            sparse_config=dict(data.get("sparse_config", {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})),
+            sparse_config=data.get("sparse_config", {}),
             qtucker_config=dict(data.get("qtucker_config", {})),
             circuit_compression=CircuitCompressionConfig.from_dict(
                 data.get("circuit_compression", {})
@@ -353,14 +369,12 @@ class FeasibilityRequest:
     policy: FeasibilityPolicy = field(default_factory=FeasibilityPolicy)
     evidence_collection: EvidenceCollectionConfig = field(default_factory=EvidenceCollectionConfig)
     classical_resources: ClassicalResources | None = None
-    max_steps: int = 16
     metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: int = 1
 
     def __post_init__(self) -> None:
         _schema_version(self.schema_version)
-        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, Integral) or self.max_steps <= 0:
-            raise ValueError("max_steps must be a positive integer")
+        _validate_sparse_memory_control(_validated_sparse_config(self.evidence_collection.sparse_config))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -370,7 +384,6 @@ class FeasibilityRequest:
             "policy": self.policy.to_dict(),
             "evidence_collection": self.evidence_collection.to_dict(),
             "classical_resources": self.classical_resources.to_dict() if self.classical_resources else None,
-            "max_steps": self.max_steps,
             "metadata": dict(self.metadata),
         }
 
@@ -385,7 +398,6 @@ class FeasibilityRequest:
             policy=FeasibilityPolicy.from_dict(data.get("policy", {})),
             evidence_collection=EvidenceCollectionConfig.from_dict(data.get("evidence_collection", {})),
             classical_resources=ClassicalResources.from_dict(resources) if resources is not None else None,
-            max_steps=data.get("max_steps", 16),
             metadata=dict(data.get("metadata", {})),
         )
 
