@@ -8,6 +8,15 @@ Each release on GitHub has fuller notes.
 
 ## [Unreleased]
 
+### Fixed
+
+- README: the compact sparse reconstruction example pinned Quantum I/O
+  `step_version="0.8.0"`, which was never deployed, so it failed to find the step.
+  It now uses the default version discovery. The other version-pinning examples
+  use a placeholder instead of a version that will be retired.
+- README: the same section credited the feature to SDK 0.5.0, the working version
+  number before the release was renumbered; it shipped in 0.4.0.
+
 ## [0.4.0] - 2026-10-08
 
 Adds three hosted services (Quantum I/O, feasibility analysis and circuit compression)

@@ -368,8 +368,9 @@ adapter; region indices in the report refer to its normalized baseline circuit.
 
 `CircuitCompressionParams` follows the other service clients: `api_key` defaults
 to `Q_ALCHEMY_API_KEY` (then `PINEXQ_API_KEY`), and `host` defaults to
-`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="0.1.7"` to pin a
-deployed step, or omit it to discover the visible version. Successful result
+`Q_ALCHEMY_HOST` or `jobs.api.q-alchemy.com`. Set `step_version="<version>"` to pin a
+deployed step, or omit it to discover the visible version. Superseded versions are
+retired over time, so a pinned version can stop resolving. Successful result
 retrieval removes SDK-created jobs and WorkData by default. Set `remove_data=False`
 to retain them. A failure or malformed report preserves the job for diagnosis;
 `CircuitCompressionExecutionError` exposes the remote error and its original
@@ -414,7 +415,7 @@ Q_ALCHEMY_RUN_LIVE_CIRCUIT_COMPRESSION=1 \
   pytest -v -s tests/test_circuit_compression_live_integration.py
 ```
 
-Optionally set `Q_ALCHEMY_CIRCUIT_COMPRESSION_STEP_VERSION=0.1.1` to pin the
+Optionally set `Q_ALCHEMY_CIRCUIT_COMPRESSION_STEP_VERSION=<version>` to pin the
 ProcessingStep, and `Q_ALCHEMY_HOST` to select a different PineXQ host. Both a key
 and the explicit live-test flag are required; otherwise these tests skip.
 
@@ -624,14 +625,15 @@ selects PineXQ runtime resources without exposing credentials in the experiment 
 
 #### Compact sparse reconstruction
 
-SDK 0.5.0 can submit preparation, reconstruction-observable generation,
+SDK 0.4.0 can submit preparation, reconstruction-observable generation,
 acquisition, fitting, and sparse model export in one Quantum I/O job. Requires
-deployed `q-alchemy-quantum-io-pinexq` 0.8.0 with Quantum I/O core 0.11.0.
+deployed `q-alchemy-quantum-io-pinexq` 0.8.0 or later; the default version discovery
+selects the newest deployed step.
 
 ```python
 from q_alchemy import (
-    ExecutionPlan, MeasurementPlan, QuantumExperiment, QuantumIOParams,
-    QuantumIOService, Runtime, State,
+    ExecutionPlan, MeasurementPlan, QuantumExperiment, QuantumIOService,
+    Runtime, State,
 )
 
 target = State.sparse(num_qubits=2, indices=[0, 3], amplitudes=[2**-.5, 2**-.5])
@@ -650,7 +652,7 @@ plan = ExecutionPlan(
     ),
     estimation_output={"support": "target", "target_fidelity": True},
 )
-with QuantumIOService(QuantumIOParams(step_version="0.8.0")) as service:
+with QuantumIOService() as service:
     report = service.run(experiment, plan).result()
 print(report.format_summary())
 report.estimate.sparse_state.save_npz("reconstructed.npz")
