@@ -625,7 +625,7 @@ selects PineXQ runtime resources without exposing credentials in the experiment 
 
 #### Compact sparse reconstruction
 
-SDK 0.5.0 can submit preparation, reconstruction-observable generation,
+SDK 0.4.0 can submit preparation, reconstruction-observable generation,
 acquisition, fitting, and sparse model export in one Quantum I/O job. Requires
 deployed `q-alchemy-quantum-io-pinexq` 0.8.0 or later with Quantum I/O core 0.11.0;
 the default version discovery selects the newest deployed step.
