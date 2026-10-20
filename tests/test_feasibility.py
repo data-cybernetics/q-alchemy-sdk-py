@@ -814,7 +814,7 @@ def test_report_format_summary_matches_feasibility_core_resource_and_model_style
         "  Quality reason: Backend-calibrated noisy simulation violates the required Observable RMSE criterion.\n"
         "  Backend: ibm_test\n"
         "  Assessment basis: calibrated-model\n"
-        "  Noisy simulation performed: True\n"
+        "  Quantum simulator execution performed: True\n"
         "  QPU execution performed: False\n"
         "  Median 2Q error: 0.008\n"
         "  Median T2: 8e-05 s\n"
@@ -1101,13 +1101,13 @@ def test_report_summary_matches_core_classical_resource_telemetry_and_memory_bou
     summary = FeasibilityReport.from_dict(payload).format_summary()
     assert "  Resource criteria:\n" in summary
     assert "    Classical RAM limit: 24 GiB\n" in summary
-    assert "    Detected simulator host budget: 20 GiB\n" in summary
+    assert "    Simulator working-set budget: 20 GiB\n" in summary
     assert "    Sparse memory estimate at amplitude limit: 12 GiB\n" in summary
     assert (
         "    Classical memory requirement: 8 GiB (lower bound); "
         "<= 24 GiB available [INCONCLUSIVE]\n"
     ) in summary
-    assert "Detected simulator host budget: 1 GiB" not in summary
+    assert "Simulator working-set budget: 1 GiB" not in summary
 
 
 def test_report_summary_matches_core_quantum_resource_criterion_order():

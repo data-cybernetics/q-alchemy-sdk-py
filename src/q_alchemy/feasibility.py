@@ -15,7 +15,7 @@ from pinexq.client.job_management import Job, enter_jma
 from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
-from q_alchemy.feasibility_contract import FeasibilityReport, FeasibilityRequest
+from q_alchemy.feasibility_contract import FeasibilityReport, FeasibilityRequest, ResultScope
 from q_alchemy.initialize import create_client, find_processing_step, from_name
 from q_alchemy.quantum_io import (
     IBMQuantumCredentials,
@@ -80,7 +80,7 @@ class FeasibilityParams:
 
 
 class FeasibilityJob:
-    def __init__(self, job: Job, *, timeout_sec: int | None, remove_data: bool, input_workdata: list[_OwnedWorkData] | None = None) -> None:
+    def __init__(self, job: Job, *, timeout_sec: int | None, remove_data: bool, input_workdata: list[_OwnedWorkData] | None = None, result_scope: ResultScope = ResultScope.SELECTED) -> None:
         self._job = job
         self._timeout_sec = timeout_sec
         self._remove_data = remove_data
@@ -88,6 +88,7 @@ class FeasibilityJob:
         self._result: FeasibilityReport | None = None
         self._job_removed = False
         self._cleanup_complete = False
+        self._result_scope = ResultScope(result_scope)
 
     @property
     def removed(self) -> bool:
@@ -129,6 +130,10 @@ class FeasibilityJob:
                     f"Feasibility execution failed: {detail}",
                     original_exception=exc,
                 ) from None
+        if self._result_scope is ResultScope.ALL:
+            # A legacy server may silently ignore the request option. Preserve
+            # its report and job instead of treating missing results as empty.
+            self._result.require_computation_results()
         if self._remove_data and not self._cleanup_complete:
             self._job_removed, self._input_workdata = _delete_job_then_inputs(
                 self._job,
@@ -237,6 +242,7 @@ class FeasibilityService:
             timeout_sec=self.params.job_completion_timeout_sec,
             remove_data=self.params.remove_data,
             input_workdata=owned_inputs,
+            result_scope=request.result_scope,
         )
 
     def _step(self, name: str):

@@ -217,7 +217,7 @@ and results retain their original order. JSON payloads without `dtype` remain
 readable and default to complex128; old Parquet files keep their legacy behavior.
 
 Dtype preservation requires preparation ProCon **0.4.10+**, Quantum I/O core
-**0.12.9+** (hosted adapter **0.8.12+**), and Feasibility core **0.6.61+** (hosted
+**0.12.9+** (hosted adapter **0.8.12+**), and Feasibility core **0.6.62+** (hosted
 adapter **0.2.20+**), as applicable. Older consumers can still read the wire but
 may widen amplitudes. Deploy updated consumers before releasing SDK **0.4.3**.
 Dtype preservation applies to the input passed into preparation. Quantum

@@ -363,6 +363,13 @@ class EvidenceCollectionConfig:
         )
 
 
+class ResultScope(str, Enum):
+    """Which retained reports to return; does not schedule execution."""
+
+    SELECTED = "selected"
+    ALL = "all"
+
+
 @dataclass(frozen=True)
 class FeasibilityRequest:
     criteria: SolutionCriteria
@@ -371,15 +378,18 @@ class FeasibilityRequest:
     classical_resources: ClassicalResources | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: int = 1
+    result_scope: ResultScope = ResultScope.SELECTED
 
     def __post_init__(self) -> None:
         _schema_version(self.schema_version)
+        object.__setattr__(self, "result_scope", ResultScope(self.result_scope))
         _validate_sparse_memory_control(_validated_sparse_config(self.evidence_collection.sparse_config))
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "kind": "feasibility-request",
+            "result_scope": self.result_scope.value,
             "criteria": self.criteria.to_dict(),
             "policy": self.policy.to_dict(),
             "evidence_collection": self.evidence_collection.to_dict(),
@@ -399,6 +409,7 @@ class FeasibilityRequest:
             evidence_collection=EvidenceCollectionConfig.from_dict(data.get("evidence_collection", {})),
             classical_resources=ClassicalResources.from_dict(resources) if resources is not None else None,
             metadata=dict(data.get("metadata", {})),
+            result_scope=data.get("result_scope", ResultScope.SELECTED),
         )
 
     def to_json(self, *, indent: int | None = None) -> str:
@@ -798,7 +809,7 @@ def _format_classical_resource_criteria_lines(
     for metric, label in (
         (
             _CLASSICAL_SIMULATOR_BUDGET_BYTES,
-            "Detected simulator host budget",
+            "Simulator working-set budget",
         ),
         (
             _CLASSICAL_ESTIMATED_PEAK_MEMORY_BYTES,
@@ -975,6 +986,58 @@ class FeasibilityRecommendation:
 
 
 @dataclass(frozen=True)
+class ComputationResult:
+    """One retained QIO report and its association with an assessment.
+
+    ``completed`` is the server's reference/execution availability check. It does
+    not certify measurement coverage or quality. IDs are local to an assessment.
+    """
+
+    result_id: str
+    evidence_request: str
+    mode: str | None
+    source: str | None
+    source_kind: str | None
+    completed: bool
+    selected_by_recommendation: bool
+    is_primary: bool
+    experiment_report: ExperimentReport
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ComputationResult":
+        from .quantum_io_contract import ExperimentReport
+
+        for key in ("result_id", "evidence_request"):
+            if not isinstance(data.get(key), str) or not data[key]:
+                raise ValueError(f"computation result {key} must be a non-empty string")
+        for key in ("completed", "selected_by_recommendation", "is_primary"):
+            _boolean(data.get(key), f"computation result {key}")
+        return cls(
+            result_id=data["result_id"],
+            evidence_request=data["evidence_request"],
+            mode=data.get("mode"),
+            source=data.get("source"),
+            source_kind=data.get("source_kind"),
+            completed=data["completed"],
+            selected_by_recommendation=data["selected_by_recommendation"],
+            is_primary=data["is_primary"],
+            experiment_report=ExperimentReport.from_dict(data["experiment_report"]),
+        )
+
+
+class ResultScopeUnavailableError(RuntimeError):
+    """The response did not acknowledge the requested all-results contract."""
+
+    def __init__(self, report: FeasibilityReport):
+        super().__init__(
+            "The service did not return result_scope='all'. Use a service version "
+            "that supports all retained computation reports. The available "
+            "assessment is preserved on this exception's report attribute."
+        )
+        self.report = report
+
+
+@dataclass(frozen=True)
 class FeasibilityReport:
     raw: Mapping[str, Any]
 
@@ -983,7 +1046,33 @@ class FeasibilityReport:
         _schema_version(data.get("schema_version"))
         if data.get("kind") != "feasibility-report":
             raise ValueError("payload kind must be 'feasibility-report'")
+        if data.get("result_scope") is not None:
+            scope = ResultScope(data["result_scope"])
+            if scope is ResultScope.ALL and not isinstance(data.get("computation_results"), list):
+                raise ValueError("result_scope='all' requires a computation_results array")
         return cls(dict(data))
+
+    @property
+    def result_scope(self) -> ResultScope | None:
+        """Applied scope, or None when a legacy service did not acknowledge it."""
+        value = self.raw.get("result_scope")
+        return ResultScope(value) if value is not None else None
+
+    @property
+    def computation_results(self) -> tuple[ComputationResult, ...] | None:
+        """All retained reports; None means unavailable, () means returned empty."""
+        if self.result_scope is not ResultScope.ALL:
+            return None
+        results = tuple(ComputationResult.from_dict(item) for item in self.raw["computation_results"])
+        if len({item.result_id for item in results}) != len(results):
+            raise ValueError("computation result IDs must be unique within an assessment")
+        return results
+
+    def require_computation_results(self) -> tuple[ComputationResult, ...]:
+        results = self.computation_results
+        if results is None:
+            raise ResultScopeUnavailableError(self)
+        return results
 
     @property
     def final(self) -> bool:
@@ -1263,7 +1352,11 @@ class FeasibilityReport:
             scopes=("quantum-model",),
         )
         if noisy_completion is not None and noisy_completion.get("value") is True:
-            lines.append("  Noisy simulation performed: True")
+            source_kind = _mapping(noisy_completion.get("metadata")).get("source_kind")
+            label = {"ideal-simulator": "Ideal simulation", "noisy-simulator": "Noisy simulation"}.get(
+                source_kind, "Quantum simulator execution"
+            )
+            lines.append(f"  {label} performed: True")
         lines.append(
             f"  QPU execution performed: {bool(quantum.get('execution_performed', False))}"
         )

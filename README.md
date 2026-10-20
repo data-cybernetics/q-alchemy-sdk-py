@@ -943,6 +943,55 @@ if computation is not None:
     print(computation.format_summary())
 ```
 
+For comparison measurements as well as the selected calculation, request all retained
+reports explicitly:
+
+```python
+from dataclasses import replace
+from q_alchemy import ResultScope
+
+request = replace(request, result_scope=ResultScope.ALL)
+report = FeasibilityService().analyze(experiment, request).result()
+for result in report.require_computation_results():
+    computation = result.experiment_report  # existing typed Quantum I/O ExperimentReport
+    measurements = computation.execution
+    if measurements is None and computation.reference is not None:
+        measurements = computation.reference.measurements
+    if measurements is not None and measurements.observations is not None:
+        for observation in measurements.observations.observations:
+            print(result.result_id, result.source_kind, observation.label,
+                  observation.value, observation.stderr, observation.shots)
+```
+
+`result_scope` accepts `"selected"` (the default) or `"all"` and changes reporting only.
+Use the existing `COMPARE` policy to request comparison execution. Under `COMPARE`,
+classical may remain the recommendation: its `reference.measurements` and the separate
+simulator/QPU report's `execution` are both accessible with `"all"`. The singular
+`computation_result` and `computation_experiment_report` keep their existing meanings.
+
+`report.result_scope` acknowledges the applied scope. `report.computation_results`
+returns typed `ComputationResult` entries, `()` for an acknowledged empty collection,
+or `None` when all results were not provided. Each entry wraps the existing Quantum I/O
+report with its `result_id`, evidence request, source, and selection information.
+The standard service links extracted evidence through `metadata.result_id`. IDs are
+local to the assessment and do not identify backend jobs or imply that a reused
+reference was simulated again. `completed` describes reference/execution availability;
+inspect the requested measurement labels and quality metrics separately.
+
+If an older service ignores an all-results request, `job.result()` raises
+`ResultScopeUnavailableError`. Its `.report` preserves the returned assessment and the
+job is retained; a missing collection is never silently treated as empty. Use a worker
+containing the updated Feasibility core and PineXQ adapter. Existing selected-result
+requests remain compatible with older workers.
+
+The collection preserves available measurement values, uncertainty, and shot metadata
+without executing again. Exact reference observations generally have no shot
+uncertainty; an ideal simulator acquisition may still use finite shots. Unknown
+uncertainty stays unknown. `source_kind` distinguishes ideal/noisy simulators, QPUs,
+and replay; Feasibility's `execution_performed` remains QPU-specific.
+All-results payloads may be larger, and they cannot recover measurements from a workflow
+that failed before returning its report.
+
 Quantum circuits are not returned by default because generated state-preparation circuits can
 be large. Request the logical experiment circuit (`P + U`) explicitly on the SDK call:
 
