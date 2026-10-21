@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .quantum_io_compression_contract import CircuitCompressionConfig as QuantumIOCircuitCompressionConfig
+from .quantum_io_compression_contract import _compression_diagnostic_lines
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1285,6 +1286,7 @@ class FeasibilityReport:
             lines.append(
                 f"  Accepted regions: {int(compression.get('accepted_regions', 0))}"
             )
+            lines.extend(_compression_diagnostic_lines(compression.get("diagnostics")))
 
         lines.extend(
             [
