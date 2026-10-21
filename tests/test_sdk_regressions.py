@@ -1,6 +1,7 @@
 """Offline regressions for job isolation, allocation limits and transport failures."""
 import base64
 import io
+import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event, Lock
 from types import SimpleNamespace
@@ -172,7 +173,9 @@ def test_parallel_order_limit_serialization_and_client_ownership(monkeypatch):
             else:
                 second_finished.set()
             assert base64.b64decode(inline) == payload
-            restored = recover_sparse_coo_from_arrow(pq.read_table(io.BytesIO(payload))).toarray()
+            wire = json.loads(payload)
+            restored = np.zeros((1, 1 << wire["num_qubits"]), complex)
+            restored[0, [int(index) for index in wire["indices"]]] = [complex(*value) for value in wire["amplitudes"]]
             np.testing.assert_array_equal(restored, [[1, 0]])
             return str(opt.extra_kwargs["index"])
         finally:
@@ -284,6 +287,8 @@ def test_shared_payload_follows_inline_and_upload_routes(monkeypatch, research):
         upload.assert_not_called()
         for call in configure.call_args_list:
             payload = base64.b64decode(call.kwargs["statevector_data"])
-            restored = recover_sparse_coo_from_arrow(pq.read_table(io.BytesIO(payload))).toarray()
+            wire = json.loads(payload)
+            restored = np.zeros((1, 1 << wire["num_qubits"]), complex)
+            restored[0, [int(index) for index in wire["indices"]]] = [complex(*value) for value in wire["amplitudes"]]
             np.testing.assert_array_equal(restored, [[1, 0]])
     client.close.assert_not_called()

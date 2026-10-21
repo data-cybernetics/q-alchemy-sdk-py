@@ -70,6 +70,7 @@ from .quantum_io import (
 from .feasibility_contract import (
     CircuitCompressionConfig,
     ClassicalResources,
+    ComputationResult,
     Criterion,
     EvidenceCollectionConfig,
     FeasibilityPolicy,
@@ -79,6 +80,8 @@ from .feasibility_contract import (
     FeasibilityRequest,
     QuantumExecutionPolicy,
     RecommendedCompute,
+    ResultScope,
+    ResultScopeUnavailableError,
     Relation,
     SolutionCriteria,
 )

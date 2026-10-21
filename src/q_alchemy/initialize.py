@@ -32,6 +32,7 @@ from pinexq.client.job_management.model import WorkDataQueryParameters, WorkData
 
 from q_alchemy.utils import is_power_of_two, nonnegative_integer
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
+from q_alchemy.quantum_io_contract import State
 
 # 1MB state vectors (16 bytes/amplitude * 2**16 amplitudes = 1048576 bytes)
 USE_INLINE_STATE_NUM_QUBITS = 16  # compatibility constant
@@ -68,6 +69,8 @@ class OptParams:
     use_qasm3: bool = field(default=False)
     initialization_method: InitializationMethods = field(default=InitializationMethods.AUTO)
     extra_kwargs: dict = field(default_factory=dict)
+    # Preparation adapters before 0.4.9 accept sparse Parquet, not State JSON.
+    legacy_sparse_transport: bool = field(default=False)
 
     @classmethod
     def from_dict(cls, env):
@@ -116,18 +119,22 @@ def encode_statevector(state_vector: pa.Table | np.ndarray) -> str:
     return base64.b64encode(_serialize_statevector(state_vector)).decode("ascii")
 
 
-def _serialize_statevector(state_vector: pa.Table | np.ndarray) -> bytes:
+def _serialize_statevector(state_vector: pa.Table | np.ndarray | dict | list) -> bytes:
     buffer = io.BytesIO()
     if isinstance(state_vector, np.ndarray):
         np.save(buffer, state_vector, allow_pickle=False)
-    else:
+    elif isinstance(state_vector, pa.Table):
         pq.write_table(state_vector, buffer)
+    else:
+        return json.dumps(state_vector, allow_nan=False, separators=(",", ":")).encode("utf-8")
     return buffer.getvalue()
 
 
 def _payload_type(payload: bytes) -> str:
-    """Identify the two formats produced by our serializer."""
-    return "numpy_load" if payload.startswith(b"\x93NUMPY") else "parquet"
+    """Identify formats produced by our serializer."""
+    if payload.startswith(b"\x93NUMPY"):
+        return "numpy_load"
+    return "parquet" if payload.startswith(b"PAR1") else "json"
 
 
 def allow_deletion(wd_link: WorkDataLink) -> None:
@@ -187,7 +194,7 @@ def _upload_statevector_payload(client: httpx.Client, payload: bytes, opt_params
 
     if existing_wd_query is None or existing_wd_query.total_entities == 0:
         wd_link = wd_root.upload_action.execute(UploadParameters(
-            filename=f"{param_hash}.npy" if _payload_type(payload) == "numpy_load" else f"{param_hash}.parquet",
+            filename=f"{param_hash}." + {"numpy_load": "npy", "parquet": "parquet", "json": "json"}[_payload_type(payload)],
             binary=payload,
             mediatype=MediaTypes.OCTET_STREAM,
             json=None,
@@ -561,7 +568,7 @@ def run_job(job: Job, opt_params: OptParams, timeout_s: float, *, expected_state
 
 
 def q_alchemy_as_qasm(
-        state_vector: List[complex] | np.ndarray | sparse.sparray,
+        state_vector: State | List[complex] | np.ndarray | sparse.sparray,
         opt_params: dict | OptParams | None = None,
         client: httpx.Client | None = None,
         return_summary=False,
@@ -586,12 +593,12 @@ def q_alchemy_as_qasm(
 
 
 def _q_alchemy_as_qasm(
-        state_vector: List[complex] | np.ndarray | sparse.sparray,
+        state_vector: State | List[complex] | np.ndarray | sparse.sparray,
         opt_params: OptParams,
         client: httpx.Client,
         return_summary: bool,
 ) -> str | Tuple[str, dict]:
-    payload, num_qubits = _prepare_statevector(state_vector)
+    payload, num_qubits = _prepare_statevector(state_vector, legacy_sparse_transport=opt_params.legacy_sparse_transport)
     return _run_prepared_statevector(payload, num_qubits, opt_params, client, return_summary)
 
 
@@ -614,6 +621,12 @@ def _maybe_make_sparse_row(vector: np.ndarray):
 
 def _state_row(state_vector):
     """Validate width and choose a transport representation once per state."""
+    if isinstance(state_vector, State):
+        if state_vector.num_qubits < 1:
+            raise ValueError("Preparation requires at least one qubit")
+        if state_vector.indices is not None:
+            return state_vector
+        state_vector = np.asarray(state_vector.amplitudes, dtype=state_vector.dtype)
     if sparse.issparse(state_vector):
         row = sparse.coo_matrix(state_vector.reshape(1, -1))
     else:
@@ -632,14 +645,55 @@ def _state_row(state_vector):
     return row if sparse_row is None else sparse_row
 
 
-def _transport_data(matrix):
-    return convert_sparse_coo_to_arrow(matrix.tocoo()) if sparse.issparse(matrix) else matrix
+def _row_qubits(row):
+    return row.num_qubits if isinstance(row, State) else int(row.shape[1]).bit_length() - 1
 
 
-def _prepare_statevector(state_vector) -> tuple[bytes, int]:
+def _sparse_wire_rows(matrix):
+    if isinstance(matrix, State):
+        return [matrix.to_dict()]
+    if isinstance(matrix, list):
+        return [state for row in matrix for state in _sparse_wire_rows(row)]
+    # Canonicalize once on the client before constructing the unique-index
+    # State contract. Explicit zero entries do not contribute to the state.
+    states = matrix.tocsr(copy=True)
+    states.sum_duplicates()
+    states.eliminate_zeros()
+    n = _row_qubits(states)
+    result = []
+    for row in range(states.shape[0]):
+        start, stop = states.indptr[row:row + 2]
+        result.append(State.sparse(
+            num_qubits=n, indices=states.indices[start:stop],
+            amplitudes=states.data[start:stop],
+        ).to_dict())
+    return result
+
+
+def _transport_data(matrix, *, legacy_sparse_transport=False):
+    if isinstance(matrix, np.ndarray):
+        return matrix
+    if legacy_sparse_transport:
+        if isinstance(matrix, (State, list)):
+            rows = matrix if isinstance(matrix, list) else [matrix]
+            converted = []
+            for row in rows:
+                if isinstance(row, State):
+                    if row.num_qubits >= 63:
+                        raise ValueError("Legacy sparse transport cannot represent 63 or more qubits; use State JSON")
+                    row = sparse.coo_matrix((np.asarray(row.amplitudes, dtype=row.dtype), ([0] * len(row.indices), row.indices)),
+                                            shape=(1, 1 << row.num_qubits))
+                converted.append(row)
+            matrix = sparse.vstack(converted, format="coo")
+        return convert_sparse_coo_to_arrow(matrix.tocoo())
+    rows = _sparse_wire_rows(matrix)
+    return rows[0] if len(rows) == 1 else rows
+
+
+def _prepare_statevector(state_vector, *, legacy_sparse_transport=False) -> tuple[bytes, int]:
     """Validate/select/serialize once, even when option sets share a state."""
     matrix = _state_row(state_vector)
-    return _serialize_statevector(_transport_data(matrix)), matrix.shape[1].bit_length() - 1
+    return _serialize_statevector(_transport_data(matrix, legacy_sparse_transport=legacy_sparse_transport)), _row_qubits(matrix)
 
 
 def _run_prepared_statevector(
@@ -676,7 +730,7 @@ def _run_prepared_statevector(
     return qasm
 
 
-def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse.sparray,
+def q_alchemy_as_qasm_parallel(state_vector: State | List[complex] | np.ndarray | sparse.sparray,
                                 opt_params: List[dict | OptParams], client: httpx.Client | None = None,
                                 return_summary=False, *, max_workers: int = 4):
     """Run option sets concurrently, preserving order and propagating failures.
@@ -690,15 +744,17 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse
     options = [deepcopy(populate_opt_params(opt)) for opt in opt_params]
     if not options:
         return []
-    payload, num_qubits = _prepare_statevector(state_vector)
-    inline_payload = (
-        base64.b64encode(payload).decode("ascii")
-        if _fits_inline(payload)
-        and any(opt.use_research_function is None for opt in options)
-        else None
-    )
+    # Select once; mixed old/new adapter options serialize at most two formats.
+    matrix = _state_row(state_vector)
+    num_qubits = _row_qubits(matrix)
+    prepared = {}
+    for legacy in {opt.legacy_sparse_transport for opt in options}:
+        payload = _serialize_statevector(_transport_data(matrix, legacy_sparse_transport=legacy))
+        inline = base64.b64encode(payload).decode("ascii") if _fits_inline(payload) else None
+        prepared[legacy] = payload, inline
 
     def run(opt):
+        payload, inline_payload = prepared[opt.legacy_sparse_transport]
         worker_client = client if client is not None else create_client(opt)
         try:
             return _run_prepared_statevector(
@@ -720,7 +776,7 @@ def q_alchemy_as_qasm_parallel(state_vector: List[complex] | np.ndarray | sparse
 
 
 def q_alchemy_as_qasm_parallel_states(
-        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
+        state_vector: List[State | List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
         opt_params: dict | OptParams,
         client: httpx.Client | None = None,
         return_summary=False,
@@ -750,18 +806,21 @@ def q_alchemy_as_qasm_parallel_states(
 
 
 def _q_alchemy_as_qasm_parallel_states(
-        state_vector: List[List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
+        state_vector: List[State | List[complex] | np.ndarray | sparse.sparray] | sparse.sparray,
         opt_params: OptParams,
         client: httpx.Client,
         return_summary: bool,
 ) -> list[str] | tuple[list[str], list[dict]]:
     # A file has one representation. Split mixed batches into at most two
     # groups, then restore the caller's order. Sparse rows never become dense.
-    groups = _batch_state_groups(state_vector)
+    groups = [
+        (indices, _transport_data(matrix, legacy_sparse_transport=opt_params.legacy_sparse_transport))
+        for indices, matrix in _batch_state_groups(state_vector)
+    ]
     qasm_results = [None] * sum(len(indices) for indices, _ in groups)
     summary_results = [None] * len(qasm_results)
     for indices, matrix in groups:
-        qasms, summaries = _run_state_batch(matrix, opt_params, client)
+        qasms, summaries = _run_state_batch(matrix, opt_params, client, num_states=len(indices))
         for index, qasm, summary in zip(indices, qasms, summaries):
             qasm_results[index] = qasm
             summary_results[index] = summary
@@ -780,23 +839,25 @@ def _batch_state_groups(state_vector):
     rows = list(state_vector)
     if not rows:
         raise ValueError("Expected a nonempty batch of state rows")
-    groups = {False: ([], []), True: ([], [])}
+    groups = {}
     width = None
     for index, state in enumerate(rows):
         row = _state_row(state)
-        if width is not None and row.shape[1] != width:
+        if width is not None and _row_qubits(row) != width:
             raise ValueError("All states in a batch must have the same width")
-        width = row.shape[1]
-        indices, selected = groups[sparse.issparse(row)]
+        width = _row_qubits(row)
+        is_sparse = sparse.issparse(row) or isinstance(row, State)
+        key = (is_sparse, row.dtype if isinstance(row, State) else row.dtype.name)
+        indices, selected = groups.setdefault(key, ([], []))
         indices.append(index)
         selected.append(row)
 
     result = []
-    for is_sparse, (indices, selected) in groups.items():
+    for (is_sparse, _dtype), (indices, selected) in groups.items():
         if not indices:
             continue
         if is_sparse:
-            matrix = sparse.vstack(selected, format="coo")
+            matrix = selected if any(isinstance(row, State) for row in selected) else sparse.vstack(selected, format="coo")
         elif isinstance(state_vector, np.ndarray) and state_vector.ndim == 2 and len(indices) == len(rows):
             matrix = state_vector  # Do not copy an already dense batch.
         else:
@@ -805,9 +866,8 @@ def _batch_state_groups(state_vector):
     return result
 
 
-def _run_state_batch(matrix, opt_params, client):
-    num_states = matrix.shape[0]
-    statevector_data = upload_statevector(client, _transport_data(matrix), opt_params)
+def _run_state_batch(data, opt_params, client, *, num_states):
+    statevector_data = upload_statevector(client, data, opt_params)
 
     job_timeout = (
         opt_params.job_completion_timeout_sec
