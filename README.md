@@ -1375,3 +1375,60 @@ input before parsing the core plan. This is a service option, not an
 `run_quantum_experiment(..., include_quantum_circuits=True)` for portable export;
 `run_quantum_experiment_report(..., include_quantum_circuits=True)` continues to
 retain runtime circuit objects locally without exporting them automatically.
+
+## Worker execution times
+
+`FeasibilityReport.performance` and `ExperimentReport.performance` expose optional
+`PerformanceDiagnostics` with typed `PerformanceSpan` entries. Older reports
+return `None`. Elapsed values are inclusive wall seconds; nested spans must not
+be summed. Use `(trace_id, span_id)` to deduplicate repeated embedded spans and
+`parent_span_id` to recover nesting. Evidence collections link to computation
+`result_ids`; cache hits link to their original work. These are worker
+observations, separate from client polling or round-trip latency.
+
+Preserve the full report before reducing benchmark results to application summaries:
+
+```python
+from pathlib import Path
+from time import perf_counter
+
+started = perf_counter()
+report = service.analyze(experiment, request).result()
+client_elapsed_seconds = perf_counter() - started
+# Save outside the measured SDK interval; retains preparation/compression and
+# simulator resource metadata as well as any worker performance spans.
+Path("feasibility-report.json").write_text(report.to_json(indent=2))
+if report.performance is not None:
+    for span in report.performance.spans:
+        print(span.operation, span.elapsed_seconds, span.result_ids)
+```
+
+The SDK forwards observed durations without interpreting submit-and-wait time
+as pure simulation or queue time. Missing timers are unavailable, not zero.
+
+### Provider execution receipts
+
+New Feasibility workers retain remote execution IDs even when the selected result
+is classical. The SDK exposes them without querying a hardware provider:
+
+```python
+for attempt in report.execution_attempts or ():
+    for submission in attempt["execution_provenance"]["submissions"]:
+        print(submission["provider"], submission.get("backend"),
+              submission.get("execution_id"), submission["local_outcome"])
+```
+
+For `result_scope="all"`, each retained result's
+`experiment_report.execution.execution_provenance` contains its full receipts
+(when it has an execution). The assessment view keeps IDs, measurement labels and
+usage but omits detailed per-circuit metrics/configuration. Older workers may return
+`None`; this means unavailable rather than zero jobs. Remote job IDs are separate
+from PineXQ job IDs and assessment-local result IDs.
+
+IBM usage collection is optional: pass `collect_job_metrics=True` in the existing
+evidence collection `execution_options` to request one best-effort metrics lookup
+per completed job. Its timeout/retry policy is the Runtime client's policy; it is
+off by default. Provider usage preserves its own units and meaning and must not be
+interpreted as SDK elapsed time. Partial receipts survive handled failures in
+Feasibility reports; unhandled PineXQ errors still use the existing message-based
+error transport. This feature does not provide durable worker-crash recovery.

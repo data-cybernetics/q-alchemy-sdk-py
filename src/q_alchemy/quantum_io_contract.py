@@ -6,6 +6,8 @@ private runtime package. JSON serialization remains an internal transport detail
 
 from __future__ import annotations
 
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+
 from .quantum_io_compression_contract import CircuitCompressionConfig, CircuitCompressionMetrics, CircuitCompressionSummary
 
 import json
@@ -1195,6 +1197,12 @@ class ExecutionResult:
     basis_distributions: tuple[BasisDistribution, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    @property
+    def execution_provenance(self) -> Mapping[str, Any] | None:
+        """Optional provider-neutral receipts; preserve unknown schema/extensions."""
+        value = self.metadata.get("execution_provenance")
+        return value if isinstance(value, Mapping) else None
+
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExecutionResult":
         observations = data.get("observations")
@@ -1836,6 +1844,8 @@ class ExperimentReport:
     portable_quantum_circuit: Mapping[str, Any] | None = None
     circuit_complexity: Mapping[str, Any] | None = None
 
+    performance: PerformanceDiagnostics | None = None
+
     @property
     def quantum_circuit(self) -> Any | None:
         """Reconstruct the optional compressed logical P + U circuit with Qiskit.
@@ -1857,6 +1867,7 @@ class ExperimentReport:
         estimate = data.get("estimate")
         held_out = data.get("held_out_verification_error")
         return cls(
+            performance=(PerformanceDiagnostics.from_dict(data["performance"]) if data.get("performance") is not None else None),
             portable_quantum_circuit=_portable_quantum_circuit(data.get("quantum_circuit")),
             generated_at=str(data["generated_at"]),
             mode=str(data["mode"]),
@@ -1907,6 +1918,7 @@ class ExperimentReport:
 
     def _report_dict(self) -> dict[str, Any]:
         payload = {
+            **({"performance": self.performance.to_dict()} if self.performance is not None else {}),
             "generated_at": self.generated_at,
             "mode": self.mode,
             **({'circuit_complexity': dict(self.circuit_complexity)}

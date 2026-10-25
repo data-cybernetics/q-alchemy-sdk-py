@@ -23,6 +23,8 @@ from .simulator import (
 )
 
 
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+
 from .quantum_io_contract import (
     SCHEMA_VERSION,
     BasisDistribution,

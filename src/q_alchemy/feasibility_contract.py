@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+
 from .quantum_io_compression_contract import CircuitCompressionConfig as QuantumIOCircuitCompressionConfig
 from .quantum_io_compression_contract import _compression_diagnostic_lines
 
@@ -1054,6 +1056,11 @@ class FeasibilityReport:
         return cls(dict(data))
 
     @property
+    def performance(self) -> PerformanceDiagnostics | None:
+        value = self.raw.get("performance")
+        return PerformanceDiagnostics.from_dict(value) if value is not None else None
+
+    @property
     def result_scope(self) -> ResultScope | None:
         """Applied scope, or None when a legacy service did not acknowledge it."""
         value = self.raw.get("result_scope")
@@ -1112,6 +1119,21 @@ class FeasibilityReport:
     def execution_trace(self) -> Mapping[str, Any] | None:
         value = self.raw.get("execution_trace")
         return value if isinstance(value, Mapping) else None
+
+    @property
+    def execution_attempts(self) -> tuple[Mapping[str, Any], ...] | None:
+        """Receipts across all collected paths, even with result_scope='selected'.
+
+        None means unavailable from this producer; an empty tuple means no receipts.
+        No provider lookup or resource-selection logic runs in the SDK.
+        """
+        trace = self.execution_trace
+        value = trace.get("execution_attempts") if trace is not None else None
+        if value is None:
+            return None
+        if not isinstance(value, (list, tuple)) or any(not isinstance(item, Mapping) for item in value):
+            raise ValueError("execution_attempts must be an array of objects")
+        return tuple(dict(item) for item in value)
 
     @property
     def computation_result(self) -> Mapping[str, Any] | None:
@@ -1415,6 +1437,15 @@ class FeasibilityReport:
                 kind = item.get("kind", "unknown")
                 reason = item.get("reason", "")
                 lines.append(f"  - {kind}: {reason}")
+        if self.execution_attempts:
+            lines.extend(["", "PROVIDER EXECUTIONS"])
+            for attempt in self.execution_attempts:
+                for submission in attempt.get("execution_provenance", {}).get("submissions", ()):
+                    lines.append(
+                        f"  {submission.get('provider', 'unknown')} / {submission.get('backend', 'unknown')}: "
+                        f"{submission.get('execution_id', 'ID unavailable')} "
+                        f"({submission.get('local_outcome', 'unknown')}; {attempt.get('evidence_request', 'unknown')})"
+                    )
         return "\n".join(lines)
 
 

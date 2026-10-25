@@ -38,6 +38,8 @@ from q_alchemy.quantum_io_contract import (
     CircuitCompressionSummary,
     ExecutionPlan,
     ExperimentReport,
+    PerformanceDiagnostics,
+    PerformanceSpan,
     QuantumExperiment,
     Runtime,
 )
@@ -58,6 +60,8 @@ NOISY_BACKEND_SIMULATOR_RESOURCE = "noisy-backend-simulator"
 LOG = logging.getLogger(__name__)
 
 __all__ = [
+    "PerformanceDiagnostics",
+    "PerformanceSpan",
     "CircuitCompressionConfig",
     "CircuitCompressionMetrics",
     "CircuitCompressionSummary",

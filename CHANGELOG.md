@@ -8,6 +8,13 @@ Each release on GitHub has fuller notes.
 
 ## [Unreleased]
 
+### Added
+
+- Provider-neutral execution receipts via `ExecutionResult.execution_provenance`
+  and `FeasibilityReport.execution_attempts`, including QPU submissions when the
+  selected computation is classical. Feasibility text summaries show provider IDs.
+  Older reports remain readable without receipts or provider dependencies.
+
 ### Fixed
 
 - README: the compact sparse reconstruction example pinned Quantum I/O
@@ -16,6 +23,16 @@ Each release on GitHub has fuller notes.
   use a placeholder instead of a version that will be retired.
 - README: the same section credited the feature to SDK 0.5.0, the working version
   number before the release was renumbered; it shipped in 0.4.0.
+
+## [0.4.5] - 2026-10-22
+
+### Added
+
+- Optional typed `PerformanceDiagnostics` and `PerformanceSpan` contracts on
+  Feasibility and Quantum I/O reports. Preserve worker timings through parsing
+  and serialization, with support for older reports that omit timing fields.
+- Documentation for inclusive wall-time spans and saving complete reports
+  separately from client round-trip measurements.
 
 ## [0.4.0] - 2026-10-08
 

@@ -16,6 +16,7 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 from q_alchemy.feasibility_contract import FeasibilityReport, FeasibilityRequest, ResultScope
+from q_alchemy.performance_contract import PerformanceDiagnostics, PerformanceSpan
 from q_alchemy.initialize import create_client, find_processing_step, from_name
 from q_alchemy.quantum_io import (
     IBMQuantumCredentials,
