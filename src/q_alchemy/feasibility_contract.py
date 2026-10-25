@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+
 from .quantum_io_compression_contract import CircuitCompressionConfig as QuantumIOCircuitCompressionConfig
+from .quantum_io_compression_contract import _compression_diagnostic_lines
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 import json
 from math import isfinite
-from numbers import Integral
+from numbers import Integral, Real
 from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
@@ -152,35 +155,18 @@ class RecommendedCompute(str, Enum):
 
 @dataclass(frozen=True)
 class FeasibilityPolicy:
-    classical_first: bool = True
     quantum_execution: QuantumExecutionPolicy = QuantumExecutionPolicy.WHEN_NEEDED
-    dense_memory_utilization_fraction: float = 0.80
-
-    def __post_init__(self) -> None:
-        if self.classical_first is not True:
-            raise ValueError(
-                "classical_first=False is not supported; feasibility is always "
-                "classical-first. Use quantum_execution=COMPARE to run both paths."
-            )
-        if not 0 < self.dense_memory_utilization_fraction <= 1:
-            raise ValueError("dense_memory_utilization_fraction must be in (0, 1]")
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "classical_first": self.classical_first,
             "quantum_execution": self.quantum_execution.value,
-            "dense_memory_utilization_fraction": self.dense_memory_utilization_fraction,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "FeasibilityPolicy":
         return cls(
-            classical_first=data.get("classical_first", True),
             quantum_execution=QuantumExecutionPolicy(
                 str(data.get("quantum_execution", QuantumExecutionPolicy.WHEN_NEEDED.value))
-            ),
-            dense_memory_utilization_fraction=float(
-                data.get("dense_memory_utilization_fraction", 0.80)
             ),
         )
 
@@ -235,6 +221,38 @@ class CircuitCompressionConfig(QuantumIOCircuitCompressionConfig):
         return super().from_dict({"enabled": True, **data})
 
 
+def _validated_sparse_config(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("sparse_config must be a mapping")
+    config = dict(value)
+    if "run_options" in config:
+        if not isinstance(config["run_options"], Mapping):
+            raise ValueError("sparse_config.run_options must be a mapping")
+        config["run_options"] = dict(config["run_options"])
+    for path, options in (("sparse_config", config),
+                          ("sparse_config.run_options", config.get("run_options", {}))):
+        for key in ("sparse_epsilon", "final_sparse_epsilon"):
+            if key not in options:
+                continue
+            threshold = options.pop(key)
+            if isinstance(threshold, bool) or not isinstance(threshold, Real) or threshold != 0:
+                raise ValueError(
+                    f"{path}.{key} must be numeric zero; feasibility requires "
+                    "exact sparse references and does not permit amplitude pruning"
+                )
+    return config
+
+
+def _validate_sparse_memory_control(config: Mapping[str, Any]) -> None:
+    for path, options in (("sparse_config", config),
+                          ("sparse_config.run_options", config.get("run_options", {}))):
+        if "max_nnz" in options:
+            raise ValueError(
+                f"{path}.max_nnz cannot be combined with a feasibility RAM budget; "
+                "use classical_resources.available_memory_bytes instead"
+            )
+
+
 @dataclass(frozen=True)
 class EvidenceCollectionConfig:
     """Portable acquisition controls for Feasibility >= 0.6.48.
@@ -248,7 +266,7 @@ class EvidenceCollectionConfig:
     backend_options: Mapping[str, Any] = field(default_factory=dict)
     shots: int = 4096
     preparation_options: Mapping[str, Any] = field(default_factory=dict)
-    sparse_config: Mapping[str, Any] = field(default_factory=lambda: {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})
+    sparse_config: Mapping[str, Any] = field(default_factory=dict)
     qtucker_config: Mapping[str, Any] = field(default_factory=dict)
     circuit_compression: CircuitCompressionConfig = field(
         default_factory=CircuitCompressionConfig
@@ -263,6 +281,7 @@ class EvidenceCollectionConfig:
 
     def __post_init__(self) -> None:
         _boolean(self.least_busy, "least_busy")
+        object.__setattr__(self, "sparse_config", _validated_sparse_config(self.sparse_config))
         if not isinstance(self.circuit_compression, CircuitCompressionConfig):
             raise ValueError("circuit_compression must be a CircuitCompressionConfig")
         if not isinstance(self.qtucker_observable_config, Mapping):
@@ -337,7 +356,7 @@ class EvidenceCollectionConfig:
             backend_options=dict(data.get("backend_options", {})),
             shots=data.get("shots", 4096),
             preparation_options=dict(data.get("preparation_options", {})),
-            sparse_config=dict(data.get("sparse_config", {"sparse_epsilon": 0.0, "final_sparse_epsilon": 0.0})),
+            sparse_config=data.get("sparse_config", {}),
             qtucker_config=dict(data.get("qtucker_config", {})),
             circuit_compression=CircuitCompressionConfig.from_dict(
                 data.get("circuit_compression", {})
@@ -347,30 +366,37 @@ class EvidenceCollectionConfig:
         )
 
 
+class ResultScope(str, Enum):
+    """Which retained reports to return; does not schedule execution."""
+
+    SELECTED = "selected"
+    ALL = "all"
+
+
 @dataclass(frozen=True)
 class FeasibilityRequest:
     criteria: SolutionCriteria
     policy: FeasibilityPolicy = field(default_factory=FeasibilityPolicy)
     evidence_collection: EvidenceCollectionConfig = field(default_factory=EvidenceCollectionConfig)
     classical_resources: ClassicalResources | None = None
-    max_steps: int = 16
     metadata: Mapping[str, Any] = field(default_factory=dict)
     schema_version: int = 1
+    result_scope: ResultScope = ResultScope.SELECTED
 
     def __post_init__(self) -> None:
         _schema_version(self.schema_version)
-        if isinstance(self.max_steps, bool) or not isinstance(self.max_steps, Integral) or self.max_steps <= 0:
-            raise ValueError("max_steps must be a positive integer")
+        object.__setattr__(self, "result_scope", ResultScope(self.result_scope))
+        _validate_sparse_memory_control(_validated_sparse_config(self.evidence_collection.sparse_config))
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": self.schema_version,
             "kind": "feasibility-request",
+            "result_scope": self.result_scope.value,
             "criteria": self.criteria.to_dict(),
             "policy": self.policy.to_dict(),
             "evidence_collection": self.evidence_collection.to_dict(),
             "classical_resources": self.classical_resources.to_dict() if self.classical_resources else None,
-            "max_steps": self.max_steps,
             "metadata": dict(self.metadata),
         }
 
@@ -385,8 +411,8 @@ class FeasibilityRequest:
             policy=FeasibilityPolicy.from_dict(data.get("policy", {})),
             evidence_collection=EvidenceCollectionConfig.from_dict(data.get("evidence_collection", {})),
             classical_resources=ClassicalResources.from_dict(resources) if resources is not None else None,
-            max_steps=data.get("max_steps", 16),
             metadata=dict(data.get("metadata", {})),
+            result_scope=data.get("result_scope", ResultScope.SELECTED),
         )
 
     def to_json(self, *, indent: int | None = None) -> str:
@@ -786,7 +812,7 @@ def _format_classical_resource_criteria_lines(
     for metric, label in (
         (
             _CLASSICAL_SIMULATOR_BUDGET_BYTES,
-            "Detected simulator host budget",
+            "Simulator working-set budget",
         ),
         (
             _CLASSICAL_ESTIMATED_PEAK_MEMORY_BYTES,
@@ -963,6 +989,58 @@ class FeasibilityRecommendation:
 
 
 @dataclass(frozen=True)
+class ComputationResult:
+    """One retained QIO report and its association with an assessment.
+
+    ``completed`` is the server's reference/execution availability check. It does
+    not certify measurement coverage or quality. IDs are local to an assessment.
+    """
+
+    result_id: str
+    evidence_request: str
+    mode: str | None
+    source: str | None
+    source_kind: str | None
+    completed: bool
+    selected_by_recommendation: bool
+    is_primary: bool
+    experiment_report: ExperimentReport
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ComputationResult":
+        from .quantum_io_contract import ExperimentReport
+
+        for key in ("result_id", "evidence_request"):
+            if not isinstance(data.get(key), str) or not data[key]:
+                raise ValueError(f"computation result {key} must be a non-empty string")
+        for key in ("completed", "selected_by_recommendation", "is_primary"):
+            _boolean(data.get(key), f"computation result {key}")
+        return cls(
+            result_id=data["result_id"],
+            evidence_request=data["evidence_request"],
+            mode=data.get("mode"),
+            source=data.get("source"),
+            source_kind=data.get("source_kind"),
+            completed=data["completed"],
+            selected_by_recommendation=data["selected_by_recommendation"],
+            is_primary=data["is_primary"],
+            experiment_report=ExperimentReport.from_dict(data["experiment_report"]),
+        )
+
+
+class ResultScopeUnavailableError(RuntimeError):
+    """The response did not acknowledge the requested all-results contract."""
+
+    def __init__(self, report: FeasibilityReport):
+        super().__init__(
+            "The service did not return result_scope='all'. Use a service version "
+            "that supports all retained computation reports. The available "
+            "assessment is preserved on this exception's report attribute."
+        )
+        self.report = report
+
+
+@dataclass(frozen=True)
 class FeasibilityReport:
     raw: Mapping[str, Any]
 
@@ -971,7 +1049,38 @@ class FeasibilityReport:
         _schema_version(data.get("schema_version"))
         if data.get("kind") != "feasibility-report":
             raise ValueError("payload kind must be 'feasibility-report'")
+        if data.get("result_scope") is not None:
+            scope = ResultScope(data["result_scope"])
+            if scope is ResultScope.ALL and not isinstance(data.get("computation_results"), list):
+                raise ValueError("result_scope='all' requires a computation_results array")
         return cls(dict(data))
+
+    @property
+    def performance(self) -> PerformanceDiagnostics | None:
+        value = self.raw.get("performance")
+        return PerformanceDiagnostics.from_dict(value) if value is not None else None
+
+    @property
+    def result_scope(self) -> ResultScope | None:
+        """Applied scope, or None when a legacy service did not acknowledge it."""
+        value = self.raw.get("result_scope")
+        return ResultScope(value) if value is not None else None
+
+    @property
+    def computation_results(self) -> tuple[ComputationResult, ...] | None:
+        """All retained reports; None means unavailable, () means returned empty."""
+        if self.result_scope is not ResultScope.ALL:
+            return None
+        results = tuple(ComputationResult.from_dict(item) for item in self.raw["computation_results"])
+        if len({item.result_id for item in results}) != len(results):
+            raise ValueError("computation result IDs must be unique within an assessment")
+        return results
+
+    def require_computation_results(self) -> tuple[ComputationResult, ...]:
+        results = self.computation_results
+        if results is None:
+            raise ResultScopeUnavailableError(self)
+        return results
 
     @property
     def final(self) -> bool:
@@ -1010,6 +1119,21 @@ class FeasibilityReport:
     def execution_trace(self) -> Mapping[str, Any] | None:
         value = self.raw.get("execution_trace")
         return value if isinstance(value, Mapping) else None
+
+    @property
+    def execution_attempts(self) -> tuple[Mapping[str, Any], ...] | None:
+        """Receipts across all collected paths, even with result_scope='selected'.
+
+        None means unavailable from this producer; an empty tuple means no receipts.
+        No provider lookup or resource-selection logic runs in the SDK.
+        """
+        trace = self.execution_trace
+        value = trace.get("execution_attempts") if trace is not None else None
+        if value is None:
+            return None
+        if not isinstance(value, (list, tuple)) or any(not isinstance(item, Mapping) for item in value):
+            raise ValueError("execution_attempts must be an array of objects")
+        return tuple(dict(item) for item in value)
 
     @property
     def computation_result(self) -> Mapping[str, Any] | None:
@@ -1184,6 +1308,7 @@ class FeasibilityReport:
             lines.append(
                 f"  Accepted regions: {int(compression.get('accepted_regions', 0))}"
             )
+            lines.extend(_compression_diagnostic_lines(compression.get("diagnostics")))
 
         lines.extend(
             [
@@ -1251,7 +1376,11 @@ class FeasibilityReport:
             scopes=("quantum-model",),
         )
         if noisy_completion is not None and noisy_completion.get("value") is True:
-            lines.append("  Noisy simulation performed: True")
+            source_kind = _mapping(noisy_completion.get("metadata")).get("source_kind")
+            label = {"ideal-simulator": "Ideal simulation", "noisy-simulator": "Noisy simulation"}.get(
+                source_kind, "Quantum simulator execution"
+            )
+            lines.append(f"  {label} performed: True")
         lines.append(
             f"  QPU execution performed: {bool(quantum.get('execution_performed', False))}"
         )
@@ -1308,6 +1437,15 @@ class FeasibilityReport:
                 kind = item.get("kind", "unknown")
                 reason = item.get("reason", "")
                 lines.append(f"  - {kind}: {reason}")
+        if self.execution_attempts:
+            lines.extend(["", "PROVIDER EXECUTIONS"])
+            for attempt in self.execution_attempts:
+                for submission in attempt.get("execution_provenance", {}).get("submissions", ()):
+                    lines.append(
+                        f"  {submission.get('provider', 'unknown')} / {submission.get('backend', 'unknown')}: "
+                        f"{submission.get('execution_id', 'ID unavailable')} "
+                        f"({submission.get('local_outcome', 'unknown')}; {attempt.get('evidence_request', 'unknown')})"
+                    )
         return "\n".join(lines)
 
 

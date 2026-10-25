@@ -37,13 +37,14 @@ If you would like to run our examples, please use
 pip install q-alchemy-sdk-py[examples]
 ```
 
-We use [uv](https://docs.astral.sh/uv/) and have tested this all with Python 3.11 through 3.14. So the way to install 
-it after cloning is simply
+The SDK supports Python 3.11 through 3.14. We use
+[uv](https://docs.astral.sh/uv/). To install after cloning, run:
 
 ```bash
 uv sync --locked
 ```
 
+Dependency requirements are defined in [pyproject.toml](pyproject.toml).
 The SDK requires `pinexq-client>=2.1.0,<3`. Client 2.1.0 expects PineXQ
 JobManagement API 10.1. The client checks its protocol major/minor against the
 server and warns when they differ; the SDK preserves these warnings. A server
@@ -62,6 +63,89 @@ And for running our examples,
 ```bash
 uv sync --locked --extra examples
 ```
+
+## Request licensing
+
+Calculate your request's **state score**, **circuit score**, or both, then compare
+with this table. Limits are inclusive: a score equal to the limit is allowed.
+
+| Request workload | Free limit | Enterprise limit |
+|---|---:|---:|
+| Target state: Preparation (including entanglement), Quantum I/O, Feasibility | 49,152 | 20,971,520 |
+| Circuit: Simulator, or supplied evolution in Quantum I/O / Feasibility | 2,500 | 25,000 |
+| Circuit: Circuit Compressor | 10,000 | 100,000 |
+
+If every applicable score fits Free, the request fits Free. Otherwise, it requires
+Enterprise if every score fits Enterprise. A score above the Enterprise limit
+exceeds both plans. For Quantum I/O and Feasibility requests containing both a
+target state and an evolution circuit, **both scores must fit your plan**. Without
+a target state, there is no target-state score to calculate.
+
+### State score
+
+**State score = number of logical qubits × number of nonzero amplitudes.**
+
+Count nonzero amplitudes in the dtype you submit, after adding together any
+entries with the same basis index. Ignore exact zeros, including entries that
+cancel to zero. Tiny nonzero amplitudes still count. Dense and sparse
+representations of the same state have the same score.
+
+| Example state | Calculation | Required plan |
+|---|---:|---|
+| Dense 12-qubit state, all amplitudes nonzero | `12 × 4,096 = 49,152` | Free |
+| Sparse 72-qubit state, 2 nonzero amplitudes | `72 × 2 = 144` | Free |
+| Sparse 72-qubit state, 10,000 nonzero amplitudes | `72 × 10,000 = 720,000` | Enterprise |
+
+For a dense state with every amplitude nonzero, the score is `n × 2**n`, where
+`n` is the number of qubits.
+For preparation batches, calculate each state's score separately; Free also
+allows at most **100 states per service job**.
+
+### Circuit score
+
+**Circuit score = sum of the weights of the submitted gates and operations.**
+
+The following gates have weight equal to the number of qubits they act on:
+
+| Gate names | Weight per gate |
+|---|---:|
+| `u`, `p`, `rx`, `ry`, `rz`, `x`, `y`, `z`, `h` | 1 |
+| `cx`, `cy`, `cz`, `rzz`, `swap` | 2 |
+| `ccx`, `cswap` | 3 |
+
+Other atomic gates, such as a unitary or multi-controlled X gate, have weight
+**`4**(q - 1)`**, where `q` is the number of qubits the gate acts on, including
+controls:
+
+| Qubits per other atomic gate | 1 | 2 | 3 | 4 |
+|---|---:|---:|---:|---:|
+| Weight per gate | 1 | 4 | 16 | 64 |
+
+For a custom gate with an explicit body, count the operations inside its body
+**each time the gate is used**, including nested custom gates. Each measurement
+or reset adds 1 per qubit. Barriers, delays, and global phase add 0. An open
+control (a control on zero) on a listed gate adds 2 for each open control.
+Qiskit's `initialize` costs `4**(q - 1) + q`, including its resets.
+
+For example, **1,000 H + 500 CX + 100 CCX** scores:
+
+```text
+1,000 × 1 + 500 × 2 + 100 × 3 = 2,300
+```
+
+That fits Free for all circuit services. A score of **3,000** requires Enterprise
+for Simulator or supplied evolution, and fits Free for Circuit Compressor.
+
+Count the circuit **as submitted, before optimization**; cancelling gates still
+count. Serialization can change the operations: an RZZ sent in QPY scores 2,
+while its QASM expansion into CX–RZ–CX scores 5. See the
+[detailed circuit rules](docs/licensing_tests.md#circuit-cases) for supported forms.
+
+These limits apply to services with workload licensing. The service checks your
+subscription and reports the circuit score and allowance; the SDK does not enforce
+a separate licensing policy. Passing a license check does not guarantee that a
+request fits the algorithm's technical resource limits. See
+[live licensing tests](docs/licensing_tests.md) to verify a deployment.
 
 ## Usage
 
@@ -207,8 +291,9 @@ This example demonstrates how batched data can be processed using broadcasting w
 Every entry point (`q_alchemy_as_qasm`, `QAlchemyInitialize`,
 `QAlchemyStatePreparation`, `AmplitudeEmbedding`) takes its settings as an
 `OptParams` object, or as a plain dict with the same keys. `q_alchemy_as_qasm`
-also accepts them as keyword arguments. The state itself can be a list, a numpy
-array, a scipy sparse array or, for Qiskit, a `Statevector`.
+also accepts them as keyword arguments. `q_alchemy_as_qasm` and the parallel
+preparation functions also accept the existing `State.sparse(...)` object. Legacy
+list, NumPy and SciPy inputs remain supported; Qiskit wrappers accept `Statevector`.
 
 Dense inputs are checked for sparsity once before serialization. The SDK uses
 QTucker's blockwise, early-exit density rule: a vector is sent as sparse when its
@@ -218,17 +303,25 @@ never discards tiny amplitudes or renormalizes the state. This keeps transport
 lossless and leaves the approximation budget with QTucker.
 
 - Dense vectors use NumPy `.npy` serialization (`numpy_load` for inline input).
-- Sparse vectors use Parquet with basis indices and complex amplitudes. Inputs
-  already supplied as SciPy sparse matrices/arrays skip the density check and
-  remain sparse, even when fully populated.
+- Sparse vectors use the existing Quantum I/O `State.sparse(...)` JSON wire
+  format: explicit `num_qubits`, decimal-string basis indices, and `[real, imag]`
+  amplitudes. `State.sparse(...)` inputs go directly to serialization without a
+  SciPy conversion, including indices above 64 bits. SciPy inputs skip the density
+  check, combine duplicate coordinates and remove exact zeros before serialization.
+  Zero states and nonfinite sparse amplitudes are rejected before submission.
 - Mixed batches are split into at most two service jobs, one per representation;
   returned circuits and summaries follow the original input order. Each job uses
   the usual cleanup policy and timeout. If either job fails, the call raises.
   Uniform batches still use one job; parallel option sets share one serialization.
 
-The updated ProCon preserves these dense/sparse paths into QTucker. Both formats
-are supported by older services too, but avoiding server-side conversions requires
-the updated ProCon deployment. No private QTucker dependency is added to the SDK.
+Sparse JSON requires a preparation adapter that supports the State wire format.
+For adapters without that support, set
+`OptParams(legacy_sparse_transport=True)` to retain sparse Parquet transport;
+that format cannot represent 63 or more qubits. Existing NumPy and Parquet files
+remain accepted by the new adapter. No private QTucker dependency is added to the SDK.
+
+The adapter decodes sparse JSON once and packs one row into QTucker's unsigned
+64-bit words at dispatch, without SciPy, Arrow or dense-state conversions.
 
 The fields you are most likely to touch:
 
@@ -240,6 +333,7 @@ The fields you are most likely to touch:
 | `initialization_method` | `InitializationMethods.AUTO` | Which algorithm builds the circuit (see below). |
 | `extra_kwargs` | `{}` | Method-specific options, as a dict (see below). |
 | `use_qasm3` | `False` | Experimental: return OpenQASM 3 instead of OpenQASM 2. |
+| `legacy_sparse_transport` | `False` | Send sparse Parquet to preparation adapters without State JSON support. |
 | `remove_data` | `True` | Delete the job and its uploaded data once the result is fetched. |
 | `job_completion_timeout_sec` | `300` | How long to wait for the job before giving up. |
 
@@ -723,8 +817,7 @@ print(report.format_summary())
 `FeasibilityReport.format_summary()` mirrors the canonical human-readable formatter in
 `q-alchemy-feasibility`, including classical and quantum status, resource/quality
 criteria, backend/model evidence, recommendation, and next-evidence requests.
-The SDK formatter is aligned with Feasibility 0.6.50, the PineXQ adapter 0.2.11, and
-Quantum I/O 0.11.0. Serialized core reports and their canonical summaries are kept
+Serialized core reports and their canonical summaries are kept
 as regression fixtures so later core changes can be checked without installing
 the server runtime in the SDK environment.
 
@@ -767,8 +860,8 @@ Use `estimator_options` for Pauli-observable execution. `backend_run_options`
 (and its legacy alias `run_options`) applies to basis-measurement/count execution.
 Retired resource-sweep and attribution controls are no longer constructor
 parameters. Their keys in old request JSON are ignored, matching the service.
-`classical_first=False` is rejected locally; use `quantum_execution=COMPARE`
-when both classical and quantum paths are wanted.
+Feasibility always follows the classical-first workflow; use
+`quantum_execution=COMPARE` when both classical and quantum paths are wanted.
 
 To check formatter parity after a core upgrade, run
 `tests/generate_feasibility_fixtures.py --check` using a Python environment with
@@ -854,6 +947,55 @@ computation = report.computation_experiment_report
 if computation is not None:
     print(computation.format_summary())
 ```
+
+For comparison measurements as well as the selected calculation, request all retained
+reports explicitly:
+
+```python
+from dataclasses import replace
+from q_alchemy import ResultScope
+
+request = replace(request, result_scope=ResultScope.ALL)
+report = FeasibilityService().analyze(experiment, request).result()
+for result in report.require_computation_results():
+    computation = result.experiment_report  # existing typed Quantum I/O ExperimentReport
+    measurements = computation.execution
+    if measurements is None and computation.reference is not None:
+        measurements = computation.reference.measurements
+    if measurements is not None and measurements.observations is not None:
+        for observation in measurements.observations.observations:
+            print(result.result_id, result.source_kind, observation.label,
+                  observation.value, observation.stderr, observation.shots)
+```
+
+`result_scope` accepts `"selected"` (the default) or `"all"` and changes reporting only.
+Use the existing `COMPARE` policy to request comparison execution. Under `COMPARE`,
+classical may remain the recommendation: its `reference.measurements` and the separate
+simulator/QPU report's `execution` are both accessible with `"all"`. The singular
+`computation_result` and `computation_experiment_report` keep their existing meanings.
+
+`report.result_scope` acknowledges the applied scope. `report.computation_results`
+returns typed `ComputationResult` entries, `()` for an acknowledged empty collection,
+or `None` when all results were not provided. Each entry wraps the existing Quantum I/O
+report with its `result_id`, evidence request, source, and selection information.
+The standard service links extracted evidence through `metadata.result_id`. IDs are
+local to the assessment and do not identify backend jobs or imply that a reused
+reference was simulated again. `completed` describes reference/execution availability;
+inspect the requested measurement labels and quality metrics separately.
+
+If an older service ignores an all-results request, `job.result()` raises
+`ResultScopeUnavailableError`. Its `.report` preserves the returned assessment and the
+job is retained; a missing collection is never silently treated as empty. Use a worker
+containing the updated Feasibility core and PineXQ adapter. Existing selected-result
+requests remain compatible with older workers.
+
+The collection preserves available measurement values, uncertainty, and shot metadata
+without executing again. Exact reference observations generally have no shot
+uncertainty; an ideal simulator acquisition may still use finite shots. Unknown
+uncertainty stays unknown. `source_kind` distinguishes ideal/noisy simulators, QPUs,
+and replay; Feasibility's `execution_performed` remains QPU-specific.
+All-results payloads may be larger, and they cannot recover measurements from a workflow
+that failed before returning its report.
 
 Quantum circuits are not returned by default because generated state-preparation circuits can
 be large. Request the logical experiment circuit (`P + U`) explicitly on the SDK call:
@@ -978,9 +1120,10 @@ print("fidelity:", state_fidelity(Statevector(sv.to_dense()), Statevector(target
 auto-selects your resource tier from your plan (Standard/Medium for everyone,
 XLarge for enterprise).
 
-> ⚠️ **The free plan is strongly limited** — state preparation is capped (currently
-> ~12 qubits, batches up to 100) and runs on the Medium simulator tier. Enterprise
-> plans get larger circuits and the XLarge tier. See the limits table in the guide.
+> Preparation's Free allowance is **49,152** for `logical_qubits * canonical_nnz`,
+> with batches of up to 100 states per service job. Enterprise allows **20,971,520**.
+> The simulator uses Medium for Free and XLarge for Enterprise. Technical resource
+> limits remain independent; see the limits table in the guide.
 
 📖 **Full guide:** [docs/initialize-and-verify.md](docs/initialize-and-verify.md) ·
 🧪 **Runnable notebook:** [examples/simulator_vs_initializer.ipynb](examples/simulator_vs_initializer.ipynb)
@@ -1176,6 +1319,33 @@ instead of silently changing the request. Zero remains a valid explicit memory
 budget. These checks are local and require no private Feasibility dependency.
 The SDK displays the returned resource and quality conclusions separately.
 
+`FeasibilityRequest` no longer accepts or emits `max_steps`. Remove that argument
+from Python construction calls. Legacy schema-v1 request JSON containing the field
+remains loadable; its value is ignored. The service attempts each declared evidence
+kind at most once per solve, so changing parameters does not trigger another attempt.
+Custom retry or parameter-study workflows must run inside a provider or use separate
+assessments. No replacement iteration control is required.
+
+`FeasibilityPolicy` now accepts and serializes only `quantum_execution`. Remove
+`classical_first` and `dense_memory_utilization_fraction` from Python calls; use
+the named `quantum_execution` argument when migrating positional calls. Saved JSON
+keys with those names are ignored through the existing unknown-field handling and
+are not emitted by new requests. A retired `classical_first=false` key cannot change
+the classical-first workflow; automatic dense-statevector fallback remains disabled.
+
+Sparse pruning thresholds in `sparse_config` or nested
+`run_options` must be numeric zero. Nonzero, boolean, string, or null values are
+rejected locally. Explicit zeros normalize away because Feasibility supplies the
+exact-reference settings itself; the default `sparse_config` is `{}`. Other sparse
+settings are preserved.
+
+`FeasibilityRequest` rejects `max_nnz` at either config level, including `"auto"`
+or null. Use `classical_resources.available_memory_bytes` for the classical quota;
+the service derives sparse capacity from the effective worker RAM budget. Remove
+explicit caps from saved request JSON and examples. A standalone
+`EvidenceCollectionConfig` can still carry `max_nnz` for direct core-provider use
+without a RAM limit, but cannot be placed in a portable `FeasibilityRequest`.
+
 ### Initialization transport and failure recovery
 
 Initialization inline transport is selected by serialized/base64 payload size (at most 1 MiB), not qubit count; larger payloads use WorkData. Recoverable wait/download/validation failures preserve jobs and data. Exceptions expose initialization_job and, when available, initialization_job_url. With a caller-owned open client, retry run_job on that job; after an SDK-owned client closes, reconstruct Job.from_url using a fresh authenticated client and the saved URL. Supply expected_states for batches. Validated results are cached for cleanup retries; cleanup errors do not discard a successful result. Compression reports validate metrics and accepted-region fields before cleanup. The SDK continues to use public Qiskit.
@@ -1205,3 +1375,60 @@ input before parsing the core plan. This is a service option, not an
 `run_quantum_experiment(..., include_quantum_circuits=True)` for portable export;
 `run_quantum_experiment_report(..., include_quantum_circuits=True)` continues to
 retain runtime circuit objects locally without exporting them automatically.
+
+## Worker execution times
+
+`FeasibilityReport.performance` and `ExperimentReport.performance` expose optional
+`PerformanceDiagnostics` with typed `PerformanceSpan` entries. Older reports
+return `None`. Elapsed values are inclusive wall seconds; nested spans must not
+be summed. Use `(trace_id, span_id)` to deduplicate repeated embedded spans and
+`parent_span_id` to recover nesting. Evidence collections link to computation
+`result_ids`; cache hits link to their original work. These are worker
+observations, separate from client polling or round-trip latency.
+
+Preserve the full report before reducing benchmark results to application summaries:
+
+```python
+from pathlib import Path
+from time import perf_counter
+
+started = perf_counter()
+report = service.analyze(experiment, request).result()
+client_elapsed_seconds = perf_counter() - started
+# Save outside the measured SDK interval; retains preparation/compression and
+# simulator resource metadata as well as any worker performance spans.
+Path("feasibility-report.json").write_text(report.to_json(indent=2))
+if report.performance is not None:
+    for span in report.performance.spans:
+        print(span.operation, span.elapsed_seconds, span.result_ids)
+```
+
+The SDK forwards observed durations without interpreting submit-and-wait time
+as pure simulation or queue time. Missing timers are unavailable, not zero.
+
+### Provider execution receipts
+
+New Feasibility workers retain remote execution IDs even when the selected result
+is classical. The SDK exposes them without querying a hardware provider:
+
+```python
+for attempt in report.execution_attempts or ():
+    for submission in attempt["execution_provenance"]["submissions"]:
+        print(submission["provider"], submission.get("backend"),
+              submission.get("execution_id"), submission["local_outcome"])
+```
+
+For `result_scope="all"`, each retained result's
+`experiment_report.execution.execution_provenance` contains its full receipts
+(when it has an execution). The assessment view keeps IDs, measurement labels and
+usage but omits detailed per-circuit metrics/configuration. Older workers may return
+`None`; this means unavailable rather than zero jobs. Remote job IDs are separate
+from PineXQ job IDs and assessment-local result IDs.
+
+IBM usage collection is optional: pass `collect_job_metrics=True` in the existing
+evidence collection `execution_options` to request one best-effort metrics lookup
+per completed job. Its timeout/retry policy is the Runtime client's policy; it is
+off by default. Provider usage preserves its own units and meaning and must not be
+interpreted as SDK elapsed time. Partial receipts survive handled failures in
+Feasibility reports; unhandled PineXQ errors still use the existing message-based
+error transport. This feature does not provide durable worker-crash recovery.

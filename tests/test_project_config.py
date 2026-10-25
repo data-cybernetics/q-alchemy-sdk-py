@@ -36,7 +36,7 @@ def test_pinexq_dependency_requires_supported_client_versions() -> None:
         Requirement(entry) for entry in _metadata()["project"]["dependencies"]
         if Requirement(entry).name == "pinexq-client"
     )
-    assert "2.1.0" in dependency.specifier
+    assert "2.5.0" in dependency.specifier
     assert "2.0.0" not in dependency.specifier
     assert "3.0.0" not in dependency.specifier
 

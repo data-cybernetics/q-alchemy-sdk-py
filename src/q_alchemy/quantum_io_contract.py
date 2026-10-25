@@ -6,6 +6,8 @@ private runtime package. JSON serialization remains an internal transport detail
 
 from __future__ import annotations
 
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+
 from .quantum_io_compression_contract import CircuitCompressionConfig, CircuitCompressionMetrics, CircuitCompressionSummary
 
 import json
@@ -14,6 +16,8 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from q_alchemy.utils import nonnegative_integer
+
+from ._state_dtype import amplitude_array, SUPPORTED_DTYPES
 
 SCHEMA_VERSION = 3
 
@@ -148,15 +152,21 @@ class State:
     """Portable target state.
 
     Use :meth:`dense` or :meth:`sparse`; users never need to supply the wire
-    discriminator manually.
+    discriminator manually. Floating array dtype is retained; lists can
+    select float32/float64/complex64/complex128 with ``dtype``. Legacy wire
+    payloads without dtype decode as complex128.
     """
 
     num_qubits: int
     amplitudes: tuple[complex, ...]
     indices: tuple[int, ...] | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    dtype: str | None = None
 
     def __post_init__(self) -> None:
+        values = amplitude_array(self.amplitudes, self.dtype)
+        object.__setattr__(self, "amplitudes", tuple(values.tolist()))
+        object.__setattr__(self, "dtype", values.dtype.name)
         nonnegative_integer(self.num_qubits, "num_qubits")
         if self.indices is None:
             if len(self.amplitudes) != 1 << self.num_qubits:
@@ -186,14 +196,15 @@ class State:
         *,
         num_qubits: int | None = None,
         metadata: Mapping[str, Any] | None = None,
+        dtype: str | None = None,
     ) -> "State":
-        values = tuple(complex(value) for value in amplitudes)
+        values = amplitude_array(amplitudes, dtype)
         if num_qubits is None:
             size = len(values)
             if size == 0 or size & (size - 1):
                 raise ValueError("dense state length must be a non-zero power of two")
             num_qubits = size.bit_length() - 1
-        return cls(nonnegative_integer(num_qubits, "num_qubits"), values, None, dict(metadata or {}))
+        return cls(nonnegative_integer(num_qubits, "num_qubits"), values, None, dict(metadata or {}), values.dtype.name)
 
     @classmethod
     def sparse(
@@ -203,12 +214,15 @@ class State:
         indices: Sequence[int],
         amplitudes: Sequence[complex],
         metadata: Mapping[str, Any] | None = None,
+        dtype: str | None = None,
     ) -> "State":
+        values = amplitude_array(amplitudes, dtype)
         return cls(
             nonnegative_integer(num_qubits, "num_qubits"),
-            tuple(complex(value) for value in amplitudes),
+            values,
             tuple(nonnegative_integer(index, "sparse index") for index in indices),
             dict(metadata or {}),
+            values.dtype.name,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -222,6 +236,7 @@ class State:
             raise ValueError("state amplitudes must have non-zero norm")
         data: dict[str, Any] = {
             "representation": self.representation,
+            "dtype": self.dtype,
             "num_qubits": self.num_qubits,
             "amplitudes": amplitudes,
             "metadata": _validated_metadata(self.metadata, path="state.metadata"),
@@ -232,6 +247,8 @@ class State:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "State":
+        if "dtype" in data and (not isinstance(data["dtype"], str) or data["dtype"] not in SUPPORTED_DTYPES):
+            raise ValueError("Unsupported state dtype")
         representation = str(data["representation"])
         amplitudes = tuple(_complex_from_data(value) for value in data["amplitudes"])
         metadata = dict(data.get("metadata", {}))
@@ -242,6 +259,7 @@ class State:
                 amplitudes,
                 num_qubits=data["num_qubits"],
                 metadata=metadata,
+                dtype=data.get("dtype", "complex128"),
             )
         if representation == "sparse":
             return cls.sparse(
@@ -252,6 +270,7 @@ class State:
                 ),
                 amplitudes=amplitudes,
                 metadata=metadata,
+                dtype=data.get("dtype", "complex128"),
             )
         raise ValueError("state representation must be 'dense' or 'sparse'")
 
@@ -1178,6 +1197,12 @@ class ExecutionResult:
     basis_distributions: tuple[BasisDistribution, ...] = ()
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
+    @property
+    def execution_provenance(self) -> Mapping[str, Any] | None:
+        """Optional provider-neutral receipts; preserve unknown schema/extensions."""
+        value = self.metadata.get("execution_provenance")
+        return value if isinstance(value, Mapping) else None
+
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExecutionResult":
         observations = data.get("observations")
@@ -1817,6 +1842,9 @@ class ExperimentReport:
     circuit_compression: CircuitCompressionSummary | None = None
     # Optional portable QASM 3, separate from runtime-only circuit objects.
     portable_quantum_circuit: Mapping[str, Any] | None = None
+    circuit_complexity: Mapping[str, Any] | None = None
+
+    performance: PerformanceDiagnostics | None = None
 
     @property
     def quantum_circuit(self) -> Any | None:
@@ -1839,6 +1867,7 @@ class ExperimentReport:
         estimate = data.get("estimate")
         held_out = data.get("held_out_verification_error")
         return cls(
+            performance=(PerformanceDiagnostics.from_dict(data["performance"]) if data.get("performance") is not None else None),
             portable_quantum_circuit=_portable_quantum_circuit(data.get("quantum_circuit")),
             generated_at=str(data["generated_at"]),
             mode=str(data["mode"]),
@@ -1881,14 +1910,19 @@ class ExperimentReport:
                 else None
             ),
             warnings=tuple(str(item) for item in data.get("warnings", ())),
+            circuit_complexity=(dict(data['circuit_complexity'])
+                                if isinstance(data.get('circuit_complexity'), Mapping) else None),
             reference_to_estimated_surrogate_fidelity=(float(data["reference_to_estimated_surrogate_fidelity"]) if data.get("reference_to_estimated_surrogate_fidelity") is not None else None),
             reference_to_estimated_surrogate_infidelity=(float(data["reference_to_estimated_surrogate_infidelity"]) if data.get("reference_to_estimated_surrogate_infidelity") is not None else None),
         )
 
     def _report_dict(self) -> dict[str, Any]:
         payload = {
+            **({"performance": self.performance.to_dict()} if self.performance is not None else {}),
             "generated_at": self.generated_at,
             "mode": self.mode,
+            **({'circuit_complexity': dict(self.circuit_complexity)}
+               if self.circuit_complexity is not None else {}),
             **({"quantum_circuit": _portable_quantum_circuit(self.portable_quantum_circuit)}
                if self.portable_quantum_circuit is not None else {}),
             "experiment": self.experiment.to_dict(),

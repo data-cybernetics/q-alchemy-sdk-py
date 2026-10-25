@@ -23,6 +23,8 @@ from .simulator import (
 )
 
 
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+
 from .quantum_io_contract import (
     SCHEMA_VERSION,
     BasisDistribution,
@@ -70,6 +72,7 @@ from .quantum_io import (
 from .feasibility_contract import (
     CircuitCompressionConfig,
     ClassicalResources,
+    ComputationResult,
     Criterion,
     EvidenceCollectionConfig,
     FeasibilityPolicy,
@@ -79,6 +82,8 @@ from .feasibility_contract import (
     FeasibilityRequest,
     QuantumExecutionPolicy,
     RecommendedCompute,
+    ResultScope,
+    ResultScopeUnavailableError,
     Relation,
     SolutionCriteria,
 )

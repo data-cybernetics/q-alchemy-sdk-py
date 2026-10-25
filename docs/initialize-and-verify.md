@@ -52,7 +52,6 @@ result. It picks the circuit transport automatically (inline OpenQASM for small
 circuits, a QPY upload for large ones).
 
 ```python
-from qiskit.quantum_info import Statevector, state_fidelity
 from q_alchemy import SparseSimulator
 
 sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from the env
@@ -61,18 +60,17 @@ sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from the e
 sv = sim.sparse_statevector(prep, sparse_index_format="bitstring")
 print(sv.nnz, "non-zero amplitudes")
 
-# Did we prepare the state we asked for, and does the simulator agree with Qiskit?
-print("vs target:", state_fidelity(Statevector(sv.to_dense()), Statevector(target)))
-print("vs qiskit:", state_fidelity(Statevector(sv.to_dense()), Statevector(prep)))
+# Compare the simulator output directly against the requested amplitudes.
+print("vs target:", abs(np.vdot(target, sv.to_dense()))**2)
 
 # (b) Measurement counts (Born-rule sampling).
 measured = prep.copy(); measured.measure_all()
 print(sim.counts(measured, shots=8192).counts)
 
 # (c) Tomography: an exact analysis of the simulated state (not measurement-based):
-#     density matrix and purity, plus fidelity against a dense reference for small circuits.
+#     density matrix and purity, without a second simulation.
 tomo = sim.tomography(prep)
-print("purity:", tomo.purity, "fidelity:", tomo.state_fidelity)
+print("purity:", tomo.purity)
 ```
 
 For a sparse target the simulator reproduces the prepared state **exactly**
@@ -96,36 +94,57 @@ never discards tiny amplitudes or renormalizes the state. This keeps transport
 lossless and leaves the approximation budget with QTucker.
 
 - Dense vectors use NumPy `.npy` serialization (`numpy_load` for inline input).
-- Sparse vectors use Parquet with basis indices and complex amplitudes. Inputs
-  already supplied as SciPy sparse matrices/arrays skip the density check and
-  remain sparse, even when fully populated.
+- Sparse vectors use the existing Quantum I/O `State.sparse(...)` JSON wire
+  format: explicit `num_qubits`, decimal-string basis indices, and `[real, imag]`
+  amplitudes. `State.sparse(...)` inputs go directly to serialization without a
+  SciPy conversion, including indices above 64 bits. SciPy inputs skip the density
+  check, combine duplicate coordinates and remove exact zeros before serialization.
+  Zero states and nonfinite sparse amplitudes are rejected before submission.
 - Mixed batches are split into at most two service jobs, one per representation;
   returned circuits and summaries follow the original input order. Each job uses
   the usual cleanup policy and timeout. If either job fails, the call raises.
   Uniform batches still use one job; parallel option sets share one serialization.
 
-The updated ProCon preserves these dense/sparse paths into QTucker. Both formats
-are supported by older services too, but avoiding server-side conversions requires
-the updated ProCon deployment. No private QTucker dependency is added to the SDK.
+Sparse JSON requires a preparation adapter that supports the State wire format.
+Deploy that adapter before upgrading SDK clients. For older adapters, set
+`OptParams(legacy_sparse_transport=True)` to retain sparse Parquet transport;
+that format cannot represent 63 or more qubits. Existing NumPy and Parquet files
+remain accepted by the new adapter. No private QTucker dependency is added to the SDK.
+
+The adapter decodes sparse JSON once and packs one row into QTucker's unsigned
+64-bit words at dispatch, without SciPy, Arrow or dense-state conversions.
+Workload licensing admits states by the score below, independently of technical
+resource safeguards. For example, hierarchical Tucker's low-rank fallback can
+exceed the Python backend's dense-lifting limit even on an admitted sparse
+72-qubit state.
 
 ---
 
-## Plans & limits — the free tier is strongly limited
+## Plans and limits
 
 State preparation runs on Q-Alchemy's servers, so usage is bounded by your plan
-(read from your account's grants). **The free tier is intentionally limited** —
-it's meant for trying things out, not production-scale workloads:
+(read from your account's grants). Adapters with workload licensing use
+**state complexity = logical qubits × canonical nonzero amplitudes**. The same
+state score and allowances apply to Preparation's entanglement analysis and to
+Quantum I/O and Feasibility requests that supply a target state.
 
 | | Free plan | Enterprise plan |
 |---|---|---|
-| Max qubits for **state preparation** | **up to 12 qubits** | larger (currently up to ~16; in active expansion) |
-| Batch size (multi-state preparation) | **up to 100 states** | higher |
+| Maximum state complexity (inclusive) | **49,152** | **20,971,520** |
+| Batch size per preparation service job | **up to 100 states** | No separate commercial batch cap |
 | Simulator resource tier | **Standard (Medium)** | **XLarge** (auto-selected) |
 
-If you exceed a free-tier limit you'll get a clear error asking you to upgrade
-(`support@q-alchemy.com`). These numbers reflect the current prototype phase and
-may change — check the [portal](https://portal.q-alchemy.com/) for what your key
-allows.
+Count nonzeros after combining duplicate basis indices and removing exact-zero
+cancellations; explicit zeros do not count and tiny nonzeros do. State JSON
+requires unique indices, while the SDK canonicalizes legacy SciPy input. Each
+batch row must fit its allowance independently. A dense 12-qubit state scores
+`12 * 4096 = 49,152`; a sparse 72-qubit state with two amplitudes scores only 144.
+
+The authenticated adapter enforces admission, and the SDK preserves its error
+message. Older deployments can still enforce qubit limits. See the
+[licensing test guide](licensing_tests.md) to check the latest released services
+or override their versions. Admission does not guarantee successful execution;
+technical memory, width and algorithm constraints still apply.
 
 ### Simulator tiers are automatic
 
@@ -175,3 +194,32 @@ section of the README.
   — the full prepare → simulate → verify notebook with plots.
 - The [PineXQ documentation](https://pinexq.net/docs/), to work with the
   underlying API directly.
+
+### Amplitude dtype
+
+Preparation and portable `State` inputs retain `float32`, `float64`, `complex64`,
+and `complex128` amplitude storage. NumPy and SciPy inputs infer the dtype from
+their data; `State.dense(...)` and `State.sparse(...)` also accept an explicit
+`dtype="float32"` (or another supported name) for Python lists. Integer/bool
+inputs use float64. Unsupported storage types are rejected by `State`.
+A real dtype rejects amplitudes with nonzero imaginary parts.
+
+```python
+values = np.array([.6, .8], dtype=np.float64)
+state = State.sparse(num_qubits=72, indices=[0, (1 << 71) + 3], amplitudes=values)
+assert state.dtype == "float64"
+```
+
+The existing sparse JSON wire includes an optional `dtype` field. Legacy
+Parquet transport includes dtype schema metadata; dense NumPy transport retains
+its native dtype. Batches of different dtypes are submitted in separate groups
+and results retain their original order. JSON payloads without `dtype` remain
+readable and default to complex128; old Parquet files keep their legacy behavior.
+
+Dtype preservation requires preparation ProCon **0.4.10+**, Quantum I/O core
+**0.12.9+** (hosted adapter **0.8.12+**), and Feasibility core **0.6.62+** (hosted
+adapter **0.2.20+**), as applicable. Older consumers can still read the wire but
+may widen amplitudes. Deploy updated consumers before releasing SDK **0.4.3**.
+Dtype preservation applies to the input passed into preparation. Quantum
+evolution, decomposition and other algorithm intermediates choose their own
+appropriate numerical types.
