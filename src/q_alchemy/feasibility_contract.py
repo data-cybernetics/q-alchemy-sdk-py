@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+from .performance_contract import PerformanceDiagnostics
 
 from .quantum_io_compression_contract import CircuitCompressionConfig as QuantumIOCircuitCompressionConfig
 from .quantum_io_compression_contract import _compression_diagnostic_lines
@@ -139,14 +139,32 @@ class QuantumExecutionPolicy(str, Enum):
     NEVER = "never"
 
 
-class FeasibilityStatus(str, Enum):
+class _OpenStrEnum(str, Enum):
+    """Enum for values the service reports; it may add values in newer releases.
+
+    An unknown string becomes a pseudo-member carrying that value, so reading a
+    report from a newer service never fails and ``.value`` stays exact. Known
+    values still return the canonical members (``is`` comparisons work).
+    """
+
+    @classmethod
+    def _missing_(cls, value: object):
+        if not isinstance(value, str):
+            return None
+        member = str.__new__(cls, value)
+        member._name_ = value.upper().replace("-", "_")
+        member._value_ = value
+        return member
+
+
+class FeasibilityStatus(_OpenStrEnum):
     FEASIBLE = "feasible"
     INFEASIBLE = "infeasible"
     NOT_NEEDED = "not-needed"
     UNKNOWN = "unknown"
 
 
-class RecommendedCompute(str, Enum):
+class RecommendedCompute(_OpenStrEnum):
     CLASSICAL = "classical"
     QUANTUM = "quantum"
     NONE_AVAILABLE = "none-available"
@@ -371,6 +389,16 @@ class ResultScope(str, Enum):
 
     SELECTED = "selected"
     ALL = "all"
+
+
+def _known_result_scope(value: Any) -> ResultScope | None:
+    """Parse a scope acknowledged by the service; unknown values read as None."""
+    if value is None:
+        return None
+    try:
+        return ResultScope(value)
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True)
@@ -1049,10 +1077,10 @@ class FeasibilityReport:
         _schema_version(data.get("schema_version"))
         if data.get("kind") != "feasibility-report":
             raise ValueError("payload kind must be 'feasibility-report'")
-        if data.get("result_scope") is not None:
-            scope = ResultScope(data["result_scope"])
-            if scope is ResultScope.ALL and not isinstance(data.get("computation_results"), list):
-                raise ValueError("result_scope='all' requires a computation_results array")
+        if _known_result_scope(data.get("result_scope")) is ResultScope.ALL and not isinstance(
+            data.get("computation_results"), list
+        ):
+            raise ValueError("result_scope='all' requires a computation_results array")
         return cls(dict(data))
 
     @property
@@ -1062,9 +1090,12 @@ class FeasibilityReport:
 
     @property
     def result_scope(self) -> ResultScope | None:
-        """Applied scope, or None when a legacy service did not acknowledge it."""
-        value = self.raw.get("result_scope")
-        return ResultScope(value) if value is not None else None
+        """Applied scope, or None when a legacy service did not acknowledge it.
+
+        A scope this SDK version does not know also reads as None; the service's
+        value stays available as ``raw["result_scope"]``.
+        """
+        return _known_result_scope(self.raw.get("result_scope"))
 
     @property
     def computation_results(self) -> tuple[ComputationResult, ...] | None:
@@ -1101,7 +1132,7 @@ class FeasibilityReport:
         value = self.raw.get("recommendation")
         data = value if isinstance(value, Mapping) else {}
         return FeasibilityRecommendation(
-            RecommendedCompute(str(data.get("compute", "undetermined"))),
+            RecommendedCompute(str(data.get("compute") or "undetermined")),
             str(data.get("reason", "")),
         )
 
@@ -1215,11 +1246,11 @@ class FeasibilityReport:
 
     @property
     def classical_status(self) -> FeasibilityStatus:
-        return FeasibilityStatus(str(self.classical.get("status", "unknown")))
+        return FeasibilityStatus(str(self.classical.get("status") or "unknown"))
 
     @property
     def quantum_status(self) -> FeasibilityStatus:
-        return FeasibilityStatus(str(self.quantum.get("status", "unknown")))
+        return FeasibilityStatus(str(self.quantum.get("status") or "unknown"))
 
     @property
     def next_evidence(self) -> tuple[Mapping[str, Any], ...]:
@@ -1306,7 +1337,7 @@ class FeasibilityReport:
                     ]
                 )
             lines.append(
-                f"  Accepted regions: {int(compression.get('accepted_regions', 0))}"
+                f"  Accepted regions: {_int_or_none(compression.get('accepted_regions')) or 0}"
             )
             lines.extend(_compression_diagnostic_lines(compression.get("diagnostics")))
 
@@ -1440,7 +1471,11 @@ class FeasibilityReport:
         if self.execution_attempts:
             lines.extend(["", "PROVIDER EXECUTIONS"])
             for attempt in self.execution_attempts:
-                for submission in attempt.get("execution_provenance", {}).get("submissions", ()):
+                provenance = attempt.get("execution_provenance")
+                submissions = provenance.get("submissions") if isinstance(provenance, Mapping) else None
+                for submission in submissions if isinstance(submissions, (list, tuple)) else ():
+                    if not isinstance(submission, Mapping):
+                        continue
                     lines.append(
                         f"  {submission.get('provider', 'unknown')} / {submission.get('backend', 'unknown')}: "
                         f"{submission.get('execution_id', 'ID unavailable')} "

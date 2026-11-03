@@ -161,7 +161,7 @@ def test_parallel_order_limit_serialization_and_client_ownership(monkeypatch):
         clients.append(client)
         return client
     monkeypatch.setattr(initialize, "create_client", make_client)
-    def run(payload, n, opt, client, summary, inline):
+    def run(payload, opt, client, summary, inline):
         nonlocal active, peak
         with lock:
             active += 1

@@ -161,7 +161,7 @@ def test_parallel_dense_options_select_and_serialize_only_once(monkeypatch):
     serializer = Mock(wraps=init._serialize_statevector)
     monkeypatch.setattr(init, '_maybe_make_sparse_row', check)
     monkeypatch.setattr(init, '_serialize_statevector', serializer)
-    def run(payload, n, options, client, summary, inline):
+    def run(payload, options, client, summary, inline):
         assert init._payload_type(payload) == 'numpy_load'
         assert base64.b64decode(inline) == payload
         return 'qasm'
@@ -265,7 +265,7 @@ def test_invalid_sparse_row_in_mixed_batch_fails_before_upload(monkeypatch):
 
 
 def test_parallel_options_can_mix_legacy_and_json(monkeypatch):
-    def run(payload, n, opt, client, summary, inline):
+    def run(payload, opt, client, summary, inline):
         assert base64.b64decode(inline) == payload
         return init._payload_type(payload)
     monkeypatch.setattr(init, '_run_prepared_statevector', run)

@@ -12,6 +12,7 @@ LOG = logging.getLogger(__name__)
 
 from .initialize import q_alchemy_as_qasm
 from .simulator import (
+    PlanLookupError,
     SparseSimulator,
     SimulatorParams,
     CountsResult,

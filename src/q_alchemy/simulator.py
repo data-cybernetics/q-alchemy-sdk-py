@@ -47,7 +47,9 @@ import io
 import json
 import logging
 import os
-from dataclasses import dataclass, field, fields
+from collections.abc import Mapping
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Literal, Sequence
 
@@ -72,6 +74,10 @@ Circuit = Any  # qiskit.QuantumCircuit (imported lazily) or an OpenQASM 2 string
 
 # Grant (from the caller's UserGrants) that unlocks the XLarge enterprise tier.
 ENTERPRISE_GRANT = "plan:enterprise"
+
+
+class PlanLookupError(RuntimeError):
+    """The caller's plan could not be read, so the simulator tier is unknown."""
 
 # Return-WorkData alias produced by each capability (matches the ProCon).
 _OUTPUT_ALIAS: dict[str, str] = {
@@ -130,14 +136,26 @@ class SimulatorParams:
 
 
 def _populate_params(params: "SimulatorParams | dict | None", **kwargs) -> SimulatorParams:
+    """Return a private ``SimulatorParams``; the caller's object is never modified.
+
+    A mapping may carry keys shared with other SDK params (they are ignored, as
+    in :meth:`SimulatorParams.from_dict`), but keyword overrides must name
+    ``SimulatorParams`` fields: a misspelled option raises ``TypeError``.
+    """
     if params is None:
-        params = SimulatorParams()
-    elif isinstance(params, dict):
-        params = SimulatorParams.from_dict(params)
-    for attr, value in kwargs.items():
-        if hasattr(params, attr):
-            setattr(params, attr, value)
-    return params
+        resolved = SimulatorParams()
+    elif isinstance(params, SimulatorParams):
+        resolved = deepcopy(params)
+    elif isinstance(params, Mapping):
+        resolved = SimulatorParams.from_dict(params)
+    else:
+        raise TypeError("params must be SimulatorParams, a mapping, or None")
+    if kwargs:
+        unknown = sorted(set(kwargs) - {f.name for f in fields(SimulatorParams)})
+        if unknown:
+            raise TypeError(f"Unknown simulator option(s): {', '.join(unknown)}")
+        resolved = replace(resolved, **kwargs)
+    return resolved
 
 
 # --------------------------------------------------------------------------- #
@@ -388,6 +406,8 @@ class SparseSimulator:
         Navigates the entry point to ``Info`` and returns the embedded
         ``CurrentUser.UserGrants`` (e.g. ``["plan:enterprise", ...]``). Returns
         ``[]`` if the API doesn't expose it, so detection degrades to standard.
+        Raises :class:`PlanLookupError` if the lookup fails; failures are not
+        cached.
         """
         if self._grants is None:
             self._grants = self._fetch_user_grants()
@@ -433,21 +453,44 @@ class SparseSimulator:
             self._tier = requested
         return self._tier
 
+    def _get_json_object(self, url: str) -> dict:
+        response = self.client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError(f"expected a JSON object from {url}")
+        return data
+
     def _fetch_user_grants(self) -> list[str]:
+        """Read ``CurrentUser.UserGrants``.
+
+        ``[]`` means the API does not expose grants (no ``Info`` link or no
+        ``CurrentUser`` entity). A failed lookup -- network error, HTTP error
+        status, or a malformed response -- raises :class:`PlanLookupError`
+        instead, so a transient failure cannot silently move an enterprise
+        caller to the standard tier; nothing is cached and the next call retries.
+        """
         try:
-            entry = self.client.get("/api/EntryPoint").json()
+            entry = self._get_json_object("/api/EntryPoint")
             info_href = next(
-                (l["href"] for l in entry.get("links", []) if "Info" in (l.get("rel") or [])),
+                (link["href"] for link in entry.get("links") or []
+                 if "Info" in (link.get("rel") or [])),
                 None,
             )
             if not info_href:
                 return []
-            info = self.client.get(info_href).json()
-            for entity in info.get("entities", []):
+            info = self._get_json_object(info_href)
+            for entity in info.get("entities") or []:
                 if "CurrentUser" in (entity.get("rel") or []):
-                    return list((entity.get("properties") or {}).get("UserGrants", []))
-        except Exception:
-            return []
+                    grants = (entity.get("properties") or {}).get("UserGrants") or []
+                    if not isinstance(grants, list) or not all(isinstance(g, str) for g in grants):
+                        raise ValueError("UserGrants must be a list of strings")
+                    return list(grants)
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            raise PlanLookupError(
+                "Could not read this API key's plan (UserGrants) to choose the simulator "
+                f"tier: {exc}. Pass tier='standard' to skip the plan lookup."
+            ) from exc
         return []
 
     # -- public capabilities ------------------------------------------------- #

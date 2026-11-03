@@ -15,8 +15,68 @@ Each release on GitHub has fuller notes.
   selected computation is classical. Feasibility text summaries show provider IDs.
   Older reports remain readable without receipts or provider dependencies.
 
+### Changed
+
+- `QAlchemyBackend.run()` now starts the remote simulation in a background
+  thread, like Aer. `QAlchemyJob.status()` reports `QUEUED`/`RUNNING`/`DONE`/
+  `ERROR`, `result(timeout=...)` and `wait_for_final_state()` work, and a failed
+  job is re-raised on every `result()` call instead of being resubmitted.
+- Keyword overrides must name a real option: `q_alchemy_as_qasm*`,
+  `SparseSimulator`, `QAlchemyBackend`/`QAlchemyProvider`, `QuantumIOService`
+  and `FeasibilityService` raise `TypeError` for a misspelled option (e.g.
+  `max_fidelity_los=`) instead of silently ignoring it. Passing simulator options
+  together with an existing `SparseSimulator` also raises.
+- `SparseSimulator` raises the new `PlanLookupError` when it cannot read the
+  caller's plan (network error, HTTP error status, malformed response) instead
+  of treating the failure as "no grants". Previously a transient failure was
+  cached for the client's lifetime and silently moved enterprise callers to the
+  standard tier (or produced a misleading `PermissionError` for
+  `tier="enterprise"`). Failures are not cached; `tier="standard"` needs no lookup.
+- `q_alchemy_as_qasm`, `q_alchemy_as_qasm_parallel` and each item given to
+  `q_alchemy_as_qasm_parallel_states` must be a single state: shapes `(N,)`,
+  `(1, N)` and `(N, 1)` are accepted, and a 2-D batch such as `(2, 4)` now raises
+  `ValueError` instead of being flattened into one longer state.
+- Update runtime, build, development, and examples dependency minimums, including
+  `pinexq-client>=2.7.0,<3`. Preserve Python 3.11–3.14 support with Python-specific
+  NumPy, SciPy, and SciPy stubs requirements, the compatible PennyLane–Qiskit
+  dependency set, and the seven-day release-age policy.
+- Constrain Setuptools only for legacy IBM dependency metadata builds so optional
+  quantum integrations resolve with current build tooling.
+
 ### Fixed
 
+- SDK entry points no longer modify the params object passed in:
+  `populate_opt_params`, `SparseSimulator` (so `QAlchemyProvider.get_backend(tier=...)`
+  no longer changes the provider's shared settings), `QuantumIOService` and
+  `FeasibilityService` now work on a copy.
+- Reports from a newer service no longer make `result()` fail:
+  `RecommendedCompute` and `FeasibilityStatus` keep values this SDK version does
+  not know (e.g. `report.recommendation.compute.value == "hybrid"`); an unknown
+  `result_scope` in a report reads as `None` (the value stays in `report.raw`)
+  while requests still reject unknown scopes; `ExperimentReport` drops
+  performance diagnostics it cannot read, with a `UserWarning`, instead of
+  rejecting the whole report; and `FeasibilityReport.format_summary()` tolerates
+  `null` for `accepted_regions`, `execution_provenance` and its submissions.
+- `QAlchemyBackend` results now carry Aer's `creg_sizes`/`qreg_sizes`/
+  `global_phase` header fields, so counts and memory for circuits with several
+  classical registers are split per register exactly as Aer does (`'10 1'`,
+  or `'01 00'` after `measure_all()` on a circuit with a register) instead of
+  one run-together key.
+- PennyLane: `QAlchemyStatePreparation`, `AmplitudeEmbedding` and
+  `pennylane_batch_initialize` accept `opt_params` as a dict, and no longer append
+  `Source=PennyLane-Integration` to the caller's `OptParams.job_tags` on every
+  construction (the tag is now present exactly once on a private copy).
+- `ExecutionPlan` given `q_alchemy.CircuitCompressionConfig` (the Feasibility
+  variant, enabled by default) now stores the Quantum I/O type, so the plan
+  round-trips, and warns when that silently enables compression. Use
+  `q_alchemy.quantum_io.CircuitCompressionConfig` for plans.
+- Removed an unreachable `return ops_list` (undefined name) and a no-op
+  `tocoo()` call in the PennyLane integration, unused imports in the Feasibility
+  and Quantum I/O modules, and an unused parameter of an internal
+  initialization helper. `q_alchemy.quantum_io` now imports the performance and
+  compression types from their defining modules; its exports are unchanged.
+- Read MNIST digit labels as strings in the data-upload test fixture, avoiding
+  scikit-learn's string-only category cleanup on pandas-inferred integer labels.
 - README: the compact sparse reconstruction example pinned Quantum I/O
   `step_version="0.8.0"`, which was never deployed, so it failed to find the step.
   It now uses the default version discovery. The other version-pinning examples

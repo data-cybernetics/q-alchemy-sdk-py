@@ -6,12 +6,13 @@ private runtime package. JSON serialization remains an internal transport detail
 
 from __future__ import annotations
 
-from .performance_contract import PerformanceDiagnostics, PerformanceSpan
+from .performance_contract import PerformanceDiagnostics
 
-from .quantum_io_compression_contract import CircuitCompressionConfig, CircuitCompressionMetrics, CircuitCompressionSummary
+from .quantum_io_compression_contract import CircuitCompressionConfig, CircuitCompressionSummary
 
 import json
 import math
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
@@ -748,6 +749,23 @@ class ExecutionPlan:
             raise ValueError("shots must be positive")
         if not isinstance(self.circuit_compression, CircuitCompressionConfig):
             raise ValueError("circuit_compression must be a CircuitCompressionConfig")
+        if type(self.circuit_compression) is not CircuitCompressionConfig:
+            # e.g. q_alchemy.CircuitCompressionConfig, the Feasibility variant whose
+            # default is enabled=True. Keep its settings, but store the Quantum I/O
+            # type so the plan round-trips, and say that compression is on.
+            given = self.circuit_compression
+            if given.enabled:
+                warnings.warn(
+                    f"ExecutionPlan received {type(given).__module__}.{type(given).__qualname__}, "
+                    "which enables circuit compression by default (q_alchemy.CircuitCompressionConfig "
+                    "is the Feasibility variant). Compression is enabled for this plan; use "
+                    "q_alchemy.quantum_io.CircuitCompressionConfig, which defaults to enabled=False.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            object.__setattr__(self, "circuit_compression", CircuitCompressionConfig(
+                enabled=given.enabled, options=given.options,
+            ))
         _check_no_secrets(self.circuit_compression.options, path="circuit_compression.options")
         _check_no_secrets(self.preparation_options, path="preparation_options")
         _validated_metadata(self.preparation_options, path="preparation_options")
@@ -1816,6 +1834,26 @@ def _portable_quantum_circuit(value: Any) -> dict[str, Any] | None:
     return dict(value)
 
 
+
+def _optional_performance(value: Any) -> PerformanceDiagnostics | None:
+    """Parse optional wall-time diagnostics without failing the report.
+
+    Diagnostics are informational. A producer newer than this SDK may report a
+    span status or field this version rejects; the experiment result is still
+    valid, so the diagnostics are dropped with a warning instead.
+    """
+    if value is None:
+        return None
+    try:
+        return PerformanceDiagnostics.from_dict(value)
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        warnings.warn(
+            f"Ignoring performance diagnostics this SDK version cannot read: {exc}",
+            UserWarning,
+            stacklevel=2,
+        )
+        return None
+
 @dataclass(frozen=True)
 class ExperimentReport:
     """Typed, service-safe experiment report.
@@ -1867,7 +1905,7 @@ class ExperimentReport:
         estimate = data.get("estimate")
         held_out = data.get("held_out_verification_error")
         return cls(
-            performance=(PerformanceDiagnostics.from_dict(data["performance"]) if data.get("performance") is not None else None),
+            performance=_optional_performance(data.get("performance")),
             portable_quantum_circuit=_portable_quantum_circuit(data.get("quantum_circuit")),
             generated_at=str(data["generated_at"]),
             mode=str(data["mode"]),

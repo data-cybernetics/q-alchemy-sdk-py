@@ -9,7 +9,8 @@ import io
 import os
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, UTC
 from enum import StrEnum
 from typing import List, Tuple, Dict, Optional
@@ -210,17 +211,26 @@ def _upload_statevector_payload(client: httpx.Client, payload: bytes, opt_params
 
 
 def populate_opt_params(opt_params: dict | OptParams | None = None, **kwargs) -> OptParams:
-    if opt_params is None:
-        opt_params = OptParams()
-    elif isinstance(opt_params, OptParams):
-        opt_params = opt_params
-    else:
-        opt_params = OptParams(**opt_params)
+    """Return a private ``OptParams``; the caller's object is never modified.
 
-    for attr in kwargs:
-        if hasattr(opt_params, attr):
-            setattr(opt_params, attr, kwargs[attr])
-    return opt_params
+    Keyword overrides must name ``OptParams`` fields: a misspelled option raises
+    ``TypeError`` rather than being silently ignored.
+    """
+    if opt_params is None:
+        resolved = OptParams()
+    elif isinstance(opt_params, OptParams):
+        resolved = deepcopy(opt_params)
+    elif isinstance(opt_params, Mapping):
+        resolved = OptParams(**opt_params)
+    else:
+        raise TypeError("opt_params must be OptParams, a mapping, or None")
+
+    if kwargs:
+        unknown = sorted(set(kwargs) - {f.name for f in fields(OptParams)})
+        if unknown:
+            raise TypeError(f"Unknown OptParams option(s): {', '.join(unknown)}")
+        resolved = replace(resolved, **kwargs)
+    return resolved
 
 
 def create_processing_input(opt_params: OptParams, statevector_data: WorkDataLink | str,
@@ -598,8 +608,8 @@ def _q_alchemy_as_qasm(
         client: httpx.Client,
         return_summary: bool,
 ) -> str | Tuple[str, dict]:
-    payload, num_qubits = _prepare_statevector(state_vector, legacy_sparse_transport=opt_params.legacy_sparse_transport)
-    return _run_prepared_statevector(payload, num_qubits, opt_params, client, return_summary)
+    payload, _ = _prepare_statevector(state_vector, legacy_sparse_transport=opt_params.legacy_sparse_transport)
+    return _run_prepared_statevector(payload, opt_params, client, return_summary)
 
 
 def _maybe_make_sparse_row(vector: np.ndarray):
@@ -619,6 +629,16 @@ def _maybe_make_sparse_row(vector: np.ndarray):
     return sparse.coo_matrix(vector.reshape(1, -1))
 
 
+def _require_one_state(shape) -> None:
+    """Accept (N,), (1, N) or (N, 1); never flatten a batch into one longer state."""
+    if sum(1 for extent in shape if extent != 1) > 1:
+        raise ValueError(
+            f"Expected one state vector, got an array of shape {tuple(shape)}. "
+            "To prepare several states, pass them to q_alchemy_as_qasm_parallel_states, "
+            "one state per row or list item."
+        )
+
+
 def _state_row(state_vector):
     """Validate width and choose a transport representation once per state."""
     if isinstance(state_vector, State):
@@ -628,9 +648,12 @@ def _state_row(state_vector):
             return state_vector
         state_vector = np.asarray(state_vector.amplitudes, dtype=state_vector.dtype)
     if sparse.issparse(state_vector):
+        _require_one_state(state_vector.shape)
         row = sparse.coo_matrix(state_vector.reshape(1, -1))
     else:
-        vector = np.asarray(state_vector).reshape(-1)
+        vector = np.asarray(state_vector)
+        _require_one_state(vector.shape)
+        vector = vector.reshape(-1)
         if vector.dtype.kind not in "buifc":
             raise ValueError("State amplitudes must be numeric")
         row = vector.reshape(1, -1)
@@ -698,7 +721,6 @@ def _prepare_statevector(state_vector, *, legacy_sparse_transport=False) -> tupl
 
 def _run_prepared_statevector(
     payload: bytes,
-    num_qubits: int,
     opt_params: OptParams,
     client: httpx.Client,
     return_summary: bool,
@@ -741,12 +763,11 @@ def q_alchemy_as_qasm_parallel(state_vector: State | List[complex] | np.ndarray 
     """
     if nonnegative_integer(max_workers, "max_workers") == 0:
         raise ValueError("max_workers must be positive")
-    options = [deepcopy(populate_opt_params(opt)) for opt in opt_params]
+    options = [populate_opt_params(opt) for opt in opt_params]
     if not options:
         return []
     # Select once; mixed old/new adapter options serialize at most two formats.
     matrix = _state_row(state_vector)
-    num_qubits = _row_qubits(matrix)
     prepared = {}
     for legacy in {opt.legacy_sparse_transport for opt in options}:
         payload = _serialize_statevector(_transport_data(matrix, legacy_sparse_transport=legacy))
@@ -758,7 +779,7 @@ def q_alchemy_as_qasm_parallel(state_vector: State | List[complex] | np.ndarray 
         worker_client = client if client is not None else create_client(opt)
         try:
             return _run_prepared_statevector(
-                payload, num_qubits, opt, worker_client, return_summary, inline_payload
+                payload, opt, worker_client, return_summary, inline_payload
             )
         finally:
             if client is None:

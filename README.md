@@ -45,14 +45,19 @@ uv sync --locked
 ```
 
 Dependency requirements are defined in [pyproject.toml](pyproject.toml).
-The SDK requires `pinexq-client>=2.1.0,<3`. Client 2.1.0 expects PineXQ
-JobManagement API 10.1. The client checks its protocol major/minor against the
-server and warns when they differ; the SDK preserves these warnings. A server
-still running API 10.0 therefore produces a mismatch warning with client 2.1.0.
-Client package versions and API protocol versions are separate.
+The SDK requires `pinexq-client>=2.7.0,<3`. The client checks its API protocol
+major/minor against the server and warns when they differ; the SDK preserves
+these warnings. Client package versions and API protocol versions are separate.
 This client recognizes the server's `TenantId` and `IsMaterialized` fields.
 API-version and schema warnings are no longer suppressed by the SDK; a future
 mismatch remains visible. `Q_ALCHEMY_API_VERSION_WARNING` is no longer needed.
+
+NumPy, SciPy, and SciPy stubs use Python-specific minimum versions so Python 3.11
+remains supported alongside Python 3.12–3.14. The PennyLane–Qiskit plugin also
+constrains compatible Qiskit, Aer, and IBM Runtime releases. Dependency minimums
+respect these constraints and the existing seven-day release-age policy.
+uv supplies `setuptools<82` only when building legacy IBM dependency metadata;
+this compatibility setting does not add Setuptools to the SDK runtime.
 
 Again, for qiskit- or PennyLane-integrations, please add the groups
 ```bash

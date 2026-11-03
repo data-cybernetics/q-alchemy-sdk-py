@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field, fields
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -16,7 +17,6 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 from q_alchemy.feasibility_contract import FeasibilityReport, FeasibilityRequest, ResultScope
-from q_alchemy.performance_contract import PerformanceDiagnostics, PerformanceSpan
 from q_alchemy.initialize import create_client, find_processing_step, from_name
 from q_alchemy.quantum_io import (
     IBMQuantumCredentials,
@@ -159,13 +159,15 @@ class FeasibilityService:
         if params is None:
             resolved = FeasibilityParams()
         elif isinstance(params, FeasibilityParams):
-            resolved = params
+            resolved = deepcopy(params)  # never modify the caller's params
         else:
             resolved = FeasibilityParams.from_dict(params)
-        for name, value in kwargs.items():
-            if not hasattr(resolved, name):
+        names = {item.name for item in fields(resolved)}
+        for name in kwargs:
+            if name not in names:
                 raise TypeError(f"Unknown FeasibilityService option {name!r}")
-            setattr(resolved, name, value)
+        if kwargs:
+            resolved = replace(resolved, **kwargs)
         owns_client = client is None
         if client is None:
             if not resolved.api_key:
