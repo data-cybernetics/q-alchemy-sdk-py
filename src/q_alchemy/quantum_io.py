@@ -21,7 +21,8 @@ import json
 import logging
 import os
 import warnings
-from dataclasses import dataclass, field, fields
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -32,10 +33,13 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 from q_alchemy.initialize import create_client, find_processing_step, from_name
-from q_alchemy.quantum_io_contract import (
+from q_alchemy.performance_contract import PerformanceDiagnostics, PerformanceSpan
+from q_alchemy.quantum_io_compression_contract import (
     CircuitCompressionConfig,
     CircuitCompressionMetrics,
     CircuitCompressionSummary,
+)
+from q_alchemy.quantum_io_contract import (
     ExecutionPlan,
     ExperimentReport,
     QuantumExperiment,
@@ -58,6 +62,8 @@ NOISY_BACKEND_SIMULATOR_RESOURCE = "noisy-backend-simulator"
 LOG = logging.getLogger(__name__)
 
 __all__ = [
+    "PerformanceDiagnostics",
+    "PerformanceSpan",
     "CircuitCompressionConfig",
     "CircuitCompressionMetrics",
     "CircuitCompressionSummary",
@@ -348,15 +354,15 @@ class QuantumIOService:
         if params is None:
             resolved = QuantumIOParams()
         elif isinstance(params, QuantumIOParams):
-            resolved = params
+            resolved = deepcopy(params)  # never modify the caller's params
         else:
             resolved = QuantumIOParams.from_dict(params)
-
-        for name, value in kwargs.items():
-            if hasattr(resolved, name):
-                setattr(resolved, name, value)
-            else:
+        names = {item.name for item in fields(resolved)}
+        for name in kwargs:
+            if name not in names:
                 raise TypeError(f"Unknown QuantumIOService option {name!r}")
+        if kwargs:
+            resolved = replace(resolved, **kwargs)
 
         owns_client = client is None
         if client is None:

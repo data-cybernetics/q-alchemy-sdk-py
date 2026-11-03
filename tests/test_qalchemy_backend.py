@@ -101,6 +101,50 @@ class TestInteropNormalization(unittest.TestCase):
         self.assertIs(copy.deepcopy(be), be)
 
 
+class _CannedCountsSimulator(SparseSimulator):
+    """Returns fixed counts in the server's merged single-``c``-register format."""
+
+    def __init__(self, counts):
+        super().__init__(client=object(), tier="standard")
+        self._counts = counts
+
+    def counts(self, circuit, *, shots, **_):
+        from q_alchemy.simulator import CountsResult
+        return CountsResult(counts=dict(self._counts), num_qubits=circuit.num_qubits, shots=shots, raw={})
+
+
+class TestMultiRegisterCounts(unittest.TestCase):
+    """Keys are split per classical register, as Aer does."""
+
+    def test_counts_and_memory_are_split_per_register(self):
+        from qiskit import ClassicalRegister, QuantumRegister
+        a, b = ClassicalRegister(1, "a"), ClassicalRegister(2, "b")
+        qc = QuantumCircuit(QuantumRegister(3, "q"), a, b)
+        qc.x(0); qc.x(2)
+        qc.measure(0, a[0]); qc.measure([1, 2], b)
+        # Merged register c = (b[1], b[0], a[0]) = "101"; Aer reports "10 1".
+        backend = QAlchemyBackend(params=_CannedCountsSimulator({"101": 5}))
+        result = backend.run(qc, shots=5, memory=True).result(timeout=5)
+        self.assertEqual(result.get_counts(), {"10 1": 5})
+        self.assertEqual(result.get_memory(), ["10 1"] * 5)
+        header = result.results[0].header
+        self.assertEqual(header["creg_sizes"], [["a", 1], ["b", 2]])
+        self.assertEqual(header["qreg_sizes"], [["q", 3]])
+
+    def test_measure_all_on_a_circuit_with_a_register(self):
+        qc = QuantumCircuit(2, 2)
+        qc.x(0)
+        qc.measure_all()
+        backend = QAlchemyBackend(params=_CannedCountsSimulator({"0100": 3}))
+        self.assertEqual(backend.run(qc, shots=3).result(timeout=5).get_counts(), {"01 00": 3})
+
+    def test_single_register_keys_are_unchanged(self):
+        qc = QuantumCircuit(2, 2)
+        qc.measure([0, 1], [0, 1])
+        backend = QAlchemyBackend(params=_CannedCountsSimulator({"11": 4}))
+        self.assertEqual(backend.run(qc, shots=4).result(timeout=5).get_counts(), {"11": 4})
+
+
 class TestProvider(unittest.TestCase):
     def test_provider_backends_offline(self):
         provider = QAlchemyProvider(params=SparseSimulator(client=object()))

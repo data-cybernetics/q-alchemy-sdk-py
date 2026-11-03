@@ -1,5 +1,5 @@
 {
-  "core_version": "0.6.48",
+  "core_version": "0.6.62",
   "cases": [
     {
       "name": "reference",
@@ -265,6 +265,7 @@
         },
         "circuit_compression": null,
         "computation_result": null,
+        "result_scope": "selected",
         "quantum_circuit": null,
         "evidence": {
           "records": [
@@ -469,7 +470,7 @@
         ],
         "final": true
       },
-      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: feasible\n  Quality: satisfied (relative to the simulated circuit reference)\n  Method: quantum-io:reference-simulation\n  WARNING: Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target.\n  Resource criteria:\n    Classical RAM limit: 48 GiB\n  Quality criteria:\n    Observable RMSE: 0 <= 0.0016 [SATISFIED]\n\nQUANTUM\n  Status: not-needed\n  Quality: not-assessed\n  Backend: not selected\n  Assessment basis: classical-short-circuit\n  Noisy simulation performed: True\n  QPU execution performed: False\n\nRECOMMENDATION\n  classical: A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: feasible\n  Quality: satisfied (relative to the simulated circuit reference)\n  Method: quantum-io:reference-simulation\n  WARNING: Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target.\n  Resource criteria:\n    Classical RAM limit: 48 GiB\n  Quality criteria:\n    Observable RMSE: 0 <= 0.0016 [SATISFIED]\n\nQUANTUM\n  Status: not-needed\n  Quality: not-assessed\n  Backend: not selected\n  Assessment basis: classical-short-circuit\n  Quantum simulator execution performed: True\n  QPU execution performed: False\n\nRECOMMENDATION\n  classical: A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
     },
     {
       "name": "mixed",
@@ -793,6 +794,7 @@
         },
         "circuit_compression": null,
         "computation_result": null,
+        "result_scope": "selected",
         "quantum_circuit": null,
         "evidence": {
           "records": [
@@ -997,7 +999,7 @@
         ],
         "final": true
       },
-      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: feasible\n  Quality: violated\n  Quality reason: Available classical evidence violates the required Target-to-prepared fidelity criterion.\n  Method: quantum-io:reference-simulation\n  WARNING: Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target.\n  Resource criteria:\n    Classical RAM limit: 48 GiB\n  Quality criteria:\n    Observable RMSE: 0 <= 0.0016 [SATISFIED] (relative to the simulated circuit reference)\n    Target-to-prepared fidelity: 0.971527 >= 0.99 [VIOLATED]\n\nQUANTUM\n  Status: not-needed\n  Quality: not-assessed\n  Backend: not selected\n  Assessment basis: classical-short-circuit\n  Noisy simulation performed: True\n  QPU execution performed: False\n\nRECOMMENDATION\n  classical: A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: feasible\n  Quality: violated\n  Quality reason: Available classical evidence violates the required Target-to-prepared fidelity criterion.\n  Method: quantum-io:reference-simulation\n  WARNING: Preparation fidelity discrepancy: Quantum I/O reports that measured loss 0.02847322 exceeds the initializer's estimated loss 0 (target-to-prepared fidelity 0.97152678). The simulated circuit reference includes the preparation circuit; reference-relative quality does not establish accuracy against the intended target.\n  Resource criteria:\n    Classical RAM limit: 48 GiB\n  Quality criteria:\n    Observable RMSE: 0 <= 0.0016 [SATISFIED] (relative to the simulated circuit reference)\n    Target-to-prepared fidelity: 0.971527 >= 0.99 [VIOLATED]\n\nQUANTUM\n  Status: not-needed\n  Quality: not-assessed\n  Backend: not selected\n  Assessment basis: classical-short-circuit\n  Quantum simulator execution performed: True\n  QPU execution performed: False\n\nRECOMMENDATION\n  classical: A quantum computer is not required for this workload because it can be executed classically within the assessed resource limits. Classical result quality is reported separately."
     },
     {
       "name": "attempt_only",
@@ -1186,6 +1188,7 @@
         },
         "circuit_compression": null,
         "computation_result": null,
+        "result_scope": "selected",
         "quantum_circuit": null,
         "evidence": {
           "records": [
@@ -1473,6 +1476,7 @@
         },
         "circuit_compression": null,
         "computation_result": null,
+        "result_scope": "selected",
         "quantum_circuit": null,
         "evidence": {
           "records": [
@@ -1571,7 +1575,7 @@
         "warnings": [],
         "final": false
       },
-      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: unknown\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n\nQUANTUM\n  Status: quality inconclusive\n  Quality: inconclusive\n  Quality reason: The configured quantum simulator completed, but the required Observable RMSE metric is unavailable because no independent reference observable values were available.\n  Backend: test\n  Assessment basis: simulated-quantum\n  Noisy simulation performed: True\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n  Quality criteria (quantum simulator):\n    Observable RMSE: not available (required <= 0.1) [MISSING]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - classical-execution: obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed"
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: unknown\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n\nQUANTUM\n  Status: quality inconclusive\n  Quality: inconclusive\n  Quality reason: The configured quantum simulator completed, but the required Observable RMSE metric is unavailable because no independent reference observable values were available.\n  Backend: test\n  Assessment basis: simulated-quantum\n  Quantum simulator execution performed: True\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n  Quality criteria (quantum simulator):\n    Observable RMSE: not available (required <= 0.1) [MISSING]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - classical-execution: obtain an exact-if-resources-allow classical reference before concluding that quantum computing is needed"
     },
     {
       "name": "qpu_missing",
@@ -1760,6 +1764,7 @@
         },
         "circuit_compression": null,
         "computation_result": null,
+        "result_scope": "selected",
         "quantum_circuit": null,
         "evidence": {
           "records": [
@@ -2075,6 +2080,7 @@
         },
         "circuit_compression": null,
         "computation_result": null,
+        "result_scope": "selected",
         "quantum_circuit": null,
         "evidence": {
           "records": [
@@ -2227,7 +2233,7 @@
         "warnings": [],
         "final": false
       },
-      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: resource infeasible\n  Reason: The classical simulation exceeded the configured memory budget.\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n    Detected simulator host budget: 512 B\n    Sparse memory estimate at amplitude limit: 256 B\n    Sparse simulation memory: > 1 KiB required (lower bound); 1 KiB available [VIOLATED]\n\nQUANTUM\n  Status: unknown\n  Quality: not-assessed\n  Backend: test\n  Assessment basis: insufficient-evidence\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - quantum-static-analysis: comparison mode was requested; discover the configured quantum target and evaluate hard capacity constraints without executing it"
+      "summary": "COMPUTE FEASIBILITY\n-------------------\n\nCLASSICAL\n  Status: resource infeasible\n  Reason: The classical simulation exceeded the configured memory budget.\n  Quality: not-assessed\n  Method: not selected\n  Resource criteria:\n    Classical RAM limit: 1 KiB\n    Simulator working-set budget: 512 B\n    Sparse memory estimate at amplitude limit: 256 B\n    Sparse simulation memory: > 1 KiB required (lower bound); 1 KiB available [VIOLATED]\n\nQUANTUM\n  Status: unknown\n  Quality: not-assessed\n  Backend: test\n  Assessment basis: insufficient-evidence\n  QPU execution performed: False\n  Resource criteria:\n    Backend operational: yes [SATISFIED]\n\nRECOMMENDATION\n  undetermined: More evidence is required before choosing between additional classical resources and quantum execution.\n\nNEXT EVIDENCE\n  - quantum-static-analysis: comparison mode was requested; discover the configured quantum target and evaluate hard capacity constraints without executing it"
     }
   ]
 }

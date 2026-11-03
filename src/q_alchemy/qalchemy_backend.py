@@ -21,6 +21,9 @@ mirroring the local ``SparseAerBackend`` so the two are interchangeable.
 from __future__ import annotations
 
 import datetime as _dt
+import threading
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from copy import deepcopy
 import uuid
 from typing import Sequence
@@ -49,6 +52,7 @@ from qiskit.circuit.library import (
     ZGate,
 )
 from qiskit.providers import BackendV2, JobStatus, JobV1, Options
+from qiskit.providers.exceptions import JobError, JobTimeoutError
 from qiskit.result import Result
 from qiskit.transpiler import Target
 
@@ -82,6 +86,32 @@ def _has_measurements(circuit: QuantumCircuit) -> bool:
     return any(instruction.operation.name == "measure" for instruction in circuit.data)
 
 
+def _result_header(circuit: QuantumCircuit) -> dict:
+    """Experiment header in Aer's layout, built from the caller's circuit.
+
+    The simulator runs a copy whose classical bits are merged into one ``c``
+    register (by global clbit index), so its counts carry no register breaks.
+    ``creg_sizes`` from the original circuit lets ``Result.get_counts()`` split
+    keys per register exactly as Aer does, e.g. ``'01 00'`` after
+    ``measure_all()`` on a circuit that already had a classical register.
+    """
+    header: dict[str, object] = {
+        "name": circuit.name,
+        "metadata": circuit.metadata or {},
+        "n_qubits": circuit.num_qubits,
+        "memory_slots": circuit.num_clbits,
+    }
+    if circuit.cregs:
+        header["creg_sizes"] = [[register.name, register.size] for register in circuit.cregs]
+    if circuit.qregs:
+        header["qreg_sizes"] = [[register.name, register.size] for register in circuit.qregs]
+    try:
+        header["global_phase"] = float(circuit.global_phase)
+    except TypeError:  # unbound parameter; the simulator rejects such circuits anyway
+        pass
+    return header
+
+
 def _counts_to_memory(hex_counts: dict[str, int]) -> list[str]:
     """Expand aggregated counts into a per-shot memory list (hex outcomes).
 
@@ -96,26 +126,62 @@ def _counts_to_memory(hex_counts: dict[str, int]) -> list[str]:
 
 
 class QAlchemyJob(JobV1):
-    """Synchronous job that executes on first ``result()`` and caches it."""
+    """Job that runs the remote simulation in a background thread.
+
+    Mirrors Aer's ``AerJob``: :meth:`QAlchemyBackend.run` submits immediately,
+    :meth:`status` reports ``QUEUED``/``RUNNING``/``DONE``/``ERROR``, and
+    :meth:`result` waits (optionally with a timeout). The remote jobs run exactly
+    once: a failure is reported as ``ERROR`` and re-raised by every
+    :meth:`result` call, never resubmitted.
+    """
 
     def __init__(self, backend: "QAlchemyBackend", job_id: str, build_result):
         super().__init__(backend, job_id)
         self._build_result = build_result
-        self._result: Result | None = None
+        self._future: Future | None = None
+        self._submit_lock = threading.Lock()
 
-    def submit(self) -> None:  # pragma: no cover - Qiskit signature
-        return None
+    def submit(self) -> None:
+        """Start the remote simulation; a job can be submitted only once."""
+        with self._submit_lock:
+            if self._future is not None:
+                raise JobError(f"Job {self.job_id()} has already been submitted.")
+            executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="qalchemy-job")
+            try:
+                self._future = executor.submit(self._build_result)
+            finally:
+                executor.shutdown(wait=False)  # the worker exits when the job ends
 
-    def result(self, timeout: float | None = None) -> Result:  # noqa: ARG002
-        if self._result is None:
-            self._result = self._build_result()
-        return self._result
+    def _submitted(self) -> Future:
+        if self._future is None:
+            raise JobError(f"Job {self.job_id()} has not been submitted.")
+        return self._future
+
+    def result(self, timeout: float | None = None) -> Result:
+        """Wait for the result; re-raises the simulation's exception on failure."""
+        try:
+            return self._submitted().result(timeout=timeout)
+        except FutureTimeoutError as exc:
+            raise JobTimeoutError(f"Timeout while waiting for job {self.job_id()}.") from exc
+        except CancelledError as exc:
+            raise JobError(f"Job {self.job_id()} was cancelled.") from exc
 
     def status(self) -> JobStatus:
-        return JobStatus.DONE if self._result is not None else JobStatus.INITIALIZING
+        future = self._future
+        if future is None:
+            return JobStatus.INITIALIZING
+        if future.cancelled():
+            return JobStatus.CANCELLED
+        if future.running():
+            return JobStatus.RUNNING
+        if not future.done():
+            return JobStatus.QUEUED
+        return JobStatus.ERROR if future.exception() is not None else JobStatus.DONE
 
     def cancel(self) -> bool:
-        return False
+        """Cancel the job if it has not started; running remote work is not interrupted."""
+        future = self._future
+        return future is not None and future.cancel()
 
 
 class QAlchemyBackend(BackendV2):
@@ -146,6 +212,11 @@ class QAlchemyBackend(BackendV2):
         self._target = self._build_target(self._num_qubits)
         # Reuse a passed-in client, or build one from params + kwargs.
         if isinstance(params, SparseSimulator):
+            if sim_kwargs:
+                raise TypeError(
+                    "Simulator options cannot be combined with an existing SparseSimulator: "
+                    + ", ".join(sorted(sim_kwargs))
+                )
             self._simulator = params
         else:
             self._simulator = SparseSimulator(params, **sim_kwargs)
@@ -236,7 +307,9 @@ class QAlchemyBackend(BackendV2):
                 }
             )
 
-        return QAlchemyJob(self, job_id, build_result)
+        job = QAlchemyJob(self, job_id, build_result)
+        job.submit()
+        return job
 
     def _run_one(self, circuit: QuantumCircuit, run_options) -> dict:
         shots = int(run_options.shots)
@@ -275,12 +348,7 @@ class QAlchemyBackend(BackendV2):
             "success": True,
             "status": "DONE",
             "seed_simulator": run_options.seed_simulator,
-            "header": {
-                "name": circuit.name,
-                "metadata": circuit.metadata or {},
-                "n_qubits": circuit.num_qubits,
-                "memory_slots": circuit.num_clbits,
-            },
+            "header": _result_header(circuit),
             "data": data,
             "metadata": {"method": "sparse-remote", "tier": self._simulator.tier},
         }

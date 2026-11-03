@@ -10,9 +10,31 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from q_alchemy.simulator import SparseSimulator, ENTERPRISE_GRANT
+import httpx
+
+from q_alchemy.simulator import ENTERPRISE_GRANT, PlanLookupError, SparseSimulator
 
 load_dotenv(Path(__file__).parent.parent / ".env")
+
+
+class _FakeClient:
+    """Serves canned JSON pages by path; optional HTTP status overrides or a network error."""
+
+    def __init__(self, pages, *, status=None, error=None):
+        self.pages, self.status, self.error = pages, dict(status or {}), error
+
+    def get(self, url):
+        if self.error is not None:
+            raise self.error
+        request = httpx.Request("GET", f"https://example.invalid{url}")
+        return httpx.Response(self.status.get(url, 200), json=self.pages.get(url, {}), request=request)
+
+
+def _grant_pages(grants):
+    return {
+        "/api/EntryPoint": {"links": [{"rel": ["Info"], "href": "/api/Info"}]},
+        "/api/Info": {"entities": [{"rel": ["CurrentUser"], "properties": {"UserGrants": grants}}]},
+    }
 
 
 def _sim(tier="auto", grants=None):
@@ -45,8 +67,43 @@ class TestTierResolution(unittest.TestCase):
             _sim("xlarge", [ENTERPRISE_GRANT]).tier
 
     def test_auto_without_grants_is_standard(self):
-        sim = SparseSimulator(client=object(), tier="auto")  # dummy client -> grant fetch fails -> []
+        # The API exposes no Info link, i.e. no grants: that is the standard tier.
+        sim = SparseSimulator(client=_FakeClient({"/api/EntryPoint": {"links": []}}), tier="auto")
         self.assertEqual(sim.user_grants(), [])
+        self.assertEqual(sim.tier, "standard")
+
+    def test_auto_reads_grants_from_the_current_user(self):
+        sim = SparseSimulator(client=_FakeClient(_grant_pages([ENTERPRISE_GRANT])), tier="auto")
+        self.assertEqual(sim.user_grants(), [ENTERPRISE_GRANT])
+        self.assertEqual(sim.tier, "enterprise")
+
+    def test_failed_plan_lookup_raises_instead_of_downgrading(self):
+        """A lookup failure must not silently move an enterprise caller to standard."""
+        failures = {
+            "network": _FakeClient({}, error=httpx.ConnectError("offline")),
+            "http status": _FakeClient(_grant_pages([ENTERPRISE_GRANT]), status={"/api/Info": 503}),
+            "unauthorized": _FakeClient({"/api/EntryPoint": {"links": []}}, status={"/api/EntryPoint": 401}),
+            "malformed": _FakeClient({"/api/EntryPoint": ["not", "an", "object"]}),
+        }
+        for label, client in failures.items():
+            for tier in ("auto", "enterprise"):
+                with self.subTest(failure=label, tier=tier):
+                    sim = SparseSimulator(client=client, tier=tier)
+                    with self.assertRaises(PlanLookupError) as caught:
+                        sim.tier
+                    self.assertIn("tier='standard'", str(caught.exception))
+                    self.assertIsNone(sim._grants)  # failures are not cached
+
+    def test_plan_lookup_failure_is_retried_on_the_next_call(self):
+        client = _FakeClient(_grant_pages([ENTERPRISE_GRANT]), status={"/api/Info": 503})
+        sim = SparseSimulator(client=client, tier="auto")
+        with self.assertRaises(PlanLookupError):
+            sim.user_grants()
+        client.status.clear()
+        self.assertEqual(sim.tier, "enterprise")
+
+    def test_standard_tier_needs_no_plan_lookup(self):
+        sim = SparseSimulator(client=_FakeClient({}, error=httpx.ConnectError("offline")), tier="standard")
         self.assertEqual(sim.tier, "standard")
 
     def test_auto_with_enterprise_grant_is_enterprise(self):

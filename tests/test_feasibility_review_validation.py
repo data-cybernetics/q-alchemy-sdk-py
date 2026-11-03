@@ -2,7 +2,7 @@
 from dataclasses import replace
 import pytest
 from q_alchemy.feasibility_contract import (
-    ClassicalResources, EvidenceCollectionConfig, FeasibilityPolicy,
+    ClassicalResources, EvidenceCollectionConfig,
     FeasibilityRequest, FeasibilityReport, SolutionCriteria, Criterion,
 )
 
@@ -17,9 +17,8 @@ def test_schema_versions_are_strict(version):
 
 
 @pytest.mark.parametrize('value', ['false', 0, 1, None])
-def test_policy_and_criterion_booleans_are_strict(value):
+def test_evidence_collection_and_criterion_booleans_are_strict(value):
     with pytest.raises(ValueError): EvidenceCollectionConfig.from_dict({'least_busy': value})
-    with pytest.raises(ValueError): FeasibilityPolicy.from_dict({'classical_first': value})
     with pytest.raises(ValueError): Criterion.from_dict({'metric': 'quality.test', 'threshold': 1, 'relation': '<=', 'required': value})
 
 

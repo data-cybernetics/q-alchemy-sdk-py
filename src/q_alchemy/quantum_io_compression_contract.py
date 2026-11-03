@@ -108,7 +108,12 @@ class CircuitCompressionSummary:
 
     input_metrics describes the original logical gates. baseline_metrics is the
     compressor's compiled baseline in the same basis/cost model as the output;
-    displayed savings use that baseline. Older reports without it remain readable.
+    displayed savings use that baseline. options retains requested overrides;
+    effective_options includes the compressor defaults and execution-owned flags.
+    diagnostics contains the existing compressor counters and timings, without
+    circuit or matrix payloads. component_versions identifies installed compression
+    dependencies, not proof that each optional backend was used. Older reports
+    without these optional fields remain readable.
     """
 
     attempted: bool
@@ -123,12 +128,33 @@ class CircuitCompressionSummary:
     reason: str | None = None
     options: Mapping[str, Any] = field(default_factory=dict)
     baseline_metrics: CircuitCompressionMetrics | None = None
+    diagnostics: Mapping[str, Any] | None = None
+    effective_options: Mapping[str, Any] | None = None
+    component_versions: Mapping[str, str] | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("diagnostics", "effective_options", "component_versions"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if not isinstance(value, Mapping):
+                raise ValueError(f"compression {name} must be a mapping or None")
+            try:
+                snapshot = json.loads(json.dumps(dict(value), allow_nan=False))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"compression {name} must contain finite JSON values") from exc
+            if name == "component_versions" and any(
+                not isinstance(version, str) for version in snapshot.values()
+            ):
+                raise ValueError("compression component_versions must contain version strings")
+            object.__setattr__(self, name, snapshot)
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "CircuitCompressionSummary":
         values = {key: data[key] for key in (
             "attempted", "applied", "changed", "exact", "equivalence",
             "input_semantics", "accepted_regions", "reason", "options",
+            "diagnostics", "effective_options", "component_versions",
         ) if key in data}
         for key in ("input_metrics", "compressed_metrics", "baseline_metrics"):
             values[key] = (CircuitCompressionMetrics.from_dict(data[key])
@@ -154,6 +180,7 @@ class CircuitCompressionSummary:
         else:
             lines.extend(["  1Q operations: not available", "  2Q operations: not available", "  Depth: not available"])
         lines.append(f"  Accepted regions: {self.accepted_regions}")
+        lines.extend(_compression_diagnostic_lines(self.diagnostics))
         return "\n".join(lines)
 
     @property
@@ -185,6 +212,32 @@ class CircuitCompressionSummary:
             "accepted_regions": self.accepted_regions,
             "reason": self.reason,
             "options": dict(self.options),
+            **{name: json.loads(json.dumps(getattr(self, name), allow_nan=False))
+               for name in ("diagnostics", "effective_options", "component_versions")
+               if getattr(self, name) is not None},
         }
+
+
+def _compression_diagnostic_lines(diagnostics: Mapping[str, Any] | None) -> list[str]:
+    """Compact presentation shared by the portable QIO and Feasibility reports."""
+    if not isinstance(diagnostics, Mapping):
+        return []
+    fields = (
+        ("Maximal regions", "maximal_regions"),
+        ("Candidates examined", "candidate_regions"),
+        ("Synthesis calls", "synthesis_calls"),
+        ("Synthesis cache hits", "synthesis_cache_hits"),
+        ("Capacity skips", "capacity_skips"),
+        ("Candidate-budget skips", "candidate_budget_skips"),
+        ("Synthesis-budget skips", "synthesis_budget_skips"),
+        ("Synthesis timeouts", "synthesis_timeouts"),
+        ("Synthesis failures", "synthesis_failures"),
+        ("Compression time (s)", "total_seconds"),
+        ("Synthesis request time (s)", "synthesis_wall_seconds"),
+    )
+    lines = [f"  {label}: {diagnostics[key]}" for label, key in fields if key in diagnostics]
+    if diagnostics.get("last_failure") is not None:
+        lines.append(f"  Last synthesis/analysis failure: {diagnostics['last_failure']}")
+    return lines
 
 

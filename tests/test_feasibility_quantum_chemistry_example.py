@@ -57,6 +57,7 @@ def test_explicit_ibm_backend_wins_when_token_is_present():
     )
 
     assert config.provider == "ibm"
+    assert config.sparse_config == {}
     assert config.backend == "ibm_test_backend"
     assert config.least_busy is False
     assert credentials is not None
@@ -128,6 +129,7 @@ def test_h2_notebook_uses_estimator_options_for_direct_observables():
 
     experiment = namespace["experiment"]
     request = namespace["request"]
+    assert request.evidence_collection.sparse_config == {}
     assert experiment.measurement_plan.observables
     assert experiment.measurement_plan.training == ()
     assert experiment.measurement_plan.validation == ()

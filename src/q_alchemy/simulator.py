@@ -27,7 +27,7 @@ without touching the job-management API directly::
     sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from env
     print(sim.counts(qc, shots=2048).counts)    # {'00': ..., '11': ...}
     print(sim.sparse_statevector(qc).amplitudes_dict())
-    print(sim.tomography(qc).state_fidelity)    # ~1.0 vs the dense reference
+    print(sim.tomography(qc).purity)            # ~1.0 for the Bell state
 
 The circuit input form is chosen automatically (small circuits go inline as
 OpenQASM 2, larger ones are uploaded as QPY WorkData); override it with
@@ -47,7 +47,9 @@ import io
 import json
 import logging
 import os
-from dataclasses import dataclass, field, fields
+from collections.abc import Mapping
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Literal, Sequence
 
@@ -72,6 +74,10 @@ Circuit = Any  # qiskit.QuantumCircuit (imported lazily) or an OpenQASM 2 string
 
 # Grant (from the caller's UserGrants) that unlocks the XLarge enterprise tier.
 ENTERPRISE_GRANT = "plan:enterprise"
+
+
+class PlanLookupError(RuntimeError):
+    """The caller's plan could not be read, so the simulator tier is unknown."""
 
 # Return-WorkData alias produced by each capability (matches the ProCon).
 _OUTPUT_ALIAS: dict[str, str] = {
@@ -130,14 +136,26 @@ class SimulatorParams:
 
 
 def _populate_params(params: "SimulatorParams | dict | None", **kwargs) -> SimulatorParams:
+    """Return a private ``SimulatorParams``; the caller's object is never modified.
+
+    A mapping may carry keys shared with other SDK params (they are ignored, as
+    in :meth:`SimulatorParams.from_dict`), but keyword overrides must name
+    ``SimulatorParams`` fields: a misspelled option raises ``TypeError``.
+    """
     if params is None:
-        params = SimulatorParams()
-    elif isinstance(params, dict):
-        params = SimulatorParams.from_dict(params)
-    for attr, value in kwargs.items():
-        if hasattr(params, attr):
-            setattr(params, attr, value)
-    return params
+        resolved = SimulatorParams()
+    elif isinstance(params, SimulatorParams):
+        resolved = deepcopy(params)
+    elif isinstance(params, Mapping):
+        resolved = SimulatorParams.from_dict(params)
+    else:
+        raise TypeError("params must be SimulatorParams, a mapping, or None")
+    if kwargs:
+        unknown = sorted(set(kwargs) - {f.name for f in fields(SimulatorParams)})
+        if unknown:
+            raise TypeError(f"Unknown simulator option(s): {', '.join(unknown)}")
+        resolved = replace(resolved, **kwargs)
+    return resolved
 
 
 # --------------------------------------------------------------------------- #
@@ -165,9 +183,9 @@ class CountsResult:
 class SparseStatevectorResult:
     """Sparse state-vector: only the amplitudes above the simulator's ``1e-10`` cutoff.
 
-    Exact unless the run set ``max_nnz``: the simulator then keeps only the
-    ``max_nnz`` largest amplitudes after every gate and renormalises them, and
-    nothing here marks that the state was truncated.
+    A positive ``max_nnz`` can truncate the state by keeping the largest
+    amplitudes and renormalising them. ``0`` imposes no amplitude-count cap.
+    Inspect ``raw['simulation_metadata']`` for capping and pruning statistics.
     """
 
     num_qubits: int
@@ -258,12 +276,12 @@ class SparseStatevectorResult:
 
 @dataclass
 class TomographyResult:
-    """Exact simulator-state analysis (not measurement-based tomography).
+    """Analysis of the simulated state (not measurement-based tomography).
 
     ``state`` is the reconstructed density matrix (full, or the reduced
     subsystem selected by ``measurement_indices``) as a complex ``ndarray``, when
-    one was materialized. ``state_fidelity`` is the fidelity against Qiskit's
-    dense ``Statevector`` reference, reported for the small full-state case.
+    one was materialized. Analysis uses the Q-Alchemy simulator's state without
+    running a Qiskit reference simulation.
     """
 
     num_qubits: int
@@ -272,7 +290,6 @@ class TomographyResult:
     state: np.ndarray | None
     state_is_reduced: bool | None
     purity: float | None
-    state_fidelity: float | None
     raw: dict
 
     @classmethod
@@ -290,7 +307,6 @@ class TomographyResult:
             state=state,
             state_is_reduced=raw.get("state_is_reduced"),
             purity=raw.get("purity"),
-            state_fidelity=raw.get("state_fidelity"),
             raw=raw,
         )
 
@@ -390,6 +406,8 @@ class SparseSimulator:
         Navigates the entry point to ``Info`` and returns the embedded
         ``CurrentUser.UserGrants`` (e.g. ``["plan:enterprise", ...]``). Returns
         ``[]`` if the API doesn't expose it, so detection degrades to standard.
+        Raises :class:`PlanLookupError` if the lookup fails; failures are not
+        cached.
         """
         if self._grants is None:
             self._grants = self._fetch_user_grants()
@@ -435,21 +453,44 @@ class SparseSimulator:
             self._tier = requested
         return self._tier
 
+    def _get_json_object(self, url: str) -> dict:
+        response = self.client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError(f"expected a JSON object from {url}")
+        return data
+
     def _fetch_user_grants(self) -> list[str]:
+        """Read ``CurrentUser.UserGrants``.
+
+        ``[]`` means the API does not expose grants (no ``Info`` link or no
+        ``CurrentUser`` entity). A failed lookup -- network error, HTTP error
+        status, or a malformed response -- raises :class:`PlanLookupError`
+        instead, so a transient failure cannot silently move an enterprise
+        caller to the standard tier; nothing is cached and the next call retries.
+        """
         try:
-            entry = self.client.get("/api/EntryPoint").json()
+            entry = self._get_json_object("/api/EntryPoint")
             info_href = next(
-                (l["href"] for l in entry.get("links", []) if "Info" in (l.get("rel") or [])),
+                (link["href"] for link in entry.get("links") or []
+                 if "Info" in (link.get("rel") or [])),
                 None,
             )
             if not info_href:
                 return []
-            info = self.client.get(info_href).json()
-            for entity in info.get("entities", []):
+            info = self._get_json_object(info_href)
+            for entity in info.get("entities") or []:
                 if "CurrentUser" in (entity.get("rel") or []):
-                    return list((entity.get("properties") or {}).get("UserGrants", []))
-        except Exception:
-            return []
+                    grants = (entity.get("properties") or {}).get("UserGrants") or []
+                    if not isinstance(grants, list) or not all(isinstance(g, str) for g in grants):
+                        raise ValueError("UserGrants must be a list of strings")
+                    return list(grants)
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            raise PlanLookupError(
+                "Could not read this API key's plan (UserGrants) to choose the simulator "
+                f"tier: {exc}. Pass tier='standard' to skip the plan lookup."
+            ) from exc
         return []
 
     # -- public capabilities ------------------------------------------------- #
@@ -482,10 +523,13 @@ class SparseSimulator:
     ) -> SparseStatevectorResult:
         """Export the sparse state-vector produced by ``circuit``.
 
-        ``max_nnz=0`` (the default) keeps every amplitude above ``1e-10``: exact,
-        but a state that is not sparse needs as much memory as the dense vector.
-        A positive ``max_nnz`` caps it, keeping the largest amplitudes and
-        renormalising after every gate, so the result becomes approximate.
+        ``max_nnz=0`` (the default) imposes no amplitude-count cap, allowing
+        growth using available process/container memory. A positive value is
+        passed unchanged to the simulator. Capping keeps the largest amplitudes
+        and renormalises.
+        Inspect ``result.raw['simulation_metadata']`` for effective limits and
+        approximation statistics. Older service versions may use different
+        defaults; use the returned metadata to establish actual behavior.
         """
         raw = self._run(
             "sparse_statevector",
