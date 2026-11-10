@@ -351,5 +351,45 @@ class TestPennyLaneIntegration(unittest.TestCase):
 
         print (circuit_test())
 
+
+class TestPennyLaneOperatorConstruction(unittest.TestCase):
+    """Keyless: building the operators must not depend on PennyLane's ``id`` argument,
+    which PennyLane 0.46 removed from ``Operation``/``StatePrep``."""
+
+    def test_state_preparation_constructs(self):
+        state = np.array([1, 0, 0, 1]) / np.sqrt(2)
+        op = QAlchemyStatePreparation(state, wires=range(2), opt_params=OptParams(api_key="unused"))
+        self.assertEqual(op.wires, qml.wires.Wires([0, 1]))
+        np.testing.assert_allclose(op.data[0], state)
+
+    def test_state_preparation_inside_qnode(self):
+        """The shape of the reported failure: constructing the op while a QNode tape is recorded."""
+        state = np.array([1, 0, 0, 1]) / np.sqrt(2)
+
+        def circuit():
+            QAlchemyStatePreparation(state, wires=range(2), opt_params=OptParams(api_key="unused"))
+            return qml.state()
+
+        tape = qml.tape.make_qscript(circuit)()
+        self.assertEqual(len(tape.operations), 1)
+        self.assertIsInstance(tape.operations[0], QAlchemyStatePreparation)
+
+    def test_amplitude_embedding_pads_and_normalizes(self):
+        from q_alchemy.pennylane_integration import AmplitudeEmbedding
+
+        op = AmplitudeEmbedding(
+            [1.0, 1.0, 1.0], wires=range(2), pad_with=0.0, normalize=True,
+            opt_params=OptParams(api_key="unused"),
+        )
+        np.testing.assert_allclose(op.data[0], np.array([1, 1, 1, 0]) / np.sqrt(3))
+        self.assertIn("opt_params", op.hyperparameters)
+
+    def test_amplitude_embedding_still_validates_norm(self):
+        from q_alchemy.pennylane_integration import AmplitudeEmbedding
+
+        with self.assertRaises(ValueError):
+            AmplitudeEmbedding([1.0, 1.0, 0.0, 0.0], wires=range(2), opt_params=OptParams(api_key="unused"))
+
+
 if __name__ == '__main__':
     unittest.main()
