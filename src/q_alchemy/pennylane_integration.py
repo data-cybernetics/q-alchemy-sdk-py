@@ -9,6 +9,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 import warnings
 from typing import Optional, Union
 
@@ -28,6 +29,33 @@ from q_alchemy.initialize import q_alchemy_as_qasm, OptParams, q_alchemy_as_qasm
 # Normalization precision required for compatibility with Qiskit and qclib state preparation.
 ATOL = 1e-10
 RTOL = 1e-9
+
+
+
+def _init_accepts_id(init) -> bool:
+    try:
+        return "id" in inspect.signature(init).parameters
+    except (TypeError, ValueError):
+        return False
+
+
+# PennyLane 0.46 removed the ``id`` argument from ``Operator``/``Operation`` and
+# ``StatePrep``. Keep accepting it in our own signatures, and only forward it to
+# PennyLane where it is still supported.
+_OPERATION_ACCEPTS_ID = _init_accepts_id(Operation.__init__)
+_STATEPREP_ACCEPTS_ID = _init_accepts_id(StatePrep.__init__)
+
+
+def _id_kwargs(id: Optional[str], supported: bool) -> dict:
+    if supported:
+        return {"id": id}
+    if id is not None:
+        warnings.warn(
+            f"This PennyLane version ({qml.__version__}) no longer supports operator ids; "
+            f"ignoring id={id!r}.",
+            stacklevel=3,
+        )
+    return {}
 
 # override qml.math.shape for scipy provider (the default version calls np.toarray())
 ar.register_function('scipy', 'shape', lambda x: x.shape)
@@ -49,10 +77,10 @@ class AmplitudeEmbedding(StatePrep):
         super().__init__(
             state,
             wires,
-            pad_with,
-            normalize,
-            id,
-            validate_norm
+            pad_with=pad_with,
+            normalize=normalize,
+            validate_norm=validate_norm,
+            **_id_kwargs(id, _STATEPREP_ACCEPTS_ID),
         )
 
         if "opt_params" in kwargs:
@@ -213,7 +241,7 @@ class QAlchemyStatePreparation(Operation):
                         f"State vectors have to be of norm 1.0, vector {i} has norm {norm}"
                     )
 
-        super().__init__(state_vector, wires=wires, id=id)
+        super().__init__(state_vector, wires=wires, **_id_kwargs(id, _OPERATION_ACCEPTS_ID))
 
     @property
     def num_params(self):
