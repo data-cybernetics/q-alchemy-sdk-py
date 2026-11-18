@@ -11,6 +11,7 @@ __path__ = extend_path(__path__, __name__)
 LOG = logging.getLogger(__name__)
 
 from .initialize import q_alchemy_as_qasm
+from .job_submission import JobSubmissionError
 from .simulator import (
     SparseSimulator,
     SimulatorParams,
