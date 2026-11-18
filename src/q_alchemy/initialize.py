@@ -30,6 +30,7 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
+from q_alchemy.job_submission import submit_with_retry
 from q_alchemy.utils import is_power_of_two, nonnegative_integer
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 
@@ -62,6 +63,9 @@ class OptParams:
     schema: str = field(default="https")
     added_headers: Dict[str, str] = field(default_factory=dict, repr=False)
     job_completion_timeout_sec: int | None = field(default=300)
+    # Covers the platform's nightly maintenance, which can refuse submissions for
+    # about a quarter of an hour. 0 disables retrying; None retries without limit.
+    job_submission_retry_timeout_sec: float | None = field(default=1800)
     basis_gates: List[str] = field(default_factory=lambda: ["u", "cx"])
     assign_data_hash: bool = field(default=True)
     use_research_function: str | None = field(default=None)
@@ -407,16 +411,18 @@ def configure_job(
         )
 
     # create_and_... does not unpack job_parameters (for later pinexqq-client)
-    job = Job(client=client).create_and_configure_rapidly(
-        name=job_parameters.name,
-        tags=job_parameters.tags,
-        processing_step_url=step.self_link(), #needs the ProcessingStepLink itself
-        start=job_parameters.start,
-        parameters=job_parameters.parameters,
-        allow_output_data_deletion=job_parameters.allow_output_data_deletion, #misleading keyword name, also does not match
-        input_data_slots=job_parameters.input_data_slots,
+    return submit_with_retry(
+        lambda: Job(client=client).create_and_configure_rapidly(
+            name=job_parameters.name,
+            tags=job_parameters.tags,
+            processing_step_url=step.self_link(), #needs the ProcessingStepLink itself
+            start=job_parameters.start,
+            parameters=job_parameters.parameters,
+            allow_output_data_deletion=job_parameters.allow_output_data_deletion, #misleading keyword name, also does not match
+            input_data_slots=job_parameters.input_data_slots,
+        ),
+        timeout_s=opt_params.job_submission_retry_timeout_sec,
     )
-    return job
 
 def extract_result(job: Job):
     # the inline job returns [str, dict], while the dataslot job returns dict only...
