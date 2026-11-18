@@ -12,17 +12,18 @@ Each release on GitHub has fuller notes.
 
 - `OptParams.job_submission_retry_timeout_sec` (default 1800). State preparation
   (`q_alchemy_as_qasm`, and the Qiskit and PennyLane integrations through it) now
-  retries a job submission the service refuses for a while: HTTP 5xx or 429, or a
-  connection that could not be opened. Delays grow from 2 s to 60 s, and each retry
+  retries a job submission the service refuses for a while: HTTP 5xx or 429, a
+  timeout, or a lost connection. Delays grow from 2 s to 60 s, and each retry
   logs a warning with its UTC time. Before this, one HTTP 500 during the platform's
-  nightly maintenance ended a long-running program.
+  nightly maintenance ended a long-running program. On 2026-11-18 that maintenance
+  blocked submissions for about 13 minutes, most of which hung rather than failed.
 - `JobSubmissionError`, raised when submission still fails. It subclasses
   pinexq-client's `ApiException`, and its message states the UTC time, the HTTP status
   and the number of attempts.
 
 ### Changed
 
-- A state-preparation submission that cannot connect now raises `JobSubmissionError`
+- A state-preparation submission that cannot connect or times out now raises `JobSubmissionError`
   instead of pinexq-client's `ClientException`.
 
 ### Fixed

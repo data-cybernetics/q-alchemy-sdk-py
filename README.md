@@ -242,7 +242,7 @@ The fields you are most likely to touch:
 | `use_qasm3` | `False` | Experimental: return OpenQASM 3 instead of OpenQASM 2. |
 | `remove_data` | `True` | Delete the job and its uploaded data once the result is fetched. |
 | `job_completion_timeout_sec` | `300` | How long to wait for the job before giving up. |
-| `job_submission_retry_timeout_sec` | `1800` | How long to keep retrying a submission the service refuses for a while (HTTP 5xx or 429, or no connection), e.g. during platform maintenance. Each retry logs a warning. `0` disables retrying; `None` retries without limit. |
+| `job_submission_retry_timeout_sec` | `1800` | How long to keep retrying a submission the service refuses for a while (HTTP 5xx or 429, a timeout, or a lost connection), e.g. during platform maintenance. Each retry logs a warning. `0` disables retrying; `None` retries without limit. |
 
 If submission still fails, the SDK raises `JobSubmissionError` (a subclass of
 pinexq-client's `ApiException`). Its message gives the UTC time of the failure, the

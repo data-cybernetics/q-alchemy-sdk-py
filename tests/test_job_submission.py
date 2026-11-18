@@ -33,16 +33,6 @@ def api_error(status, detail="Could not send message."):
                         ProblemDetails(status=status, detail=detail))
 
 
-def connect_error():
-    try:
-        raise httpx.ConnectError("connection refused")
-    except httpx.ConnectError as cause:
-        try:
-            raise ClientException("Error from httpx while executing action") from cause
-        except ClientException as exc:
-            return exc
-
-
 def fake_step():
     step = Mock()
     step.self_link.return_value.get_url.return_value = "https://jobs.example/api/ProcessingSteps/1"
@@ -68,8 +58,25 @@ def test_transient_failures_are_retried(clock, error):
     assert len(clock["sleeps"]) == 2
 
 
-def test_refused_connection_is_retried(clock):
-    submit = failing(connect_error())
+def client_error(cause):
+    try:
+        raise cause
+    except httpx.HTTPError as caught:
+        try:
+            raise ClientException("Error from httpx while executing action") from caught
+        except ClientException as exc:
+            return exc
+
+
+@pytest.mark.parametrize("cause", [
+    httpx.ConnectError("connection refused"),
+    # 2026-11-18: RabbitMQ could not create the job's queue, so the submission hung.
+    httpx.ReadTimeout("timed out"),
+    httpx.RemoteProtocolError("server disconnected without sending a response"),
+    httpx.ReadError("connection reset"),
+], ids=["refused", "read-timeout", "disconnected", "reset"])
+def test_connection_failures_are_retried(clock, cause):
+    submit = failing(client_error(cause))
     assert submission.submit_with_retry(submit, timeout_s=600) == "job"
     assert submit.call_count == 2
 
@@ -90,17 +97,9 @@ def test_client_errors_fail_at_once_with_a_timestamp(clock, error):
     assert raised.value.attempts == 1
 
 
-def test_request_sent_but_unanswered_is_not_retried(clock):
-    # A read timeout may mean the job was created; retrying could start a second one.
-    try:
-        raise httpx.ReadTimeout("timed out")
-    except httpx.ReadTimeout as cause:
-        try:
-            raise ClientException("Error from httpx while executing action") from cause
-        except ClientException as exc:
-            error = exc
-    submit = failing(error)
-    with pytest.raises(JobSubmissionError, match="ClientException"):
+def test_other_client_exceptions_are_not_retried(clock):
+    submit = failing(ClientException("Action did not respond with URL"))
+    with pytest.raises(JobSubmissionError, match="ClientException: Action did not respond"):
         submission.submit_with_retry(submit, timeout_s=600)
     assert submit.call_count == 1
 

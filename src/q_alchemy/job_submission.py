@@ -2,12 +2,12 @@
 
 PineXQ's nightly node maintenance restarts RabbitMQ and the job-management
 service. While that happens, ``RapidJobSetup`` can answer HTTP 500 (the job
-offer could not be published) or the gateway can refuse connections, for a
-few minutes. Without a retry, one such answer ends a long-running program.
+offer could not be published), hang while RabbitMQ cannot create the job's
+queue, or the gateway can refuse connections. On 2026-11-18 this lasted about
+13 minutes. Without a retry, the first such failure ends a long-running program.
 
-Retrying is safe: when submission fails this way the platform has already put
-the half-created job into the error state, so a retry creates a fresh job
-rather than a duplicate of a running one.
+Retrying is safe: a job whose submission failed this way is either in the error
+state or was never offered to a worker, so a retry does not run it twice.
 """
 from __future__ import annotations
 
@@ -58,18 +58,22 @@ def failure_status(exc: Exception) -> int | None:
 def is_transient(exc: Exception) -> bool:
     """Whether a failed submission is worth repeating.
 
-    Retried: HTTP 5xx and 429, and connections that could not be opened (the
-    request never reached the server). An error without problem details has no
-    known status; job management answers errors with problem details, so such a
-    response comes from the gateway in front of it and is retried too. Not
-    retried: other 4xx answers, and timeouts or dropped connections after the
-    request was sent, which may already have created a job.
+    Retried: HTTP 5xx and 429, timeouts, and connections that failed or were
+    dropped. An error without problem details has no known status; job
+    management answers errors with problem details, so such a response comes
+    from the gateway in front of it and is retried too. Not retried: other 4xx
+    answers, which a repeat would only get again.
+
+    A timed-out submission may have created a job, so a retry can leave an extra
+    one. In practice a submission hangs when RabbitMQ cannot create the job's
+    queue, and such a job is never offered to a worker: it does not run twice.
     """
     if isinstance(exc, ApiException):
         status = failure_status(exc)
         return status is None or status == 429 or status >= 500
     if isinstance(exc, ClientException):
-        return isinstance(exc.__cause__, (httpx.ConnectError, httpx.ConnectTimeout))
+        return isinstance(exc.__cause__, (httpx.TimeoutException, httpx.NetworkError,
+                                          httpx.RemoteProtocolError))
     return False
 
 
