@@ -1524,6 +1524,7 @@ class StateEstimateSummary:
             result["sparse_state"] = self.sparse_state.to_dict()
         if self.target_fidelity is not None:
             result["target_fidelity"] = self.target_fidelity
+        if self.target_infidelity is not None:
             result["target_infidelity"] = self.target_infidelity
         return result
 

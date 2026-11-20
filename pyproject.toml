@@ -15,32 +15,39 @@ build-backend = "pdm.backend"
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.4.7"
+version = "0.4.8"
 description = ""
 authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
 ]
 dependencies = [
-    "pydantic>=2.14.1",
+    "pydantic>=2.14.3",
     "httpx>=0.28.1,<1.0.0",
     "tenacity>=9.2.1",
     # Use the tested PineXQ 2.x client; preserve protocol/schema warnings.
     "pinexq-client>=2.7.0,<3",
     "numpy>=2.4.6; python_version < '3.12'",
-    "numpy>=2.5.4; python_version >= '3.12'",
+    "numpy>=2.5.5; python_version >= '3.12'",
     "packaging>=26.3",
     "scipy>=1.17.1; python_version < '3.12'",
     "scipy>=1.18.1; python_version >= '3.12'",
     "tqdm>=4.70.1",
-    "pyarrow>=26.0.0",
+    "pyarrow>=26.0.1",
 ]
 requires-python = "<3.15,>=3.11"
 readme = "README.md"
 
 [tool.uv]
+# The bridge pins older IBM Runtime/Aer; use a separate optional environment.
+conflicts = [[{ extra = "pennylane" }, { extra = "examples" }]]
 exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
+# Explicit audited minimum releases; retain the global age cutoff for other packages.
+numpy = "2026-11-17T13:44:00Z"
+openqasm3 = "2026-11-17T13:44:00Z"
+qiskit-aer = "2026-11-17T13:44:00Z"
+qiskit-ibm-runtime = "2026-11-17T13:44:00Z"
 pinexq-client = false # we need this even for transitive dependencies
 q-alchemy-visualization = false # first-party releases bypass the global seven-day delay
 
@@ -61,49 +68,47 @@ explicit = true
 
 [dependency-groups]
 dev = [
-    "pytest>=9.1.1",
+    "pytest>=9.2.0",
     "python-dotenv>=1.2.4",
     "pytest-dotenv>=0.5.2",
-    "notebook>=7.6.3",
-    "pip>=26.2.2",
+    "notebook>=7.6.5",
+    "pip>=26.3",
     "scipy-stubs>=1.17.1.5; python_version < '3.12'",
     "scipy-stubs>=1.18.1.1; python_version >= '3.12'",
-    "qiskit[qasm3-import]>=2.3.0",
+    "qiskit[qasm3-import]>=2.6.1",
     "qiskit-addon-utils>=0.4.0",
     "matplotlib>=3.11.2",
     "scikit-learn>=1.9.1",
     "pennylane>=0.45.1",
-    "pennylane-qiskit>=0.45.0",
-    "pandas>=3.1.0",
+    "pandas>=3.1.1",
 ]
 
 [project.optional-dependencies]
 visualization = [
-    "q-alchemy-visualization>=0.1.0",
+    "q-alchemy-visualization>=0.1.1",
 ]
 qiskit = [
-    "qiskit[qasm3-import]>=2.3.0",
+    "qiskit[qasm3-import]>=2.6.1",
 ]
 pennylane = [
     "pennylane>=0.45.1",
-    "pennylane-qiskit>=0.45.0",
-    "openqasm3[parser]>=1.0.1",
+    "pennylane-qiskit>=0.45.1",
+    "openqasm3[parser]>=1.0.2",
 ]
 examples = [
-    "qiskit>=2.3.0",
+    "qiskit>=2.6.1",
     "pennylane>=0.45.1",
-    "pennylane-qiskit>=0.45.0",
     "qutip>=5.3.1",
     "pylatexenc>=2.11",
     "qiskit-experiments>=0.14.2",
-    "qiskit-aer>=0.17.2",
+    "qiskit-aer>=0.18.4",
     "jupyter>=1.1.1",
     "matplotlib>=3.11.2",
-    "pandas>=3.1.0",
+    "pandas>=3.1.1",
     "scikit-learn>=1.9.1",
-    "torch>=2.14.1",
+    "torch>=2.15.0",
     "python-dotenv>=1.2.4",
-    "qiskit-ibm-runtime>=0.45.1",
+    "qiskit-ibm-runtime>=0.52.1",
 ]
 
 [project.license]

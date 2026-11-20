@@ -31,7 +31,7 @@ from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import WorkDataQueryParameters, WorkDataFilterParameter, \
     SetTagsWorkDataParameters, JobStates, RapidJobSetupParameters, InputDataSlotParameter
 
-from q_alchemy.utils import is_power_of_two, nonnegative_integer
+from q_alchemy.utils import nonnegative_integer
 from q_alchemy.pyarrow_data import convert_sparse_coo_to_arrow
 from q_alchemy.quantum_io_contract import State
 
@@ -136,6 +136,62 @@ def _payload_type(payload: bytes) -> str:
     if payload.startswith(b"\x93NUMPY"):
         return "numpy_load"
     return "parquet" if payload.startswith(b"PAR1") else "json"
+
+
+class JobSetupError(RuntimeError):
+    """PineXQ created the job, but the SDK could not read it back.
+
+    The job exists and was started, so its input WorkData are kept for it.
+    ``job_url`` identifies the job (e.g. for ``Job.from_url``) so it can be
+    inspected or deleted.
+    """
+
+    def __init__(self, message: str, *, job_url: str | None):
+        super().__init__(message)
+        self.job_url = job_url
+
+
+def create_job_rapidly(job: Job, **kwargs) -> Job:
+    """``job.create_and_configure_rapidly(**kwargs)`` that never loses a created job.
+
+    PineXQ creates the job with one request and reads it back with a second. If
+    only the read-back fails, ``job.job_hco`` stays unset although the job exists
+    and runs, and callers would wrongly conclude that no job was created (and
+    delete its inputs). The read-back is retried once; if it still fails,
+    :class:`JobSetupError` is raised with the job's URL.
+    """
+    read_back = getattr(job, "_get_by_link", None)
+    if read_back is None:  # not a pinexq Job (e.g. a test double)
+        job.create_and_configure_rapidly(**kwargs)
+        return job
+    created = []
+
+    def remember_link(link):
+        created.append(link)
+        read_back(link)
+
+    job._get_by_link = remember_link
+    try:
+        job.create_and_configure_rapidly(**kwargs)
+        return job
+    except Exception as exc:
+        if not created:
+            raise  # the create request itself failed: no job exists
+        try:
+            read_back(created[0])
+            return job
+        except Exception:
+            try:
+                job_url = str(created[0].get_url())
+            except Exception:
+                job_url = None
+            raise JobSetupError(
+                f"PineXQ created job {job_url or '(URL unavailable)'} but the SDK could not "
+                f"read it back: {exc}. The job was started; its input WorkData were kept.",
+                job_url=job_url,
+            ) from exc
+    finally:
+        vars(job).pop("_get_by_link", None)
 
 
 def allow_deletion(wd_link: WorkDataLink) -> None:
@@ -629,6 +685,34 @@ def _maybe_make_sparse_row(vector: np.ndarray):
     return sparse.coo_matrix(vector.reshape(1, -1))
 
 
+def _transport_dtype(dtype: np.dtype) -> np.dtype:
+    """Storage the service supports, chosen independently of the state's density.
+
+    Half precision widens to float32; extended precision (longdouble,
+    clongdouble) becomes float64/complex128, the precision the service computes
+    in. Other numeric dtypes are kept (integers and booleans are promoted later,
+    exactly as before).
+    """
+    dtype = np.dtype(dtype)
+    if dtype.kind == "f" and dtype.itemsize < 4:
+        return np.dtype(np.float32)
+    if dtype.kind == "f" and dtype.itemsize > 8:
+        return np.dtype(np.float64)
+    if dtype.kind == "c" and dtype.itemsize > 16:
+        return np.dtype(np.complex128)
+    return dtype
+
+
+def _require_preparable_width(length: int) -> None:
+    if not length or length & (length - 1):
+        raise ValueError(
+            f"The state vector is not a power of two. "
+            f"The length of the state vector is {length}."
+        )
+    if length < 2:
+        raise ValueError("Preparation requires at least one qubit (a state of length 2 or more)")
+
+
 def _require_one_state(shape) -> None:
     """Accept (N,), (1, N) or (N, 1); never flatten a batch into one longer state."""
     if sum(1 for extent in shape if extent != 1) > 1:
@@ -650,18 +734,16 @@ def _state_row(state_vector):
     if sparse.issparse(state_vector):
         _require_one_state(state_vector.shape)
         row = sparse.coo_matrix(state_vector.reshape(1, -1))
+        row = row.astype(_transport_dtype(row.dtype), copy=False)
     else:
         vector = np.asarray(state_vector)
         _require_one_state(vector.shape)
         vector = vector.reshape(-1)
         if vector.dtype.kind not in "buifc":
             raise ValueError("State amplitudes must be numeric")
+        vector = vector.astype(_transport_dtype(vector.dtype), copy=False)
         row = vector.reshape(1, -1)
-    if not is_power_of_two(row):
-        raise ValueError(
-            f"The state vector is not a power of two. "
-            f"The length of the state vector is {row.shape[1]}."
-        )
+    _require_preparable_width(row.shape[1])
     if sparse.issparse(row):
         return row  # Caller already chose sparse storage: never scan or densify.
     sparse_row = _maybe_make_sparse_row(vector)
@@ -853,9 +935,9 @@ def _batch_state_groups(state_vector):
     if sparse.issparse(state_vector):
         if state_vector.ndim != 2 or state_vector.shape[0] == 0:
             raise ValueError("Expected a nonempty batch of state rows")
-        if not is_power_of_two(state_vector):
-            raise ValueError("The state vector is not a power of two")
-        return [(list(range(state_vector.shape[0])), state_vector.tocoo())]
+        _require_preparable_width(state_vector.shape[1])
+        batch = state_vector.tocoo()
+        return [(list(range(batch.shape[0])), batch.astype(_transport_dtype(batch.dtype), copy=False))]
 
     rows = list(state_vector)
     if not rows:

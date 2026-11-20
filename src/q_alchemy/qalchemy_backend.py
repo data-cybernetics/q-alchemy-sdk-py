@@ -218,8 +218,25 @@ class QAlchemyBackend(BackendV2):
                     + ", ".join(sorted(sim_kwargs))
                 )
             self._simulator = params
+            self._owns_simulator = False  # the caller closes it
         else:
             self._simulator = SparseSimulator(params, **sim_kwargs)
+            self._owns_simulator = True
+
+    def close(self) -> None:
+        """Release the HTTP connection pool of a simulator client this backend created.
+
+        A ``SparseSimulator`` passed in as ``params`` belongs to the caller and is
+        left open. Calling this more than once is safe.
+        """
+        if self._owns_simulator:
+            self._simulator.close()
+
+    def __enter__(self) -> "QAlchemyBackend":
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()
 
     def __deepcopy__(self, memo):
         """Return self when tooling deep-copies the backend.
@@ -365,11 +382,13 @@ class QAlchemyProvider:
         self._params = params
         self._kwargs = kwargs
 
-    def get_backend(self, name: str = "q_alchemy_simulator", **kwargs) -> QAlchemyBackend:
+    BACKEND_NAME = "q_alchemy_simulator"
+
+    def get_backend(self, name: str = BACKEND_NAME, **kwargs) -> QAlchemyBackend:
         return QAlchemyBackend(params=self._params, name=name, **{**self._kwargs, **kwargs})
 
     def backends(self, name: str | None = None) -> list[QAlchemyBackend]:
-        backend = self.get_backend()
-        if name is not None and name != backend.name:
-            return []
-        return [backend]
+        """Backends matching ``name``; each one opens its own HTTP client (see ``close()``)."""
+        if name is not None and name != self.BACKEND_NAME:
+            return []  # nothing matches, so no client is opened
+        return [self.get_backend()]

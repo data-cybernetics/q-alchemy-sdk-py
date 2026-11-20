@@ -50,6 +50,9 @@ class Criterion:
         _boolean(self.required, "required")
         if not self.metric:
             raise ValueError("criterion metric must not be empty")
+        # Accept "<=" as well as Relation.LE; reject unknown relations here,
+        # not later in to_dict() after the experiment was uploaded.
+        object.__setattr__(self, "relation", Relation(self.relation))
         if not isfinite(self.threshold):
             raise ValueError("criterion threshold must be finite")
 
@@ -174,6 +177,10 @@ class RecommendedCompute(_OpenStrEnum):
 @dataclass(frozen=True)
 class FeasibilityPolicy:
     quantum_execution: QuantumExecutionPolicy = QuantumExecutionPolicy.WHEN_NEEDED
+
+    def __post_init__(self) -> None:
+        # Accept "never" as well as QuantumExecutionPolicy.NEVER.
+        object.__setattr__(self, "quantum_execution", QuantumExecutionPolicy(self.quantum_execution))
 
     def to_dict(self) -> dict[str, Any]:
         return {

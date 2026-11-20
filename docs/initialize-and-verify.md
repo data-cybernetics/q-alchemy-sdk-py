@@ -132,7 +132,7 @@ Quantum I/O and Feasibility requests that supply a target state.
 |---|---|---|
 | Maximum state complexity (inclusive) | **49,152** | **20,971,520** |
 | Batch size per preparation service job | **up to 100 states** | No separate commercial batch cap |
-| Simulator resource tier | **Standard (Medium)** | **XLarge** (auto-selected) |
+| Simulator resource tier | **Standard (Large)** | **XLarge** (auto-selected) |
 
 Count nonzeros after combining duplicate basis indices and removing exact-zero
 cancellations; explicit zeros do not count and tiny nonzeros do. State JSON
@@ -150,7 +150,7 @@ technical memory, width and algorithm constraints still apply.
 
 `SparseSimulator` reads your plan from the API and routes to the right functions:
 
-- **Free / standard** users run on the **Medium** preset.
+- **Free / standard** users run on the **Large** preset.
 - **Enterprise** users are automatically routed to the **XLarge** functions —
   no configuration needed.
 
@@ -161,7 +161,7 @@ sim = SparseSimulator()         # tier="auto" (default)
 sim.tier                        # -> "standard" or "enterprise"
 sim.is_enterprise()             # -> bool, from your account grants
 
-SparseSimulator(tier="standard")    # force the Medium tier — always allowed
+SparseSimulator(tier="standard")    # force the Large tier — always allowed
 SparseSimulator(tier="enterprise")  # force XLarge — needs the enterprise plan
 ```
 

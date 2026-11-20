@@ -1122,12 +1122,12 @@ print("fidelity:", state_fidelity(Statevector(sv.to_dense()), Statevector(target
 ```
 
 `SparseSimulator` also exposes `.counts(...)` and `.tomography(...)`, and it
-auto-selects your resource tier from your plan (Standard/Medium for everyone,
+auto-selects your resource tier from your plan (Standard/Large for everyone,
 XLarge for enterprise).
 
 > Preparation's Free allowance is **49,152** for `logical_qubits * canonical_nnz`,
 > with batches of up to 100 states per service job. Enterprise allows **20,971,520**.
-> The simulator uses Medium for Free and XLarge for Enterprise. Technical resource
+> The simulator uses Large for Free and XLarge for Enterprise. Technical resource
 > limits remain independent; see the limits table in the guide.
 
 📖 **Full guide:** [docs/initialize-and-verify.md](docs/initialize-and-verify.md) ·
@@ -1155,7 +1155,7 @@ print(job.result().get_counts())                    # {'00': ~2048, '11': ~2048}
 `backend.run(...)` accepts Aer-style options (`shots`, `seed_simulator`,
 `save_sparse_statevector`, `save_statevector`, `sparse_index_format`, ...), and
 there's an IBM-style `QAlchemyProvider().get_backend()` for discovery. The
-resource tier (Medium vs the enterprise XLarge) is selected automatically from
+resource tier (Large vs the enterprise XLarge) is selected automatically from
 your plan — see [the guide](docs/initialize-and-verify.md).
 
 #### `save_statevector` vs `save_sparse_statevector`
@@ -1437,3 +1437,15 @@ off by default. Provider usage preserves its own units and meaning and must not 
 interpreted as SDK elapsed time. Partial receipts survive handled failures in
 Feasibility reports; unhandled PineXQ errors still use the existing message-based
 error transport. This feature does not provide durable worker-crash recovery.
+
+
+### Dependency environments (17 November 2026)
+
+The modern `examples` bundle uses IBM Runtime >=0.52.1 and Aer >=0.18.4.
+The dedicated `pennylane` extra includes pennylane-qiskit >=0.45.1, whose published
+metadata requires Runtime 0.45.x and Aer 0.17.x. Install that bridge in a separate
+environment; combining `.[pennylane,examples]` is unsupported. The `dev` group no
+longer implicitly installs the bridge. Standalone PennyLane remains in examples.
+The uv manifest declares the two extras mutually exclusive rather than overriding
+third-party metadata. Dated exceptions permit audited new dependency floors while
+retaining the seven-day policy for other packages.

@@ -32,6 +32,13 @@ Each release on GitHub has fuller notes.
   cached for the client's lifetime and silently moved enterprise callers to the
   standard tier (or produced a misleading `PermissionError` for
   `tier="enterprise"`). Failures are not cached; `tier="standard"` needs no lookup.
+- Feasibility requests are checked before anything is uploaded: `Criterion`
+  and `FeasibilityPolicy` accept string values (`"<="`, `"never"`) and reject
+  unknown ones at construction, and NaN or infinity in a request (e.g. in
+  `metadata`) raises `ValueError` instead of being sent. Quantum I/O and
+  Feasibility uploads now use strict JSON.
+- Single-state preparation rejects a length-1 vector (0 qubits), as it already
+  did for a 0-qubit `State`.
 - `q_alchemy_as_qasm`, `q_alchemy_as_qasm_parallel` and each item given to
   `q_alchemy_as_qasm_parallel_states` must be a single state: shapes `(N,)`,
   `(1, N)` and `(N, 1)` are accepted, and a 2-D batch such as `(2, 4)` now raises
@@ -57,6 +64,22 @@ Each release on GitHub has fuller notes.
   performance diagnostics it cannot read, with a `UserWarning`, instead of
   rejecting the whole report; and `FeasibilityReport.format_summary()` tolerates
   `null` for `accepted_regions`, `execution_provenance` and its submissions.
+- A job that PineXQ created but the SDK could not read back is no longer
+  mistaken for a job that was never created: the read-back is retried once,
+  then the new `JobSetupError` (with `job_url`) is raised and the job's inputs
+  are kept. Simulator uploads are deleted when no job was created
+  (`remove_data=True`).
+- `QAlchemyBackend.close()` (also a context manager) releases the HTTP client
+  the backend created; `QAlchemyProvider.backends(name=...)` no longer opens a
+  client for a name that does not match. `QuantumIOService` and
+  `FeasibilityService` validate IBM credentials before opening a client.
+- `FeasibilityJob.result()` reports invalid `computation_results` (e.g.
+  duplicate result IDs) as `FeasibilityExecutionError`, keeping the job.
+- `StateEstimateSummary.to_dict()` writes `target_infidelity` even when
+  `target_fidelity` is unset, so it survives a round-trip.
+- State preparation chooses the same storage type whether a state is dense or
+  mostly zero: float16 is widened to float32, and longdouble/clongdouble become
+  float64/complex128 (previously a mostly-zero float16 state failed).
 - `QAlchemyBackend` results now carry Aer's `creg_sizes`/`qreg_sizes`/
   `global_phase` header fields, so counts and memory for circuits with several
   classical registers are split per register exactly as Aer does (`'10 1'`,
@@ -77,6 +100,8 @@ Each release on GitHub has fuller notes.
   compression types from their defining modules; its exports are unchanged.
 - Read MNIST digit labels as strings in the data-upload test fixture, avoiding
   scikit-learn's string-only category cleanup on pandas-inferred integer labels.
+- Isolate live initialization cleanup subcases with fresh uploads so a job
+  preserved after a timeout cannot keep another subcase's input data in use.
 - README: the compact sparse reconstruction example pinned Quantum I/O
   `step_version="0.8.0"`, which was never deployed, so it failed to find the step.
   It now uses the default version discovery. The other version-pinning examples
