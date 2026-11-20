@@ -9,38 +9,52 @@ includes = [
 
 [build-system]
 requires = [
-    "pdm-backend",
+    "pdm-backend>=2.5.0",
 ]
 build-backend = "pdm.backend"
 
 [project]
 name = "q-alchemy-sdk-py"
-version = "0.4.0"
+version = "0.4.8"
 description = ""
 authors = [
     { name = "Carsten Blank", email = "blank@data-cybernetics.com" },
 ]
 dependencies = [
-    "pydantic>=2.13.4",
-    "httpx<1.0.0,>=0.25.0",
-    "tenacity>=8.2.3",
-    # PineXQ client 2.1 targets JobManagement API 10.1.
-    "pinexq-client>=2.1.0,<3",
-    "numpy>=2.0.0",
-    "packaging>=20",
-    "scipy>=1.11",
-    "tqdm",
-    "pyarrow>=19.0.1",
+    "pydantic>=2.14.3",
+    "httpx>=0.28.1,<1.0.0",
+    "tenacity>=9.2.1",
+    # Use the tested PineXQ 2.x client; preserve protocol/schema warnings.
+    "pinexq-client>=2.7.0,<3",
+    "numpy>=2.4.6; python_version < '3.12'",
+    "numpy>=2.5.5; python_version >= '3.12'",
+    "packaging>=26.3",
+    "scipy>=1.17.1; python_version < '3.12'",
+    "scipy>=1.18.1; python_version >= '3.12'",
+    "tqdm>=4.70.1",
+    "pyarrow>=26.0.1",
 ]
 requires-python = "<3.15,>=3.11"
 readme = "README.md"
 
 [tool.uv]
+# The bridge pins older IBM Runtime/Aer; use a separate optional environment.
+conflicts = [[{ extra = "pennylane" }, { extra = "examples" }]]
 exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
+# Explicit audited minimum releases; retain the global age cutoff for other packages.
+numpy = "2026-11-17T13:44:00Z"
+openqasm3 = "2026-11-17T13:44:00Z"
+qiskit-aer = "2026-11-17T13:44:00Z"
+qiskit-ibm-runtime = "2026-11-17T13:44:00Z"
 pinexq-client = false # we need this even for transitive dependencies
 q-alchemy-visualization = false # first-party releases bypass the global seven-day delay
+
+[tool.uv.extra-build-dependencies]
+# Legacy IBM source releases import pkg_resources while generating metadata.
+ibm-platform-services = ["setuptools<82"]
+ibm-cloud-sdk-core = ["setuptools<82"]
 
 # Keep the examples extra CPU-only. PyPI's Linux PyTorch wheels pull the
 # CUDA/NVIDIA runtime stack into uv.lock even when GPU support is not used.
@@ -54,49 +68,47 @@ explicit = true
 
 [dependency-groups]
 dev = [
-    "pytest",
-    "python-dotenv",
-    "pytest",
-    "pytest-dotenv",
-    "notebook>=7.4.5",
-    "pip>=25.2",
-    "scipy-stubs>=1.16.1.1",
-    "qiskit[qasm3-import]>=2.3.0",
-    "qiskit-addon-utils>=0.3.1",
-    "matplotlib>=3.10.8",
-    "scikit-learn",
+    "pytest>=9.2.0",
+    "python-dotenv>=1.2.4",
+    "pytest-dotenv>=0.5.2",
+    "notebook>=7.6.5",
+    "pip>=26.3",
+    "scipy-stubs>=1.17.1.5; python_version < '3.12'",
+    "scipy-stubs>=1.18.1.1; python_version >= '3.12'",
+    "qiskit[qasm3-import]>=2.6.1",
+    "qiskit-addon-utils>=0.4.0",
+    "matplotlib>=3.11.2",
+    "scikit-learn>=1.9.1",
     "pennylane>=0.45.1",
-    "pennylane-qiskit>=0.45.0",
-    "pandas",
+    "pandas>=3.1.1",
 ]
 
 [project.optional-dependencies]
 visualization = [
-    "q-alchemy-visualization>=0.1.0",
+    "q-alchemy-visualization>=0.1.1",
 ]
 qiskit = [
-    "qiskit[qasm3-import]>=2.3.0",
+    "qiskit[qasm3-import]>=2.6.1",
 ]
 pennylane = [
     "pennylane>=0.45.1",
-    "pennylane-qiskit>=0.45.0",
-    "openqasm3[parser]",
+    "pennylane-qiskit>=0.45.1",
+    "openqasm3[parser]>=1.0.2",
 ]
 examples = [
-    "qiskit>=2.3.0",
+    "qiskit>=2.6.1",
     "pennylane>=0.45.1",
-    "pennylane-qiskit>=0.45.0",
-    "qutip",
-    "pylatexenc",
-    "qiskit_experiments",
-    "qiskit_aer",
-    "jupyter",
-    "matplotlib",
-    "pandas",
-    "scikit-learn",
-    "torch>=2.11.0",
-    "python-dotenv>=1.2.1",
-    "qiskit-ibm-runtime>=0.45.0",
+    "qutip>=5.3.1",
+    "pylatexenc>=2.11",
+    "qiskit-experiments>=0.14.2",
+    "qiskit-aer>=0.18.4",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.2",
+    "pandas>=3.1.1",
+    "scikit-learn>=1.9.1",
+    "torch>=2.15.0",
+    "python-dotenv>=1.2.4",
+    "qiskit-ibm-runtime>=0.52.1",
 ]
 
 [project.license]

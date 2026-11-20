@@ -45,8 +45,6 @@ from q_alchemy import (
 NUM_QUBITS = 12
 NUM_ELECTRONS = 6
 CLASSICAL_MEMORY_BYTES = 8 * 1024 * 1024
-SPARSE_WORKING_BYTES_PER_AMPLITUDE = 96
-SPARSE_MAX_NNZ = CLASSICAL_MEMORY_BYTES // SPARSE_WORKING_BYTES_PER_AMPLITUDE
 SHOTS = 4096
 AER_BACKEND = "aer_simulator"
 
@@ -158,11 +156,6 @@ def select_quantum_target(
             backend=ibm_backend,
             least_busy=ibm_backend is None,
             shots=SHOTS,
-            sparse_config={
-                "max_nnz": SPARSE_MAX_NNZ,
-                "sparse_epsilon": 0.0,
-                "final_sparse_epsilon": 0.0,
-            },
         )
         credentials = IBMQuantumCredentials(
             token=ibm_token,
@@ -186,11 +179,6 @@ def select_quantum_target(
         backend=AER_BACKEND,
         backend_options=backend_options,
         shots=SHOTS,
-        sparse_config={
-            "max_nnz": SPARSE_MAX_NNZ,
-            "sparse_epsilon": 0.0,
-            "final_sparse_epsilon": 0.0,
-        },
     )
     return config, None, "Aer noisy simulator: aer_simulator"
 

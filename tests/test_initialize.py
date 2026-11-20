@@ -131,7 +131,12 @@ class InitializeTestCase(unittest.TestCase):
                     ]
                     return original(job, **kwargs)
 
-                opt_params = OptParams(extra_kwargs={"max_iterations": 3} if failing else {})
+                # Give each subcase its own upload. A timed-out job is preserved
+                # and can otherwise keep the next subcase's hash-reused input in use.
+                opt_params = OptParams(
+                    assign_data_hash=False,
+                    extra_kwargs={"max_iterations": 3} if failing else {},
+                )
                 with patch.object(Job, "delete_with_associated", record):
                     if failing:
                         with self.assertRaises(PollingException):

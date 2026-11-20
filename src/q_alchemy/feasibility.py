@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-from dataclasses import dataclass, field, fields
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -15,8 +15,8 @@ from pinexq.client.job_management import Job, enter_jma
 from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
-from q_alchemy.feasibility_contract import FeasibilityReport, FeasibilityRequest
-from q_alchemy.initialize import create_client, find_processing_step, from_name
+from q_alchemy.feasibility_contract import FeasibilityReport, FeasibilityRequest, ResultScope
+from q_alchemy.initialize import create_client, create_job_rapidly, find_processing_step, from_name
 from q_alchemy.quantum_io import (
     IBMQuantumCredentials,
     _OwnedWorkData,
@@ -25,6 +25,8 @@ from q_alchemy.quantum_io import (
     _download_json_output,
     _mark_workdata_secret,
     _delete_owned_inputs,
+    _encode_json,
+    _no_job_was_created,
 )
 from q_alchemy.quantum_io_contract import QuantumExperiment
 
@@ -80,7 +82,7 @@ class FeasibilityParams:
 
 
 class FeasibilityJob:
-    def __init__(self, job: Job, *, timeout_sec: int | None, remove_data: bool, input_workdata: list[_OwnedWorkData] | None = None) -> None:
+    def __init__(self, job: Job, *, timeout_sec: int | None, remove_data: bool, input_workdata: list[_OwnedWorkData] | None = None, result_scope: ResultScope = ResultScope.SELECTED) -> None:
         self._job = job
         self._timeout_sec = timeout_sec
         self._remove_data = remove_data
@@ -88,6 +90,7 @@ class FeasibilityJob:
         self._result: FeasibilityReport | None = None
         self._job_removed = False
         self._cleanup_complete = False
+        self._result_scope = ResultScope(result_scope)
 
     @property
     def removed(self) -> bool:
@@ -129,6 +132,23 @@ class FeasibilityJob:
                     f"Feasibility execution failed: {detail}",
                     original_exception=exc,
                 ) from None
+        if self._result_scope is ResultScope.ALL:
+            # A legacy server may silently ignore the request option. Preserve
+            # its report and job instead of treating missing results as empty
+            # (ResultScopeUnavailableError carries the report).
+            try:
+                self._result.require_computation_results()
+            except ValueError as exc:
+                # Malformed computation_results: report it like any other invalid
+                # response, keeping the job and its WorkData for diagnosis.
+                LOG.warning(
+                    "Feasibility computation results are invalid; the PineXQ Job and "
+                    "its WorkData were preserved for diagnosis"
+                )
+                raise FeasibilityExecutionError(
+                    f"Feasibility execution returned invalid computation results: {exc}",
+                    original_exception=exc,
+                ) from None
         if self._remove_data and not self._cleanup_complete:
             self._job_removed, self._input_workdata = _delete_job_then_inputs(
                 self._job,
@@ -153,13 +173,17 @@ class FeasibilityService:
         if params is None:
             resolved = FeasibilityParams()
         elif isinstance(params, FeasibilityParams):
-            resolved = params
+            resolved = deepcopy(params)  # never modify the caller's params
         else:
             resolved = FeasibilityParams.from_dict(params)
-        for name, value in kwargs.items():
-            if not hasattr(resolved, name):
+        names = {item.name for item in fields(resolved)}
+        for name in kwargs:
+            if name not in names:
                 raise TypeError(f"Unknown FeasibilityService option {name!r}")
-            setattr(resolved, name, value)
+        if kwargs:
+            resolved = replace(resolved, **kwargs)
+        # Validate credentials before opening a client, so a bad value leaks nothing.
+        ibm_credentials = _coerce_ibm_credentials(ibm_credentials)
         owns_client = client is None
         if client is None:
             if not resolved.api_key:
@@ -168,7 +192,7 @@ class FeasibilityService:
         self.params = resolved
         self.client = client
         self._owns_client = owns_client
-        self._ibm_credentials = _coerce_ibm_credentials(ibm_credentials)
+        self._ibm_credentials = ibm_credentials
 
     def close(self) -> None:
         if self._owns_client and self.client is not None:
@@ -201,12 +225,15 @@ class FeasibilityService:
         job: Job | None = None
         resolved_credentials = _coerce_ibm_credentials(credentials) or self._ibm_credentials
         try:
-            experiment_wd = self._upload_json(EXPERIMENT_INPUT_ALIAS, experiment.to_dict())
-            owned_inputs.append(_OwnedWorkData(EXPERIMENT_INPUT_ALIAS, experiment_wd))
+            # Build and check the request before anything is uploaded, so an
+            # invalid request (e.g. NaN in metadata) leaves nothing behind.
             request_payload = request.to_dict()
             request_payload["service_options"] = {
                 "include_quantum_circuits": include_quantum_circuits,
             }
+            _encode_json(request_payload, FEASIBILITY_REQUEST_INPUT_ALIAS)
+            experiment_wd = self._upload_json(EXPERIMENT_INPUT_ALIAS, experiment.to_dict())
+            owned_inputs.append(_OwnedWorkData(EXPERIMENT_INPUT_ALIAS, experiment_wd))
             request_wd = self._upload_json(FEASIBILITY_REQUEST_INPUT_ALIAS, request_payload)
             owned_inputs.append(_OwnedWorkData(FEASIBILITY_REQUEST_INPUT_ALIAS, request_wd))
             slots = [
@@ -219,7 +246,8 @@ class FeasibilityService:
                 slots.append(InputDataSlotParameter(Index=_IBM_CREDENTIALS_SLOT, WorkDataUrls=[str(credentials_wd.get_url())]))
 
             job = Job(client=self.client)
-            job.create_and_configure_rapidly(
+            create_job_rapidly(
+                job,
                 name=f"Feasibility assessment ({datetime.now():%Y-%m-%d %H:%M:%S})",
                 tags=["SDK", "Feasibility"] + list(self.params.job_tags),
                 processing_step_url=step.self_link(),
@@ -227,8 +255,8 @@ class FeasibilityService:
                 allow_output_data_deletion=True,
                 input_data_slots=slots,
             )
-        except BaseException:
-            if self.params.remove_data and (job is None or getattr(job, "job_hco", None) is None):
+        except BaseException as exc:
+            if self.params.remove_data and _no_job_was_created(job, exc):
                 _delete_owned_inputs(owned_inputs)
             raise
         assert job is not None
@@ -237,6 +265,7 @@ class FeasibilityService:
             timeout_sec=self.params.job_completion_timeout_sec,
             remove_data=self.params.remove_data,
             input_workdata=owned_inputs,
+            result_scope=request.result_scope,
         )
 
     def _step(self, name: str):
@@ -245,7 +274,7 @@ class FeasibilityService:
         return find_processing_step(self.client, name)
 
     def _upload_json(self, filename: str, payload: Mapping[str, Any], *, secret: bool = False) -> WorkDataLink:
-        encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
+        encoded = _encode_json(payload, filename)
         root = enter_jma(self.client).work_data_root_link.navigate()
         link = root.upload_action.execute(UploadParameters(filename=filename, binary=encoded, mediatype="application/json", json=None))
         if secret:

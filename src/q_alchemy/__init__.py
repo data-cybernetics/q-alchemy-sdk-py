@@ -10,8 +10,9 @@ __path__ = extend_path(__path__, __name__)
 
 LOG = logging.getLogger(__name__)
 
-from .initialize import q_alchemy_as_qasm
+from .initialize import JobSetupError, q_alchemy_as_qasm
 from .simulator import (
+    PlanLookupError,
     SparseSimulator,
     SimulatorParams,
     CountsResult,
@@ -22,6 +23,8 @@ from .simulator import (
     simulate_tomography,
 )
 
+
+from .performance_contract import PerformanceDiagnostics, PerformanceSpan
 
 from .quantum_io_contract import (
     SCHEMA_VERSION,
@@ -70,6 +73,7 @@ from .quantum_io import (
 from .feasibility_contract import (
     CircuitCompressionConfig,
     ClassicalResources,
+    ComputationResult,
     Criterion,
     EvidenceCollectionConfig,
     FeasibilityPolicy,
@@ -79,6 +83,8 @@ from .feasibility_contract import (
     FeasibilityRequest,
     QuantumExecutionPolicy,
     RecommendedCompute,
+    ResultScope,
+    ResultScopeUnavailableError,
     Relation,
     SolutionCriteria,
 )

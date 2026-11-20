@@ -23,11 +23,34 @@ from pennylane.operation import Operation, Operator
 from pennylane.typing import TensorLike
 from pennylane.wires import Wires, WiresLike
 
-from q_alchemy.initialize import q_alchemy_as_qasm, OptParams, q_alchemy_as_qasm_parallel_states
+from q_alchemy.initialize import (
+    OptParams,
+    populate_opt_params,
+    q_alchemy_as_qasm,
+    q_alchemy_as_qasm_parallel_states,
+)
 
 # Normalization precision required for compatibility with Qiskit and qclib state preparation.
 ATOL = 1e-10
 RTOL = 1e-9
+
+PENNYLANE_SOURCE_TAG = "Source=PennyLane-Integration"
+
+
+def _pennylane_opt_params(kwargs: dict) -> OptParams:
+    """Resolve ``opt_params`` (OptParams, mapping or loose kwargs) to a private copy.
+
+    The caller's object is never modified, and the PennyLane source tag is
+    present exactly once however often an operation is built or decomposed.
+    """
+    if kwargs.get("opt_params") is not None:
+        opt_params = populate_opt_params(kwargs["opt_params"])
+    else:
+        opt_params = OptParams.from_dict(kwargs)
+    if PENNYLANE_SOURCE_TAG not in opt_params.job_tags:
+        opt_params.job_tags = [*opt_params.job_tags, PENNYLANE_SOURCE_TAG]
+    return opt_params
+
 
 # override qml.math.shape for scipy provider (the default version calls np.toarray())
 ar.register_function('scipy', 'shape', lambda x: x.shape)
@@ -55,12 +78,7 @@ class AmplitudeEmbedding(StatePrep):
             validate_norm
         )
 
-        if "opt_params" in kwargs:
-            opt_params = kwargs["opt_params"]
-        else:
-            opt_params = OptParams.from_dict(kwargs)
-
-        self._hyperparameters['opt_params'] = opt_params
+        self._hyperparameters['opt_params'] = _pennylane_opt_params(kwargs)
 
     # pylint: disable=unused-argument
     @staticmethod
@@ -171,16 +189,8 @@ class AmplitudeEmbedding(StatePrep):
 class QAlchemyStatePreparation(Operation):
     def __init__(self, state_vector, wires, id=None, **kwargs):
 
-        # Right now, only the basis gates as given below can be set.
-        if "opt_params" in kwargs:
-            opt_params = kwargs["opt_params"]
-        else:
-            opt_params = OptParams.from_dict(kwargs)
-
-        # Append options
-        opt_params.job_tags += ["Source=PennyLane-Integration"]
         self._hyperparameters = {
-            "opt_params": opt_params
+            "opt_params": _pennylane_opt_params(kwargs)
         }
         # check if the `state_vector` param is batched
         batched = len(qml.math.shape(state_vector)) > 1
@@ -232,9 +242,6 @@ class QAlchemyStatePreparation(Operation):
             )
         if opt_params.use_qasm3:
             warnings.warn("QASM3 not fully supported by pennylane_integration!")
-        if issparse(state_vector):
-            # put it back into expected COO format
-            state_vector.tocoo()
         qasm, summary = q_alchemy_as_qasm(state_vector, opt_params, return_summary=True)
         if opt_params.use_qasm3:
             # remove include
@@ -281,7 +288,9 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
     Returns:
         list: List of quantum functions preparing requested states.
     """
-    opt_params = hyperparameters.get("opt_params", OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"]))
+    opt_params = populate_opt_params(
+        hyperparameters.get("opt_params") or OptParams(basis_gates=["id", "rx", "ry", "rz", "cx"])
+    )
     if opt_params.use_qasm3:
         warnings.warn("QASM3 not fully supported by pennylane_integration!")
     qasm_list, summary_list = q_alchemy_as_qasm_parallel_states(state_vectors, opt_params, return_summary=True)
@@ -303,7 +312,5 @@ def pennylane_batch_initialize(state_vectors, wires, **hyperparameters) -> list:
                 # no return value??
             return circuit_pennylane # a callable quantum function
         return [circuit_generator(qasm, summary) for qasm, summary in zip(qasm_list, summary_list)]
-
-    return ops_list
 
 

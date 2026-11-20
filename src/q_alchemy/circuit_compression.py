@@ -21,8 +21,10 @@ from pinexq.client.job_management import Job, enter_jma
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 from .circuit_compression_contract import CircuitCompressionReport, CircuitCompressionRequest, _circuit_envelope
-from .initialize import create_client, find_processing_step, from_name
-from .quantum_io import _OwnedWorkData, _delete_job_then_inputs, _delete_owned_inputs, _download_json_output
+from .initialize import create_client, create_job_rapidly, find_processing_step, from_name
+from .quantum_io import (
+    _OwnedWorkData, _delete_job_then_inputs, _delete_owned_inputs, _download_json_output, _no_job_was_created,
+)
 
 COMPRESS_CIRCUIT_STEP = "compress_circuit"
 CIRCUIT_INPUT_ALIAS = "quantum_circuit.json"
@@ -180,13 +182,14 @@ class CircuitCompressionService:
                 owned_inputs.append(_OwnedWorkData(name, link))
                 slots.append(InputDataSlotParameter(Index=index, WorkDataUrls=[str(link.get_url())]))
             job = Job(client=self.client)
-            job.create_and_configure_rapidly(
+            create_job_rapidly(
+                job,
                 name=f"Circuit compression ({datetime.now():%Y-%m-%d %H:%M:%S})",
                 tags=["SDK", "CircuitCompression"] + list(self.params.job_tags),
                 processing_step_url=step.self_link(), start=True, allow_output_data_deletion=True,
                 input_data_slots=slots)
-        except BaseException:
-            if self.params.remove_data and (job is None or getattr(job, "job_hco", None) is None):
+        except BaseException as exc:
+            if self.params.remove_data and _no_job_was_created(job, exc):
                 _delete_owned_inputs(owned_inputs)
             raise
         return CircuitCompressionJob(job, timeout_sec=self.params.job_completion_timeout_sec,

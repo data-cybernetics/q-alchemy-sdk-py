@@ -2,7 +2,7 @@
 
 The Q-Alchemy simulator (``q-alchemy-simulator``) is deployed as a pinexq ProCon
 that exposes eighteen ProcessingSteps — three capabilities, each in three circuit
-input forms, each once on the Medium preset and once, suffixed ``_enterprise``,
+input forms, each once on the Large preset and once, suffixed ``_enterprise``,
 on the XLarge preset for the enterprise plan:
 
 ============================  ===================  ===================  ================
@@ -27,7 +27,7 @@ without touching the job-management API directly::
     sim = SparseSimulator()                     # reads Q_ALCHEMY_API_KEY from env
     print(sim.counts(qc, shots=2048).counts)    # {'00': ..., '11': ...}
     print(sim.sparse_statevector(qc).amplitudes_dict())
-    print(sim.tomography(qc).state_fidelity)    # ~1.0 vs the dense reference
+    print(sim.tomography(qc).purity)            # ~1.0 for the Bell state
 
 The circuit input form is chosen automatically (small circuits go inline as
 OpenQASM 2, larger ones are uploaded as QPY WorkData); override it with
@@ -47,7 +47,9 @@ import io
 import json
 import logging
 import os
-from dataclasses import dataclass, field, fields
+from collections.abc import Mapping
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Literal, Sequence
 
@@ -62,7 +64,14 @@ from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
 # Reuse the SDK's existing job-management plumbing so simulator jobs behave
 # exactly like the rest of the SDK (auth, retries, step lookup + caching).
-from q_alchemy.initialize import allow_deletion, create_client, delete_job_with_data, find_processing_step
+from q_alchemy.initialize import (
+    JobSetupError,
+    allow_deletion,
+    create_client,
+    create_job_rapidly,
+    delete_job_with_data,
+    find_processing_step,
+)
 from q_alchemy.utils import nonnegative_integer
 
 Capability = Literal["counts", "sparse_statevector", "tomography"]
@@ -73,6 +82,10 @@ Circuit = Any  # qiskit.QuantumCircuit (imported lazily) or an OpenQASM 2 string
 # Grant (from the caller's UserGrants) that unlocks the XLarge enterprise tier.
 ENTERPRISE_GRANT = "plan:enterprise"
 
+
+class PlanLookupError(RuntimeError):
+    """The caller's plan could not be read, so the simulator tier is unknown."""
+
 # Return-WorkData alias produced by each capability (matches the ProCon).
 _OUTPUT_ALIAS: dict[str, str] = {
     "counts": "counts.json",
@@ -81,6 +94,16 @@ _OUTPUT_ALIAS: dict[str, str] = {
 }
 
 LOG = logging.getLogger(__name__)
+
+
+def _delete_unused_upload(work_data: WorkDataLink) -> None:
+    """Best-effort removal of an uploaded circuit that no job references."""
+    try:
+        hco = work_data.navigate()
+        if hco.delete_action.is_available():
+            hco.delete_action.execute()
+    except Exception:
+        LOG.warning("Could not delete unused simulator upload %s.", work_data.get_url(), exc_info=True)
 
 
 def _check_dense_limit(num_qubits: int, max_dense_qubits: int) -> None:
@@ -114,8 +137,8 @@ class SimulatorParams:
     job_tags: list[str] = field(default_factory=list)
     remove_data: bool = field(default=True)
     #: Resource tier. "auto" picks the enterprise (XLarge) functions when the
-    #: caller's plan allows it, else the standard (Medium) ones. "standard" is
-    #: always available — an enterprise caller may opt down to Medium — while
+    #: caller's plan allows it, else the standard (Large) ones. "standard" is
+    #: always available — an enterprise caller may opt down to Large — while
     #: "enterprise" is rejected up front without the plan.
     tier: Tier = field(default="auto")
     #: Circuits with at most this many qubits default to the inline QASM form.
@@ -130,14 +153,26 @@ class SimulatorParams:
 
 
 def _populate_params(params: "SimulatorParams | dict | None", **kwargs) -> SimulatorParams:
+    """Return a private ``SimulatorParams``; the caller's object is never modified.
+
+    A mapping may carry keys shared with other SDK params (they are ignored, as
+    in :meth:`SimulatorParams.from_dict`), but keyword overrides must name
+    ``SimulatorParams`` fields: a misspelled option raises ``TypeError``.
+    """
     if params is None:
-        params = SimulatorParams()
-    elif isinstance(params, dict):
-        params = SimulatorParams.from_dict(params)
-    for attr, value in kwargs.items():
-        if hasattr(params, attr):
-            setattr(params, attr, value)
-    return params
+        resolved = SimulatorParams()
+    elif isinstance(params, SimulatorParams):
+        resolved = deepcopy(params)
+    elif isinstance(params, Mapping):
+        resolved = SimulatorParams.from_dict(params)
+    else:
+        raise TypeError("params must be SimulatorParams, a mapping, or None")
+    if kwargs:
+        unknown = sorted(set(kwargs) - {f.name for f in fields(SimulatorParams)})
+        if unknown:
+            raise TypeError(f"Unknown simulator option(s): {', '.join(unknown)}")
+        resolved = replace(resolved, **kwargs)
+    return resolved
 
 
 # --------------------------------------------------------------------------- #
@@ -165,9 +200,9 @@ class CountsResult:
 class SparseStatevectorResult:
     """Sparse state-vector: only the amplitudes above the simulator's ``1e-10`` cutoff.
 
-    Exact unless the run set ``max_nnz``: the simulator then keeps only the
-    ``max_nnz`` largest amplitudes after every gate and renormalises them, and
-    nothing here marks that the state was truncated.
+    A positive ``max_nnz`` can truncate the state by keeping the largest
+    amplitudes and renormalising them. ``0`` imposes no amplitude-count cap.
+    Inspect ``raw['simulation_metadata']`` for capping and pruning statistics.
     """
 
     num_qubits: int
@@ -258,12 +293,12 @@ class SparseStatevectorResult:
 
 @dataclass
 class TomographyResult:
-    """Exact simulator-state analysis (not measurement-based tomography).
+    """Analysis of the simulated state (not measurement-based tomography).
 
     ``state`` is the reconstructed density matrix (full, or the reduced
     subsystem selected by ``measurement_indices``) as a complex ``ndarray``, when
-    one was materialized. ``state_fidelity`` is the fidelity against Qiskit's
-    dense ``Statevector`` reference, reported for the small full-state case.
+    one was materialized. Analysis uses the Q-Alchemy simulator's state without
+    running a Qiskit reference simulation.
     """
 
     num_qubits: int
@@ -272,7 +307,6 @@ class TomographyResult:
     state: np.ndarray | None
     state_is_reduced: bool | None
     purity: float | None
-    state_fidelity: float | None
     raw: dict
 
     @classmethod
@@ -290,7 +324,6 @@ class TomographyResult:
             state=state,
             state_is_reduced=raw.get("state_is_reduced"),
             purity=raw.get("purity"),
-            state_fidelity=raw.get("state_fidelity"),
             raw=raw,
         )
 
@@ -390,6 +423,8 @@ class SparseSimulator:
         Navigates the entry point to ``Info`` and returns the embedded
         ``CurrentUser.UserGrants`` (e.g. ``["plan:enterprise", ...]``). Returns
         ``[]`` if the API doesn't expose it, so detection degrades to standard.
+        Raises :class:`PlanLookupError` if the lookup fails; failures are not
+        cached.
         """
         if self._grants is None:
             self._grants = self._fetch_user_grants()
@@ -407,7 +442,7 @@ class SparseSimulator:
         and the two directions are not symmetric:
 
         * ``"standard"`` is always allowed. An enterprise caller opting down to
-          the Medium functions is a normal thing to want — smaller circuits do
+          the Large functions is a normal thing to want — smaller circuits do
           not need XLarge, and the standard tier is the cheaper path.
         * ``"enterprise"`` requires the plan. Without it the ProCon's grant
           check would refuse the job anyway, so refusing here turns a wasted
@@ -419,7 +454,7 @@ class SparseSimulator:
             if requested not in ("auto", "standard", "enterprise"):
                 raise ValueError(
                     f"Unknown tier {self.params.tier!r}. Use 'auto' (follow your "
-                    f"plan), 'standard' (Medium), or 'enterprise' (XLarge). "
+                    f"plan), 'standard' (Large), or 'enterprise' (XLarge). "
                     f"An unrecognized value used to fall through to the standard "
                     f"tier silently."
                 )
@@ -435,21 +470,44 @@ class SparseSimulator:
             self._tier = requested
         return self._tier
 
+    def _get_json_object(self, url: str) -> dict:
+        response = self.client.get(url)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, dict):
+            raise ValueError(f"expected a JSON object from {url}")
+        return data
+
     def _fetch_user_grants(self) -> list[str]:
+        """Read ``CurrentUser.UserGrants``.
+
+        ``[]`` means the API does not expose grants (no ``Info`` link or no
+        ``CurrentUser`` entity). A failed lookup -- network error, HTTP error
+        status, or a malformed response -- raises :class:`PlanLookupError`
+        instead, so a transient failure cannot silently move an enterprise
+        caller to the standard tier; nothing is cached and the next call retries.
+        """
         try:
-            entry = self.client.get("/api/EntryPoint").json()
+            entry = self._get_json_object("/api/EntryPoint")
             info_href = next(
-                (l["href"] for l in entry.get("links", []) if "Info" in (l.get("rel") or [])),
+                (link["href"] for link in entry.get("links") or []
+                 if "Info" in (link.get("rel") or [])),
                 None,
             )
             if not info_href:
                 return []
-            info = self.client.get(info_href).json()
-            for entity in info.get("entities", []):
+            info = self._get_json_object(info_href)
+            for entity in info.get("entities") or []:
                 if "CurrentUser" in (entity.get("rel") or []):
-                    return list((entity.get("properties") or {}).get("UserGrants", []))
-        except Exception:
-            return []
+                    grants = (entity.get("properties") or {}).get("UserGrants") or []
+                    if not isinstance(grants, list) or not all(isinstance(g, str) for g in grants):
+                        raise ValueError("UserGrants must be a list of strings")
+                    return list(grants)
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            raise PlanLookupError(
+                "Could not read this API key's plan (UserGrants) to choose the simulator "
+                f"tier: {exc}. Pass tier='standard' to skip the plan lookup."
+            ) from exc
         return []
 
     # -- public capabilities ------------------------------------------------- #
@@ -482,10 +540,13 @@ class SparseSimulator:
     ) -> SparseStatevectorResult:
         """Export the sparse state-vector produced by ``circuit``.
 
-        ``max_nnz=0`` (the default) keeps every amplitude above ``1e-10``: exact,
-        but a state that is not sparse needs as much memory as the dense vector.
-        A positive ``max_nnz`` caps it, keeping the largest amplitudes and
-        renormalising after every gate, so the result becomes approximate.
+        ``max_nnz=0`` (the default) imposes no amplitude-count cap, allowing
+        growth using available process/container memory. A positive value is
+        passed unchanged to the simulator. Capping keeps the largest amplitudes
+        and renormalises.
+        Inspect ``result.raw['simulation_metadata']`` for effective limits and
+        approximation statistics. Older service versions may use different
+        defaults; use the returned metadata to establish actual behavior.
         """
         raw = self._run(
             "sparse_statevector",
@@ -531,6 +592,7 @@ class SparseSimulator:
         step = find_processing_step(self.client, function_name)
 
         input_data_slots = None
+        work_data = None
         if upload is not None:
             filename, payload, mediatype = upload
             work_data = self._upload(filename, payload, mediatype)
@@ -538,15 +600,23 @@ class SparseSimulator:
                 InputDataSlotParameter(Index=0, WorkDataUrls=[str(work_data.get_url())])
             ]
 
-        job = Job(self.client).create_and_configure_rapidly(
-            name=f"Simulator {function_name} ({datetime.now():%Y-%m-%d %H:%M:%S})",
-            tags=["SDK", "Simulator", capability] + list(self.params.job_tags),
-            processing_step_url=step.self_link(),
-            start=True,
-            parameters=json.dumps({**parameters, **extra_parameters}),
-            allow_output_data_deletion=True,
-            input_data_slots=input_data_slots,
-        )
+        try:
+            job = create_job_rapidly(
+                Job(self.client),
+                name=f"Simulator {function_name} ({datetime.now():%Y-%m-%d %H:%M:%S})",
+                tags=["SDK", "Simulator", capability] + list(self.params.job_tags),
+                processing_step_url=step.self_link(),
+                start=True,
+                parameters=json.dumps({**parameters, **extra_parameters}),
+                allow_output_data_deletion=True,
+                input_data_slots=input_data_slots,
+            )
+        except BaseException as exc:
+            # No job references the uploaded circuit unless PineXQ created one
+            # (JobSetupError); only then must the upload be kept.
+            if work_data is not None and self.params.remove_data and not isinstance(exc, JobSetupError):
+                _delete_unused_upload(work_data)
+            raise
 
         timeout = (
             self.params.job_completion_timeout_sec

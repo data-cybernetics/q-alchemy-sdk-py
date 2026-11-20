@@ -1,5 +1,6 @@
 """Compression settings and diagnostics remain portable in the public SDK."""
 from dataclasses import replace
+from copy import deepcopy
 
 from q_alchemy.quantum_io_contract import CircuitCompressionConfig, ExecutionPlan, ExperimentReport
 from q_alchemy.quantum_io_compression_contract import CircuitCompressionMetrics, CircuitCompressionSummary
@@ -41,3 +42,39 @@ def test_sdk_uploads_compression_options_without_algorithmic_policy():
         case.service.run(_bell_experiment(), plan)
     payload = next(value for filename, value in case.uploads if filename == "execution_plan.json")
     assert payload["circuit_compression"] == {"enabled": True, "options": {"max_causal_qubits": 4}}
+
+
+def test_compression_diagnostics_survive_qio_and_feasibility_reports():
+    from q_alchemy.feasibility_contract import FeasibilityReport
+    from tests.test_feasibility import REPORT
+    from tests.test_quantum_io import _report_payload
+
+    diagnostics = {'candidate_regions': 8, 'capacity_skips': 3, 'synthesis_timeouts': 1,
+                   'synthesis_budget_skips': 2, 'total_seconds': 1.25,
+                   'future_field': {'counts': [1, 2]}}
+    summary = CircuitCompressionSummary(True, True, diagnostics=diagnostics,
+        options={'max_causal_qubits': 4},
+        effective_options={'max_causal_qubits': 4, 'collect_report': True,
+                           'equivalence': 'reachable_subspace', 'basis_gates': ['u', 'cx']},
+        component_versions={'q-alchemy-circuit-compressor': '0.4.0'})
+    qio_payload = _report_payload()
+    qio_payload['report']['circuit_compression'] = summary.to_dict()
+    qio = ExperimentReport.from_json(ExperimentReport.from_dict(qio_payload).to_json())
+    assert qio.circuit_compression == summary
+    feasibility_payload = deepcopy(REPORT)
+    feasibility_payload['circuit_compression'] = summary.to_dict()
+    feasibility_payload['computation_result']['experiment_report'] = qio_payload
+    feasibility = FeasibilityReport.from_json(FeasibilityReport.from_dict(feasibility_payload).to_json())
+    assert feasibility.circuit_compression['diagnostics'] == diagnostics
+    assert feasibility.circuit_compression['effective_options'] == summary.effective_options
+    assert feasibility.computation_experiment_report.circuit_compression == summary
+    assert 'Capacity skips: 3' in feasibility.format_summary()
+    assert 'Synthesis timeouts: 1' in feasibility.format_summary()
+    assert 'Synthesis-budget skips: 2' in qio.format_summary()
+
+
+def test_old_compression_summary_remains_readable_without_new_payloads():
+    summary = CircuitCompressionSummary.from_dict({'attempted': False, 'applied': False})
+    for field in ('diagnostics', 'effective_options', 'component_versions'):
+        assert getattr(summary, field) is None
+        assert field not in summary.to_dict()
