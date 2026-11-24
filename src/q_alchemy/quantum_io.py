@@ -21,7 +21,8 @@ import json
 import logging
 import os
 import warnings
-from dataclasses import dataclass, field, fields
+from copy import deepcopy
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -31,11 +32,14 @@ from pinexq.client.job_management import Job, enter_jma
 from pinexq.client.job_management.hcos import WorkDataLink
 from pinexq.client.job_management.model import InputDataSlotParameter, JobStates
 
-from q_alchemy.initialize import create_client, find_processing_step, from_name
-from q_alchemy.quantum_io_contract import (
+from q_alchemy.initialize import JobSetupError, create_client, create_job_rapidly, find_processing_step, from_name
+from q_alchemy.performance_contract import PerformanceDiagnostics, PerformanceSpan
+from q_alchemy.quantum_io_compression_contract import (
     CircuitCompressionConfig,
     CircuitCompressionMetrics,
     CircuitCompressionSummary,
+)
+from q_alchemy.quantum_io_contract import (
     ExecutionPlan,
     ExperimentReport,
     QuantumExperiment,
@@ -58,6 +62,8 @@ NOISY_BACKEND_SIMULATOR_RESOURCE = "noisy-backend-simulator"
 LOG = logging.getLogger(__name__)
 
 __all__ = [
+    "PerformanceDiagnostics",
+    "PerformanceSpan",
     "CircuitCompressionConfig",
     "CircuitCompressionMetrics",
     "CircuitCompressionSummary",
@@ -348,16 +354,18 @@ class QuantumIOService:
         if params is None:
             resolved = QuantumIOParams()
         elif isinstance(params, QuantumIOParams):
-            resolved = params
+            resolved = deepcopy(params)  # never modify the caller's params
         else:
             resolved = QuantumIOParams.from_dict(params)
-
-        for name, value in kwargs.items():
-            if hasattr(resolved, name):
-                setattr(resolved, name, value)
-            else:
+        names = {item.name for item in fields(resolved)}
+        for name in kwargs:
+            if name not in names:
                 raise TypeError(f"Unknown QuantumIOService option {name!r}")
+        if kwargs:
+            resolved = replace(resolved, **kwargs)
 
+        # Validate credentials before opening a client, so a bad value leaks nothing.
+        ibm_credentials = _coerce_ibm_credentials(ibm_credentials)
         owns_client = client is None
         if client is None:
             if not resolved.api_key:
@@ -370,7 +378,7 @@ class QuantumIOService:
         self.params = resolved
         self.client = client
         self._owns_client = owns_client
-        self._ibm_credentials = _coerce_ibm_credentials(ibm_credentials)
+        self._ibm_credentials = ibm_credentials
 
     def close(self) -> None:
         """Release the HTTP connection pool created by this service.
@@ -483,7 +491,8 @@ class QuantumIOService:
                 )
 
             job = Job(client=self.client)
-            job.create_and_configure_rapidly(
+            create_job_rapidly(
+                job,
                 name=f"Quantum I/O experiment ({datetime.now():%Y-%m-%d %H:%M:%S})",
                 tags=["SDK", "QuantumIO", "Experiment"] + list(self.params.job_tags),
                 processing_step_url=step.self_link(),
@@ -491,14 +500,11 @@ class QuantumIOService:
                 allow_output_data_deletion=True,
                 input_data_slots=input_slots,
             )
-        except BaseException:
-            # Remove inputs only while PineXQ still confirms that no Job was
-            # created. A create call can fail after the server accepted the Job;
-            # in that case its HCO is retained and the inputs may still be
-            # referenced, so preserving them is safer than risking data loss.
-            if self.params.remove_data and (
-                job is None or getattr(job, "job_hco", None) is None
-            ):
+        except BaseException as exc:
+            # Remove inputs only when no Job was created. A create call can fail
+            # after the server accepted the Job (JobSetupError); that Job may
+            # still reference the inputs, so preserving them is safer.
+            if self.params.remove_data and _no_job_was_created(job, exc):
                 _delete_owned_inputs(owned_inputs)
             raise
         assert job is not None
@@ -576,7 +582,8 @@ class QuantumIOService:
                 )
             ]
             job = Job(client=self.client)
-            job.create_and_configure_rapidly(
+            create_job_rapidly(
+                job,
                 name=f"List quantum backends ({datetime.now():%Y-%m-%d %H:%M:%S})",
                 tags=["SDK", "QuantumIO", "Backends"] + list(self.params.job_tags),
                 processing_step_url=step.self_link(),
@@ -591,10 +598,8 @@ class QuantumIOService:
                 allow_output_data_deletion=True,
                 input_data_slots=input_slots,
             )
-        except BaseException:
-            if self.params.remove_data and (
-                job is None or getattr(job, "job_hco", None) is None
-            ):
+        except BaseException as exc:
+            if self.params.remove_data and _no_job_was_created(job, exc):
                 _delete_owned_inputs(owned_inputs)
             raise
         assert job is not None
@@ -665,7 +670,7 @@ class QuantumIOService:
         *,
         secret: bool = False,
     ) -> WorkDataLink:
-        encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
+        encoded = _encode_json(payload, filename)
         root = enter_jma(self.client).work_data_root_link.navigate()
         link = root.upload_action.execute(
             UploadParameters(
@@ -850,6 +855,22 @@ def _delete_job_then_inputs(
             return False, list(input_workdata)
 
     return True, _delete_owned_inputs(input_workdata)
+
+
+def _encode_json(payload: Mapping[str, Any], filename: str) -> bytes:
+    """Strict JSON for an upload: NaN and infinity are rejected before sending."""
+    try:
+        return json.dumps(payload, sort_keys=True, allow_nan=False).encode("utf-8")
+    except ValueError as exc:
+        raise ValueError(f"{filename} must contain only finite numbers: {exc}") from exc
+
+
+def _no_job_was_created(job: Job | None, exc: BaseException) -> bool:
+    """True when a failed setup left no PineXQ Job that could use the inputs."""
+    if isinstance(exc, JobSetupError):
+        LOG.warning("%s Delete the job when it is no longer needed.", exc)
+        return False
+    return job is None or getattr(job, "job_hco", None) is None
 
 
 def _delete_owned_inputs(

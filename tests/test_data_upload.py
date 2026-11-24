@@ -13,7 +13,12 @@ class TestDataUpload(unittest.TestCase):
 
     def setUp(self):
         # This method will be called before each test
-        self.mnist = fetch_openml('mnist_784', version=1, parser="auto")
+        self.mnist = fetch_openml(
+            'mnist_784', version=1, parser="pandas",
+            # MNIST's final column contains nominal digit labels, not numbers.
+            # Keep strings for scikit-learn's category parsing and the "0" filter.
+            read_csv_kwargs={"dtype": {784: "str"}},
+        )
 
     def tearDown(self):
         # This method will be called after each test

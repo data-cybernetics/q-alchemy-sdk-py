@@ -7,14 +7,64 @@ from pathlib import Path
 import pytest
 
 from q_alchemy.feasibility_contract import (
-    EvidenceCollectionConfig, FeasibilityPolicy, FeasibilityReport,
-    FeasibilityRequest, SolutionCriteria,
+    ClassicalResources, EvidenceCollectionConfig, FeasibilityPolicy, FeasibilityReport,
+    FeasibilityRequest, QuantumExecutionPolicy, SolutionCriteria,
 )
 from q_alchemy.quantum_io_contract import ExperimentReport, PreparationPreflightSummary
 from tests.test_feasibility import EXPERIMENT_REPORT
 
 
 FIXTURE = json.loads((Path(__file__).parent / "data" / "feasibility_summary.json").read_text())
+
+
+@pytest.mark.parametrize("key", ["sparse_epsilon", "final_sparse_epsilon"])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("value", [1e-10, -1e-10, False, "0", None, float("nan"), float("inf")])
+def test_feasibility_rejects_conflicting_sparse_pruning(key, nested, value):
+    sparse = {"run_options": {key: value}} if nested else {key: value}
+    with pytest.raises(ValueError, match="sparse_config.*numeric zero"):
+        EvidenceCollectionConfig(sparse_config=sparse)
+    payload = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1)).to_dict()
+    payload["evidence_collection"]["sparse_config"] = sparse
+    with pytest.raises(ValueError, match="sparse_config.*numeric zero"):
+        FeasibilityRequest.from_json(json.dumps(payload))
+
+
+def test_sparse_zero_thresholds_normalize_without_mutating_other_options():
+    sparse = {"sparse_epsilon": 0, "dense_reference_max_qubits": 2,
+              "run_options": {"final_sparse_epsilon": 0.0, "optimization_level": 1}}
+    config = EvidenceCollectionConfig(sparse_config=sparse)
+    assert sparse["sparse_epsilon"] == 0
+    assert sparse["run_options"]["final_sparse_epsilon"] == 0
+    assert config.sparse_config == {
+        "dense_reference_max_qubits": 2, "run_options": {"optimization_level": 1}}
+    request = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1),
+                                 evidence_collection=config)
+    assert FeasibilityRequest.from_json(request.to_json()) == request
+    assert EvidenceCollectionConfig().sparse_config == {}
+    assert EvidenceCollectionConfig.from_dict({}).sparse_config == {}
+
+
+@pytest.mark.parametrize("value", [None, [], {"run_options": None}, {"run_options": []}])
+def test_sparse_options_require_mappings(value):
+    with pytest.raises(ValueError, match="sparse_config.*mapping"):
+        EvidenceCollectionConfig.from_dict({"sparse_config": value})
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("value", [1, "auto", None])
+def test_portable_requests_reject_explicit_sparse_capacity(nested, value):
+    sparse = {"run_options": {"max_nnz": value}} if nested else {"max_nnz": value}
+    config = EvidenceCollectionConfig(sparse_config=sparse)
+    criteria = SolutionCriteria.common(max_observable_rmse=.1)
+    for resources in (None, ClassicalResources(available_memory_bytes=960)):
+        with pytest.raises(ValueError, match="classical_resources.available_memory_bytes"):
+            FeasibilityRequest(criteria=criteria, evidence_collection=config,
+                               classical_resources=resources)
+    payload = FeasibilityRequest(criteria=criteria).to_dict()
+    payload["evidence_collection"] = config.to_dict()
+    with pytest.raises(ValueError, match="classical_resources.available_memory_bytes"):
+        FeasibilityRequest.from_json(json.dumps(payload))
 
 
 @pytest.mark.parametrize("case", FIXTURE["cases"], ids=lambda case: case["name"])
@@ -92,17 +142,54 @@ def test_execution_defaults_and_legacy_options():
         EvidenceCollectionConfig(execution_options={"transpile_options": {"optimization_level": 1}})
     with pytest.raises(ValueError, match="boolean"):
         EvidenceCollectionConfig(execution_options={"transpile": "false"})
-    with pytest.raises(ValueError, match="classical-first"):
-        FeasibilityPolicy(classical_first=False)
     with pytest.raises(TypeError, match="resource_sweep_scales"):
         EvidenceCollectionConfig(resource_sweep_scales=(1.0, 0.5))
 
 
 @pytest.mark.parametrize("value", [True, False, 0, -1, 1.5, float("nan"), float("inf"), "5"])
-def test_count_controls_are_rejected_before_submission(value):
+def test_shots_are_rejected_before_submission(value):
     with pytest.raises(ValueError, match="positive integer"):
         EvidenceCollectionConfig.from_dict({"shots": value})
-    payload = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=0.1)).to_dict()
-    payload["max_steps"] = value
-    with pytest.raises(ValueError, match="positive integer"):
-        FeasibilityRequest.from_dict(payload)
+
+
+@pytest.mark.parametrize("legacy_value", [1, 8, 16, None, "obsolete"])
+def test_retired_max_steps_is_ignored_and_not_emitted(legacy_value):
+    request = FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1))
+    payload = request.to_dict()
+    assert "max_steps" not in payload
+    payload["max_steps"] = legacy_value
+    restored = FeasibilityRequest.from_json(json.dumps(payload))
+    assert restored == request
+    assert "max_steps" not in restored.to_dict()
+
+
+def test_removed_python_iteration_argument_is_rejected():
+    with pytest.raises(TypeError, match="max_steps"):
+        FeasibilityRequest(criteria=SolutionCriteria.common(max_observable_rmse=.1), max_steps=1)
+
+
+@pytest.mark.parametrize("mode", list(QuantumExecutionPolicy))
+@pytest.mark.parametrize("retired_fields", [
+    {"classical_first": True, "dense_memory_utilization_fraction": .8},
+    {"classical_first": False, "dense_memory_utilization_fraction": "retired"},
+])
+def test_policy_request_drops_retired_fields(mode, retired_fields):
+    request = FeasibilityRequest(
+        criteria=SolutionCriteria.common(max_observable_rmse=.1),
+        policy=FeasibilityPolicy(quantum_execution=mode),
+    )
+    expected = {"quantum_execution": mode.value}
+    payload = request.to_dict()
+    assert payload["policy"] == expected
+    payload["policy"].update(retired_fields)
+    restored = FeasibilityRequest.from_json(json.dumps(payload))
+    assert restored == request
+    assert restored.to_dict()["policy"] == expected
+
+
+@pytest.mark.parametrize("field,value", [
+    ("classical_first", True), ("dense_memory_utilization_fraction", .8),
+])
+def test_removed_policy_constructor_parameters_are_rejected(field, value):
+    with pytest.raises(TypeError, match=field):
+        FeasibilityPolicy(**{field: value})

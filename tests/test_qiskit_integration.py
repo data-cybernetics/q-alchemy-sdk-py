@@ -80,14 +80,17 @@ class TestQiskitIntegration(unittest.TestCase):
 
         state_qiskit = Statevector(instr)
 
-        self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-10) # not quite that precise?
+        # max_fidelity_loss=0 means "within QAlchemy's fidelity_tolerance" (default
+        # 1e-10): about 1 in 3,000 random states gets an 8-CX circuit with a
+        # ~1e-11 loss instead of the exact 9-CX one. Assert that contract.
+        self.assert_state_close(state_vector, state_qiskit, max_fidelity_loss=0.0)
 
 
     def test_rnd_real(self):
 
         n_qubits = 4
-        state_vector = np.random.rand(2**n_qubits)
+        rng = np.random.default_rng(20261110)
+        state_vector = rng.random(2**n_qubits)
         state_vector = state_vector / np.linalg.norm(state_vector)
 
         instr = QAlchemyInitialize(
@@ -100,13 +103,16 @@ class TestQiskitIntegration(unittest.TestCase):
 
         state_qiskit = Statevector(circuit_qiskit).data
 
-        self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
-        self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
+        # max_fidelity_loss=0 means "within QAlchemy's fidelity_tolerance" (default
+        # 1e-10): about 1 in 3,000 random states gets an 8-CX circuit with a
+        # ~1e-11 loss instead of the exact 9-CX one. Assert that contract.
+        self.assert_state_close(state_vector, state_qiskit, max_fidelity_loss=0.0)
 
     def test_rnd_complex(self):
 
         n_qubits = 4
-        state_vector = np.random.rand(2**n_qubits) + np.random.rand(2**n_qubits) * 1j
+        rng = np.random.default_rng(20261111)
+        state_vector = rng.random(2**n_qubits) + rng.random(2**n_qubits) * 1j
         state_vector = state_vector / np.linalg.norm(state_vector)
         subtest_params = [True, False]
         for use_qasm3 in subtest_params:
@@ -122,8 +128,10 @@ class TestQiskitIntegration(unittest.TestCase):
 
                 state_qiskit = Statevector(circuit_qiskit).data
 
-                self.assertLessEqual(1 - abs(np.vdot(state_vector, state_qiskit))**2, 1e-13)
-                self.assertLessEqual(np.linalg.norm(state_vector - state_qiskit), 1e-12) # not quite that precise?
+                # max_fidelity_loss=0 means "within QAlchemy's fidelity_tolerance" (default
+                # 1e-10): about 1 in 3,000 random states gets an 8-CX circuit with a
+                # ~1e-11 loss instead of the exact 9-CX one. Assert that contract.
+                self.assert_state_close(state_vector, state_qiskit, max_fidelity_loss=0.0)
 
     def test_large_complex(self):
 

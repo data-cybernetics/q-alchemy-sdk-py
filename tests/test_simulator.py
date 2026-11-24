@@ -90,12 +90,12 @@ class TestResultParsing(unittest.TestCase):
             "state": [[[1.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]],
             "state_is_reduced": False,
             "purity": 1.0,
-            "state_fidelity": 1.0,
         }
         t = TomographyResult.from_raw(raw)
         self.assertEqual(t.state.shape, (2, 2))
         self.assertTrue(np.iscomplexobj(t.state))
-        self.assertAlmostEqual(t.state_fidelity, 1.0)
+        self.assertAlmostEqual(t.purity, 1.0)
+        self.assertFalse(hasattr(t, 'state_fidelity'))
 
 
 class TestInputFormResolution(unittest.TestCase):
@@ -149,10 +149,12 @@ class TestLiveSimulator(unittest.TestCase):
         self.assertEqual(r.nnz, 2)
         np.testing.assert_allclose(r.to_dense(), Statevector(self.bell).data, atol=1e-9)
 
-    def test_tomography_fidelity(self):
+    def test_tomography_native_state_analysis(self):
         r = self.sim.tomography(self.bell)
-        self.assertAlmostEqual(r.state_fidelity, 1.0, places=6)
+        self.assertNotIn('state_fidelity', r.raw)
         self.assertAlmostEqual(r.purity, 1.0, places=6)
+        target = np.array([A, 0, 0, A], dtype=complex)
+        np.testing.assert_allclose(r.state, np.outer(target, target.conj()), atol=1e-9)
 
     def test_round_trip_into_loader(self):
         from q_alchemy import q_alchemy_as_qasm
