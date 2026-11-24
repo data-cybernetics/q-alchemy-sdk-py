@@ -200,8 +200,9 @@ class CountsResult:
 class SparseStatevectorResult:
     """Sparse state-vector: only the amplitudes above the simulator's ``1e-10`` cutoff.
 
-    A positive ``max_nnz`` can truncate the state by keeping the largest
-    amplitudes and renormalising them. ``0`` imposes no amplitude-count cap.
+    With the compressed simulator runtime, a positive ``max_nnz`` caps each
+    independent state block. The exported ``nnz`` can exceed that cap when
+    several blocks are combined. ``0`` imposes no amplitude-count cap.
     Inspect ``raw['simulation_metadata']`` for capping and pruning statistics.
     """
 
@@ -540,13 +541,13 @@ class SparseSimulator:
     ) -> SparseStatevectorResult:
         """Export the sparse state-vector produced by ``circuit``.
 
-        ``max_nnz=0`` (the default) imposes no amplitude-count cap, allowing
-        growth using available process/container memory. A positive value is
-        passed unchanged to the simulator. Capping keeps the largest amplitudes
-        and renormalises.
+        ``max_nnz=0`` (the default) imposes no amplitude-count cap. The SDK
+        passes a positive value unchanged. The compressed runtime used by
+        adapter 0.3.9 keeps the largest amplitudes within each independent
+        block and renormalises them. The combined export can exceed the cap.
+        The flat runtime caps the whole state.
         Inspect ``result.raw['simulation_metadata']`` for effective limits and
-        approximation statistics. Older service versions may use different
-        defaults; use the returned metadata to establish actual behavior.
+        approximation statistics.
         """
         raw = self._run(
             "sparse_statevector",

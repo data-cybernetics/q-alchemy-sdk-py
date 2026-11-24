@@ -38,16 +38,12 @@ requires-python = "<3.15,>=3.11"
 readme = "README.md"
 
 [tool.uv]
-# The bridge pins older IBM Runtime/Aer; use a separate optional environment.
-conflicts = [[{ extra = "pennylane" }, { extra = "examples" }]]
 exclude-newer = "7 days"
 
 [tool.uv.exclude-newer-package]
 # Explicit audited minimum releases; retain the global age cutoff for other packages.
 numpy = "2026-11-17T13:44:00Z"
 openqasm3 = "2026-11-17T13:44:00Z"
-qiskit-aer = "2026-11-17T13:44:00Z"
-qiskit-ibm-runtime = "2026-11-17T13:44:00Z"
 pinexq-client = false # we need this even for transitive dependencies
 q-alchemy-visualization = false # first-party releases bypass the global seven-day delay
 
@@ -101,14 +97,14 @@ examples = [
     "qutip>=5.3.1",
     "pylatexenc>=2.11",
     "qiskit-experiments>=0.14.2",
-    "qiskit-aer>=0.18.4",
+    "qiskit-aer>=0.17.2",
     "jupyter>=1.1.1",
     "matplotlib>=3.11.2",
     "pandas>=3.1.1",
     "scikit-learn>=1.9.1",
     "torch>=2.15.0",
     "python-dotenv>=1.2.4",
-    "qiskit-ibm-runtime>=0.52.1",
+    "qiskit-ibm-runtime>=0.45.0",
 ]
 
 [project.license]

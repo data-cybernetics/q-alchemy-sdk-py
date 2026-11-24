@@ -32,7 +32,12 @@ And if you want the PennyLane-integration, please use
 pip install q-alchemy-sdk-py[pennylane]
 ```
 
-If you would like to run our examples, please use
+To install both integrations in one environment, run
+```bash
+pip install "q-alchemy-sdk-py[qiskit,pennylane]"
+```
+
+For the general examples, install the `examples` extra.
 ```bash
 pip install q-alchemy-sdk-py[examples]
 ```
@@ -59,15 +64,24 @@ respect these constraints and the existing seven-day release-age policy.
 uv supplies `setuptools<82` only when building legacy IBM dependency metadata;
 this compatibility setting does not add Setuptools to the SDK runtime.
 
-Again, for qiskit- or PennyLane-integrations, please add the groups
-```bash
-uv sync --locked --extra qiskit --extra pennylane
-```
+To run the general examples from a checkout, install the locked `examples` extra.
 
-And for running our examples,
 ```bash
 uv sync --locked --extra examples
 ```
+
+### Run examples with both integrations
+
+Run this command from the repository root to open the examples in one
+environment with Qiskit, PennyLane, Jupyter, PyTorch, and visualization support.
+
+```bash
+uv run --locked --no-dev --all-extras jupyter notebook
+```
+
+Set `Q_ALCHEMY_API_KEY` in your environment or in the repository's `.env` file.
+For the `qiskit.remote` demo, use the same command with
+`python examples/qiskit_backend.py` in place of `jupyter notebook`.
 
 ## Request licensing
 
@@ -168,7 +182,10 @@ from sklearn.datasets import fetch_openml
 
 from q_alchemy.initialize import q_alchemy_as_qasm
 
-mnist = fetch_openml('mnist_784', version=1, parser="auto")
+mnist = fetch_openml(
+    'mnist_784', version=1, parser="pandas",
+    read_csv_kwargs={"dtype": {784: "str"}},  # Column 784 contains the digit labels.
+)
 
 zero: np.ndarray = mnist.data[mnist.target == "0"].iloc[0].to_numpy()
 filler = np.empty(2 ** 10 - zero.shape[0])
@@ -191,7 +208,10 @@ import os
 
 from q_alchemy.qiskit_integration import QAlchemyInitialize, OptParams
 
-mnist = fetch_openml('mnist_784', version=1, parser="auto")
+mnist = fetch_openml(
+    'mnist_784', version=1, parser="pandas",
+    read_csv_kwargs={"dtype": {784: "str"}},  # Column 784 contains the digit labels.
+)
 
 zero: np.ndarray = mnist.data[mnist.target == "0"].iloc[0].to_numpy()
 filler = np.empty(2 ** 10 - zero.shape[0])
@@ -213,6 +233,8 @@ instr.definition.draw(fold=-1)
 
 ### PennyLane Example
 
+Follow the [example setup with both integrations](#run-examples-with-both-integrations) for these snippets.
+
 ```python
 import numpy as np
 import pennylane as qml
@@ -221,7 +243,10 @@ import os
 
 from q_alchemy.pennylane_integration import QAlchemyStatePreparation, OptParams
 
-mnist = fetch_openml('mnist_784', version=1, parser="auto")
+mnist = fetch_openml(
+    'mnist_784', version=1, parser="pandas",
+    read_csv_kwargs={"dtype": {784: "str"}},  # Column 784 contains the digit labels.
+)
 
 zero: np.ndarray = mnist.data[mnist.target == "0"].iloc[0].to_numpy()
 filler = np.empty(2 ** 10 - zero.shape[0])
@@ -1217,13 +1242,16 @@ numbers, or roughly 17 TB. **A dense export is impossible in that regime; a
 sparse one is a few hundred kilobytes.** Standard Qiskit backends offer no
 equivalent.
 
-That only helps if the state *is* sparse, and nothing forces it to be. By
-default the simulator keeps every amplitude above `1e-10`, so the result is
-exact, but a circuit that populates most of its basis states needs as much
-memory as the dense form and can exhaust the simulator. Pass `max_nnz=N` (to
-`backend.run` or `SparseSimulator.sparse_statevector`) to cap it: after every
-gate only the `N` largest amplitudes are kept and renormalised. The result is
-then approximate, and nothing in it marks that it was truncated.
+A circuit that populates most of its basis states can still produce a sparse
+export large enough to exhaust memory. The default `max_nnz=0` imposes no
+amplitude-count cap. Pass a positive `max_nnz` to `backend.run` or
+`SparseSimulator.sparse_statevector` to limit the state during simulation.
+The compressed runtime introduced in simulator 0.4.0 and used by adapter 0.3.9
+applies the cap to each independent state block. The exported state can contain
+more than `max_nnz` amplitudes when several blocks are combined. The flat
+runtime applies the cap to the whole state. Check `simulation_metadata` in the
+sparse result for capping and pruning statistics, including whether
+`amplitude_capping_occurred`.
 
 Ask for both together and you pay for one simulation:
 
@@ -1242,6 +1270,8 @@ the regime this simulator exists for. Reach for `sparse_index_format`
 back into the loader via `to_coo()`.
 
 #### From PennyLane
+
+Follow the [example setup with both integrations](#run-examples-with-both-integrations) for this demo.
 
 Because it's a standard Qiskit backend, you can use it as a PennyLane device via
 the [PennyLane–Qiskit plugin](https://github.com/PennyLaneAI/pennylane-qiskit)
@@ -1439,13 +1469,8 @@ Feasibility reports; unhandled PineXQ errors still use the existing message-base
 error transport. This feature does not provide durable worker-crash recovery.
 
 
-### Dependency environments (17 November 2026)
+### Example dependencies
 
-The modern `examples` bundle uses IBM Runtime >=0.52.1 and Aer >=0.18.4.
-The dedicated `pennylane` extra includes pennylane-qiskit >=0.45.1, whose published
-metadata requires Runtime 0.45.x and Aer 0.17.x. Install that bridge in a separate
-environment; combining `.[pennylane,examples]` is unsupported. The `dev` group no
-longer implicitly installs the bridge. Standalone PennyLane remains in examples.
-The uv manifest declares the two extras mutually exclusive rather than overriding
-third-party metadata. Dated exceptions permit audited new dependency floors while
-retaining the seven-day policy for other packages.
+The `examples` extra supports IBM Runtime 0.45.0 or later and Aer 0.17.2 or later.
+When you also install the `pennylane` extra, the resolver selects versions that
+satisfy the PennyLane–Qiskit bridge. See the [setup command for all examples](#run-examples-with-both-integrations).

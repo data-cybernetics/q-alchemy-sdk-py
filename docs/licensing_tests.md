@@ -89,18 +89,20 @@ Simulator uses the standard preset, including for Enterprise accounts, exercisin
 plan-based allowances independently of resource-tier selection. The adapter's
 own tests also cover XLarge authorization. Fixtures use cancelling gates on two
 qubits, keeping execution cheap while testing admission before optimization.
-Three additional live cases check that `max_nnz=0` retains the complete small
-state, a positive cap of 2 truncates it, and a request of 2,000,000 reaches the
-core unchanged. Together with the state cases, this module collects **33 live
-tests**.
+Three additional live cases use an entangled three-qubit circuit to check that
+`max_nnz=0` retains the full state, a cap of 2 triggers truncation, and a cap of
+2,000,000 reaches the core unchanged. Together with the state cases, this module
+collects **33 live tests**.
 
 Successful results expose score/limit in `result.raw['circuit_complexity']` for
 Simulator, Compressor and Feasibility, and `report.circuit_complexity` for
 Quantum I/O. Simulator also returns `result.raw['simulation_metadata']` with
 effective amplitude limits and approximation statistics. `max_nnz=0` means no
 amplitude-count cap, allowing growth using available process/container memory.
-Positive values are used unchanged, without an adapter-imposed amplitude ceiling.
-These are server reports, not SDK admission calculations.
+The adapter forwards positive values unchanged. The compressed runtime in
+simulator 0.4.0, used by adapter 0.3.9, applies the cap to each independent
+block, so the exported amplitude count can exceed the requested cap. The
+server reports the effective behavior in the result metadata.
 
 State and supplied-circuit limits are independent. Generated preparation,
 estimation and compression work uses technical budgets; no extra commercial

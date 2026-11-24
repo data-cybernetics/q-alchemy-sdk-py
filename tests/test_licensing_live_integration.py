@@ -278,6 +278,9 @@ def test_live_simulator_preserves_amplitude_cap(
                                 client, name, version=versions['simulator']))
     circuit = QuantumCircuit(3)
     circuit.h(range(3))
+    # Entangle all three qubits to exercise actual truncation with either runtime.
+    circuit.cz(0, 1)
+    circuit.cz(1, 2)
     with simulator.SparseSimulator(api_key=connection.api_key, host=connection.host,
                                    tier='standard', remove_data=True) as service:
         result = service.sparse_statevector(circuit, max_nnz=max_nnz, input_form='qpy')
@@ -286,4 +289,4 @@ def test_live_simulator_preserves_amplitude_cap(
     assert metadata['max_nnz'] == max_nnz
     assert metadata['max_nnz_mode'] == ('unlimited' if max_nnz == 0 else 'explicit')
     assert bool(metadata['amplitude_capping_occurred']) == (max_nnz == 2)
-    assert result.raw['circuit_complexity']['score'] == 3
+    assert result.raw['circuit_complexity']['score'] == 7

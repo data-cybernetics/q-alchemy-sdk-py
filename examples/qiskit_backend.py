@@ -1,28 +1,21 @@
 """Use the hosted Q-Alchemy simulator as a Qiskit BackendV2 (and from PennyLane).
 
-Run it with an API key available (e.g. Q_ALCHEMY_API_KEY in the repository .env):
+Set Q_ALCHEMY_API_KEY in the environment or the repository's .env file.
+Run the Qiskit demo from the repository root with the general examples extra.
 
-    python examples/qiskit_backend.py
+    uv run --locked --no-dev --extra examples python examples/qiskit_backend.py
 
-Dependencies: the `examples` extra installs everything needed to run this
-(Qiskit + the PennyLane-Qiskit plugin)::
-
-    pip install "q-alchemy-sdk-py[examples]"
-
-The Qiskit section alone only needs `[qiskit]`; the PennyLane section needs
-pennylane + the PennyLane-Qiskit plugin (`[pennylane]` or `[examples]`).
+Add the PennyLane extra to run both demos in the same environment.
 """
 
 import os
+from importlib.util import find_spec
 from pathlib import Path
 
 from dotenv import load_dotenv
 from qiskit import QuantumCircuit, transpile
 
 from q_alchemy import QAlchemyBackend, QAlchemyProvider
-
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-assert os.getenv("Q_ALCHEMY_API_KEY"), "Set Q_ALCHEMY_API_KEY (e.g. in the repository .env)"
 
 
 def qiskit_demo() -> None:
@@ -51,11 +44,15 @@ def qiskit_demo() -> None:
 
 
 def pennylane_demo() -> None:
-    try:
-        import pennylane as qml
-    except ImportError:
-        print('\n== PennyLane == (skipped: install "q-alchemy-sdk-py[examples]" or "[pennylane]")')
+    if find_spec("pennylane_qiskit") is None:
+        print("\nInstall the PennyLane extra to run both demos.")
+        print(
+            "uv run --locked --no-dev --extra examples --extra qiskit --extra pennylane "
+            "python examples/qiskit_backend.py"
+        )
         return
+
+    import pennylane as qml
 
     print("\n== PennyLane via the PennyLane-Qiskit plugin ==")
     # Any Qiskit BackendV2 can back a PennyLane device through qiskit.remote.
@@ -71,5 +68,7 @@ def pennylane_demo() -> None:
 
 
 if __name__ == "__main__":
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+    assert os.getenv("Q_ALCHEMY_API_KEY"), "Set Q_ALCHEMY_API_KEY (e.g. in the repository .env)"
     qiskit_demo()
     pennylane_demo()
